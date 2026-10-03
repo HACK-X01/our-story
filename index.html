@@ -7,6 +7,11 @@
   <meta name="description" content="A private couple app for Himanshu & Gullu — Daily Memory Vault, Blind Q&A, Love Coupons, Live Pulse & Mood Check-in.">
   <meta name="theme-color" content="#180c25">
   <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Our Story">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 
   <!-- Google Fonts: Editorial Romantic Typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,7 +21,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 
@@ -35,8 +40,13 @@
           <h1 class="brand-title">Our Story <span class="sparkle-star">✨</span></h1>
           <p class="brand-subtitle">Himanshu & Gullu • Forever & Always</p>
         </div>
-        <div class="counter-badge" id="daysCounter">
-          <span class="heart-pulse-icon">❤️</span> Day <strong id="streakDays">1</strong>
+        <div class="header-right-actions">
+          <button class="install-pwa-btn is-hidden" id="installPwaBtn" title="Install to Home Screen">
+            📲 Install App
+          </button>
+          <div class="counter-badge" id="daysCounter">
+            <span class="heart-pulse-icon">❤️</span> Day <strong id="streakDays">1</strong>
+          </div>
         </div>
       </div>
 
@@ -453,6 +463,18 @@
 
   </div>
 
+  <!-- FLOATING PWA UPDATE PROMPT BANNER -->
+  <div class="app-update-banner is-hidden" id="appUpdateBanner">
+    <div class="update-banner-icon">🚀</div>
+    <div class="update-banner-body">
+      <h4 class="update-banner-title">New Update Available! ✨</h4>
+      <p class="update-banner-text">Naye updates & features ready hain. Aapki memories & answers 100% safe rahenge!</p>
+    </div>
+    <button class="update-banner-btn" id="updateAppBtn">
+      Update Now 💖
+    </button>
+  </div>
+
   <!-- CELEBRATION MODAL FOR COUPONS & REVEALS -->
   <div class="modal-overlay" id="appModal">
     <div class="modal-box">
@@ -471,6 +493,6 @@
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" loop></audio>
 
-  <script src="script.js?v=6"></script>
+  <script src="script.js?v=7"></script>
 </body>
 </html>

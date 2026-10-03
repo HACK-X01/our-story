@@ -1621,3 +1621,125 @@ body {
   gap: 8px;
   box-shadow: 0 4px 18px rgba(37, 211, 102, 0.45);
 }
+
+/* ==========================================================================
+   PWA & APP UPDATE BANNER STYLES
+   ========================================================================== */
+.header-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.install-pwa-btn {
+  background: linear-gradient(135deg, rgba(255, 107, 138, 0.25), rgba(245, 195, 102, 0.25));
+  border: 1px solid var(--accent-gold);
+  color: var(--accent-gold);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.install-pwa-btn:hover {
+  background: linear-gradient(135deg, var(--accent-rose), var(--accent-gold));
+  color: #120919;
+  transform: scale(1.05);
+}
+
+.install-pwa-btn.is-hidden {
+  display: none !important;
+}
+
+/* Floating App Update Banner */
+.app-update-banner {
+  position: fixed;
+  bottom: 74px; /* Sits right above the bottom dock */
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  max-width: 480px;
+  background: linear-gradient(135deg, rgba(42, 18, 60, 0.98), rgba(22, 10, 32, 0.98));
+  border: 2px solid var(--accent-gold);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.85), 0 0 30px var(--accent-gold-glow);
+  z-index: 1000;
+  backdrop-filter: blur(20px);
+  animation: slideUpUpdateBanner 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.app-update-banner.is-hidden {
+  display: none !important;
+}
+
+@keyframes slideUpUpdateBanner {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 25px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.update-banner-icon {
+  font-size: 1.8rem;
+  animation: bounceRocket 2s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+@keyframes bounceRocket {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.update-banner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.update-banner-title {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  color: var(--accent-gold);
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.update-banner-text {
+  font-size: 0.74rem;
+  color: var(--text-main);
+  line-height: 1.35;
+}
+
+.update-banner-btn {
+  background: linear-gradient(135deg, var(--accent-rose), #e63960);
+  border: none;
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 3px 12px var(--accent-rose-glow);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.update-banner-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 18px var(--accent-rose-glow);
+}
+

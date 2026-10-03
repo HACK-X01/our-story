@@ -121,49 +121,123 @@ const DEFAULT_APP_STATE = {
   pulses: []
 };
 
-// --- FETCH & SYNC APP STATE ---
-const CACHE_KEY = 'our_story_cache_v6';
-// Invalidate any older cache
-if (localStorage.getItem('our_story_fresh_v6') !== 'done') {
-  localStorage.removeItem('our_story_cache');
-  localStorage.removeItem('our_story_cache_v2');
-  localStorage.removeItem('our_story_cache_v3');
-  localStorage.removeItem('our_story_cache_v5');
-  localStorage.setItem('our_story_fresh_v6', 'done');
+// --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
+const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
+const CURRENT_APP_VERSION = '1.2.0';
+
+// Retrieve stored state with backward compatibility for all legacy versions
+function getStoredCoupleData() {
+  try {
+    const primary = localStorage.getItem(PERMANENT_STORAGE_KEY);
+    if (primary) {
+      return JSON.parse(primary);
+    }
+
+    // Migration fallback across all previous versions so NO previous memories/coupons are lost
+    const legacyKeys = [
+      'our_story_cache_v6',
+      'our_story_cache_v5',
+      'our_story_cache_v4',
+      'our_story_cache_v3',
+      'our_story_cache_v2',
+      'our_story_cache'
+    ];
+    for (const key of legacyKeys) {
+      const data = localStorage.getItem(key);
+      if (data) {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed && (parsed.memories || parsed.coupons || parsed.currentQA)) {
+            localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(parsed));
+            return parsed;
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (err) {
+    console.warn('Storage read warning:', err);
+  }
+  return null;
 }
 
 function saveAppState(newState) {
+  if (!newState) return;
   appState = newState;
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(appState));
-  } catch (e) {}
+    localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(appState));
+  } catch (e) {
+    console.warn('LocalStorage save failed:', e);
+  }
+}
+
+// Merge server and local states without losing any memories, answers, or coupons
+function mergePreservingUserData(local, incoming) {
+  if (!local) return incoming;
+  if (!incoming) return local;
+
+  const merged = { ...incoming };
+
+  // 1. Preserve memories (Union by id)
+  const localMems = local.memories || [];
+  const incMems = incoming.memories || [];
+  const memMap = new Map();
+  incMems.forEach(m => { if (m && m.id) memMap.set(m.id, m); });
+  localMems.forEach(m => { if (m && m.id) memMap.set(m.id, m); });
+  merged.memories = Array.from(memMap.values());
+
+  // 2. Preserve coupons (Union by id)
+  const localCoupons = local.coupons || [];
+  const incCoupons = incoming.coupons || [];
+  const coupMap = new Map();
+  incCoupons.forEach(c => { if (c && c.id) coupMap.set(c.id, c); });
+  localCoupons.forEach(c => { if (c && c.id) coupMap.set(c.id, c); });
+  merged.coupons = Array.from(coupMap.values());
+
+  // 3. Preserve Q&A Answers
+  if (local.currentQA && incoming.currentQA) {
+    merged.currentQA = { ...incoming.currentQA };
+    merged.currentQA.answers = {
+      himanshu: incoming.currentQA.answers?.himanshu || local.currentQA.answers?.himanshu || null,
+      gullu: incoming.currentQA.answers?.gullu || local.currentQA.answers?.gullu || null
+    };
+  }
+
+  // 4. Preserve Moods
+  if (local.currentMoods && incoming.currentMoods) {
+    merged.currentMoods = {
+      himanshu: incoming.currentMoods.himanshu || local.currentMoods.himanshu,
+      gullu: incoming.currentMoods.gullu || local.currentMoods.gullu
+    };
+  }
+
+  return merged;
 }
 
 async function fetchState() {
-  // 1. Ensure we have state immediately so UI never blocks
+  // 1. Ensure we have state immediately so UI never blocks and data is instant
   if (!appState) {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-      try { appState = JSON.parse(cached); } catch (err) {}
-    }
-    if (!appState) {
+    const stored = getStoredCoupleData();
+    if (stored) {
+      appState = stored;
+    } else {
       appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
     }
     renderAll();
   }
 
-  // 2. Try fetching from server (if server active)
+  // 2. Fetch from server (if server active) and merge safely
   try {
     const res = await fetch('/api/state?t=' + Date.now());
     if (res.ok) {
       const serverState = await res.json();
       if (serverState && serverState.stats) {
-        saveAppState(serverState);
+        const merged = mergePreservingUserData(appState, serverState);
+        saveAppState(merged);
         renderAll();
       }
     }
   } catch (e) {
-    // Running on static host (e.g. GitHub Pages) or offline, local state persists seamlessly
+    // Running on static host (e.g. GitHub Pages) or offline, local persistent data remains intact!
   }
 }
 
@@ -1146,6 +1220,129 @@ function setupModalDismiss() {
   }
 }
 
+// --- 9. PWA INSTALL & LIVE APP UPDATE ENGINE ---
+let waitingServiceWorker = null;
+
+function showUpdateBanner(worker = null) {
+  if (worker) waitingServiceWorker = worker;
+  const banner = document.getElementById('appUpdateBanner');
+  if (banner) {
+    banner.classList.remove('is-hidden');
+    try {
+      playTone(700, 0.2);
+    } catch (e) {}
+  }
+}
+
+function setupPWAandUpdates() {
+  // 1. Service Worker Registration & Live Update Detection
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then((registration) => {
+      // Check if an update is already waiting (e.g. cached from previous visit)
+      if (registration.waiting) {
+        showUpdateBanner(registration.waiting);
+      }
+
+      // Check when a new service worker is installing
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        if (newWorker) {
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              showUpdateBanner(newWorker);
+            }
+          });
+        }
+      });
+
+      // Periodically check for SW updates (every 30 seconds)
+      setInterval(() => {
+        registration.update().catch(() => {});
+      }, 30000);
+    }).catch((err) => {
+      console.warn('PWA Service Worker registration skipped:', err);
+    });
+
+    // When the new worker takes control, reload smoothly
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
+  }
+
+  // 2. Wire up the "Update Now" Action Button
+  const updateBtn = document.getElementById('updateAppBtn');
+  if (updateBtn) {
+    updateBtn.addEventListener('click', () => {
+      updateBtn.textContent = 'Updating... ✨';
+      updateBtn.disabled = true;
+
+      // Ensure all current memories and answers are saved into permanent storage before reload!
+      if (appState) saveAppState(appState);
+
+      if (waitingServiceWorker) {
+        waitingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
+      } else {
+        // Fallback for static host / hard reload
+        window.location.reload();
+      }
+    });
+  }
+
+  // 3. Periodic Remote Version Checker (Detects git commits / version.json changes)
+  async function checkRemoteVersion() {
+    try {
+      const res = await fetch('./version.json?t=' + Date.now());
+      if (res.ok) {
+        const info = await res.json();
+        if (info && info.version && info.version !== CURRENT_APP_VERSION) {
+          showUpdateBanner();
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Check version on load, periodically, and when switching back to app tab
+  setTimeout(checkRemoteVersion, 3000);
+  setInterval(checkRemoteVersion, 35000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkRemoteVersion();
+  });
+
+  // 4. PWA "Add to Home Screen" Install Prompt Handler
+  let deferredInstallPrompt = null;
+  const installBtn = document.getElementById('installPwaBtn');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (installBtn) {
+      installBtn.classList.remove('is-hidden');
+    }
+  });
+
+  if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        if (outcome === 'accepted') {
+          installBtn.classList.add('is-hidden');
+        }
+        deferredInstallPrompt = null;
+      }
+    });
+  }
+
+  window.addEventListener('appinstalled', () => {
+    if (installBtn) installBtn.classList.add('is-hidden');
+    showAppModal('📱 App Installed!', 'Our Story is now installed on your phone home screen! Open it anytime for quick daily check-ins 💖');
+  });
+}
+
 // --- INITIALIZE EVERYTHING ON LOAD ---
 document.addEventListener('DOMContentLoaded', () => {
   setupProfileSwitcher();
@@ -1156,6 +1353,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupPulseArena();
   setupMoodIndicator();
   setupModalDismiss();
+  setupPWAandUpdates();
   fetchState();
 
   // Poll state every 4 seconds for live sync between phones
