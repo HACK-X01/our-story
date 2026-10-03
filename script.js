@@ -76,29 +76,86 @@ function playCelebrationChime() {
   setTimeout(() => playTone(1046.50, 0.8), 300); // C6
 }
 
+// --- DEFAULT FRESH STATE (Fallback for GitHub Pages & Offline) ---
+const DEFAULT_APP_STATE = {
+  profiles: {
+    himanshu: { name: "Himanshu", emoji: "☕", nickname: "Coffee Partner" },
+    gullu: { name: "Gullu", emoji: "🌸", nickname: "Pout Queen 🐷" }
+  },
+  stats: {
+    startDate: "2026-10-03",
+    coffeeDatesCount: 0,
+    poutsLoggedCount: 0,
+    scoldingsCount: 0
+  },
+  currentMoods: {
+    himanshu: { mood: "coffee", text: "Ready for our first story! ☕", time: "Just now" },
+    gullu: { mood: "romantic", text: "Our Story begins today! ✨", time: "Just now" }
+  },
+  currentQA: {
+    id: 1,
+    date: "2026-10-03",
+    question: "Agar hum dono ek kamre me band ho jayein aur chabhi kho jaye, toh sabse pehli cheez kya karenge? 😉🗝️",
+    category: "Romantic & Naughty",
+    answers: {
+      himanshu: null,
+      gullu: null
+    }
+  },
+  pastQAs: [],
+  coupons: [
+    { id: "c1", title: "Gullu Won The Argument Pass ⚖️", desc: "Valid for 24 hours — no counter-arguments allowed. Gullu is 100% right!", forUser: "gullu", redeemed: false },
+    { id: "c2", title: "Unlimited Coffee On Himanshu ☕", desc: "Bill on Himanshu, coffee of Gullu's choice. Redeemable at any cafe!", forUser: "gullu", redeemed: false },
+    { id: "c3", title: "1 Tight Hug on Demand 🫂", desc: "No questions asked. Redeemable anytime, anywhere.", forUser: "both", redeemed: false },
+    { id: "c4", title: "Late Night Ice-Cream & Drive 🍦", desc: "Midnight dessert run to Gullu's favorite spot under the stars.", forUser: "both", redeemed: false },
+    { id: "c5", title: "Stop Scolding Me for 1 Hour 🤫", desc: "Himanshu's emergency shield against Gullu's cute scoldings.", forUser: "himanshu", redeemed: false },
+    { id: "c6", title: "Hum Tum Ek Kamre Me Pass 🗝️", desc: "Recreate our special daydream: Just you and me, zero distractions.", forUser: "both", redeemed: false }
+  ],
+  memories: [],
+  pulses: []
+};
+
 // --- FETCH & SYNC APP STATE ---
-const CACHE_KEY = 'our_story_cache_v2';
-// Invalidate any old cache from previous test runs (e.g., 28 days or 1 dummy memory)
-if (localStorage.getItem('our_story_fresh_v2') !== 'done') {
+const CACHE_KEY = 'our_story_cache_v3';
+// Invalidate any older cache
+if (localStorage.getItem('our_story_fresh_v3') !== 'done') {
   localStorage.removeItem('our_story_cache');
-  localStorage.setItem('our_story_fresh_v2', 'done');
+  localStorage.removeItem('our_story_cache_v2');
+  localStorage.setItem('our_story_fresh_v3', 'done');
+}
+
+function saveAppState(newState) {
+  appState = newState;
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(appState));
+  } catch (e) {}
 }
 
 async function fetchState() {
-  try {
-    const res = await fetch('/api/state?t=' + Date.now());
-    if (res.ok) {
-      appState = await res.json();
-      localStorage.setItem(CACHE_KEY, JSON.stringify(appState));
-    }
-  } catch (e) {
+  // 1. Ensure we have state immediately so UI never blocks
+  if (!appState) {
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
       try { appState = JSON.parse(cached); } catch (err) {}
     }
-  }
-  if (appState) {
+    if (!appState) {
+      appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+    }
     renderAll();
+  }
+
+  // 2. Try fetching from server (if server active)
+  try {
+    const res = await fetch('/api/state?t=' + Date.now());
+    if (res.ok) {
+      const serverState = await res.json();
+      if (serverState && serverState.stats) {
+        saveAppState(serverState);
+        renderAll();
+      }
+    }
+  } catch (e) {
+    // Running on static host (e.g. GitHub Pages) or offline, local state persists seamlessly
   }
 }
 
@@ -311,25 +368,33 @@ function setupMemoryVault() {
 
       saveMemoryBtn.textContent = 'Saving to Vault... 💖';
 
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      if (!appState.memories) appState.memories = [];
+
+      const newMemory = {
+        id: 'm_' + Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        ...payload
+      };
+      appState.memories.unshift(newMemory);
+      saveAppState(appState);
+      renderVaultFeed();
+
+      playCelebrationChime();
+      showAppModal('💖 Memory Saved!', `Your daily memory with "${song.title}" is permanently stored in your Forever Scrapbook!`);
+      document.getElementById('memoryCaptionInput').value = '';
+      if (smartCard) smartCard.style.display = 'none';
+      if (removePhotoBtn) removePhotoBtn.click();
+      saveMemoryBtn.textContent = '💖 Save to Our Forever Vault';
+
       try {
-        const res = await fetch('/api/memory', {
+        await fetch('/api/memory', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (res.ok) {
-          playCelebrationChime();
-          showAppModal('💖 Memory Saved!', `Your daily memory with "${song.title}" is permanently stored in your Forever Scrapbook!`);
-          document.getElementById('memoryCaptionInput').value = '';
-          if (smartCard) smartCard.style.display = 'none';
-          if (removePhotoBtn) removePhotoBtn.click();
-          fetchState();
-        }
-      } catch (err) {
-        console.error("Save memory error:", err);
-      } finally {
-        saveMemoryBtn.textContent = '💖 Save to Our Forever Vault';
-      }
+      } catch (err) {}
     });
   }
 }
@@ -413,12 +478,12 @@ function renderQA() {
   if (qEl) qEl.textContent = `"${qa.question}"`;
   if (catEl) catEl.textContent = qa.category || 'Romantic & Playful';
 
-  const userAns = qa.answers[currentUser];
+  const userAns = (qa.answers && qa.answers[currentUser]) ? qa.answers[currentUser] : null;
   const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
-  const partnerAns = qa.answers[partnerUser];
+  const partnerAns = (qa.answers && qa.answers[partnerUser]) ? qa.answers[partnerUser] : null;
 
   // If both have answered: REVEAL!
-  if (qa.answers.himanshu && qa.answers.gullu) {
+  if (qa.answers && qa.answers.himanshu && qa.answers.gullu) {
     if (answerBox) answerBox.style.display = 'none';
     if (revealCard) revealCard.style.display = 'block';
     if (himanshuAnswerText) himanshuAnswerText.textContent = `"${qa.answers.himanshu}"`;
@@ -430,16 +495,35 @@ function renderQA() {
       answerBox.style.display = 'block';
       const textarea = document.getElementById('qaTextarea');
       const submitBtn = document.getElementById('submitQABtn');
+      let editBtn = document.getElementById('editMyAnswerBtn');
+
       if (userAns) {
         textarea.value = userAns;
         textarea.disabled = true;
         submitBtn.disabled = true;
-        submitBtn.textContent = `🔒 Your Answer is Locked! Waiting for ${currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕'}...`;
+        submitBtn.textContent = `🔒 Answer Locked! Waiting for ${currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕'}...`;
+
+        if (!editBtn) {
+          editBtn = document.createElement('button');
+          editBtn.id = 'editMyAnswerBtn';
+          editBtn.className = 'edit-answer-btn';
+          editBtn.innerHTML = '✏️ Edit / Change My Answer';
+          editBtn.style.cssText = 'background:none; border:none; color:var(--accent-gold); font-size:0.75rem; text-decoration:underline; cursor:pointer; margin-top:10px; display:block; width:100%; text-align:center; padding:4px;';
+          editBtn.onclick = () => {
+            textarea.disabled = false;
+            submitBtn.disabled = false;
+            submitBtn.textContent = '🔒 Update & Re-Lock Answer';
+            textarea.focus();
+            editBtn.remove();
+          };
+          answerBox.appendChild(editBtn);
+        }
       } else {
         textarea.value = '';
         textarea.disabled = false;
         submitBtn.disabled = false;
         submitBtn.textContent = '🔒 Lock & Submit My Answer';
+        if (editBtn) editBtn.remove();
       }
     }
   }
@@ -458,41 +542,116 @@ function renderQA() {
   }
 }
 
+// Full Question Pool for Randomizer
+const QA_QUESTIONS_POOL = [
+  { q: "Agar hum dono ek kamre me band ho jayein aur chabhi kho jaye, toh sabse pehli cheez kya karenge? 😉🗝️", cat: "Romantic & Naughty" },
+  { q: "Gullu ki aisi kaunsi aadat ya harkat hai jispe Himanshu ko sabse zyada pyaar aata hai? 🥰", cat: "Cute & Wholesome" },
+  { q: "Humari agli dream coffee date kahan honi chahiye aur kaun kya order karega? ☕✈️", cat: "Coffee Dates" },
+  { q: "Pehli baar milte hi dil me sabse pehla khayal kya aaya tha? Sach sach batana! ✨", cat: "First Impressions" },
+  { q: "Agar hum dono ek lambi road-trip par nikle, toh car me sabse pehle kaunsa gaana bajega? 🚗🎶", cat: "Music & Drives" },
+  { q: "Gullu ka kaunsa pout expression sabse zyada dangerous aur cute lagta hai? 🐷👑", cat: "Pout Queen Vibes" },
+  { q: "Ek aisi baat jo tumne abhi tak mujhe khul ke nahi batai par hamesha dil me rehti hai? 🤫❤️", cat: "Deep Secrets" },
+  { q: "Agar hum dono ko 1 poora din bina phone ke saath bitana ho, toh subah se shaam tak kya karenge? 📱❌", cat: "Quality Time" },
+  { q: "Jab hum dono ki choti si ladai hoti hai, toh sabse pehle manane kaun aata hai? ⚖️🤭", cat: "Sweet Banter" },
+  { q: "Humare pure rishte ka abhi tak ka sabse favorite aur memorable moment kaunsa hai? 📸💖", cat: "Core Memories" },
+  { q: "Agar hum dono ko raat ko 2 baje craving ho, toh late night kya khane jayenge? 🍦🍕", cat: "Midnight Cravings" },
+  { q: "Ek word me describe karo: Gullu Himanshu ke liye kya hai, aur Himanshu Gullu ke liye? 🌸☕", cat: "Pure Romance" }
+];
+
 function setupQAHandlers() {
   const submitBtn = document.getElementById('submitQABtn');
   const newQuestionBtn = document.getElementById('newQuestionBtn');
 
   if (submitBtn) {
     submitBtn.addEventListener('click', async () => {
-      const text = document.getElementById('qaTextarea').value.trim();
+      const textarea = document.getElementById('qaTextarea');
+      const text = textarea ? textarea.value.trim() : '';
       if (!text) {
-        alert("Please write your answer first! ❤️");
+        showAppModal('✏️ Answer Khali Hai!', 'Pehle apna answer likho, phir lock karo! ❤️');
+        playTone(300, 0.2);
         return;
       }
-      playTone(587.33, 0.25);
+
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      if (!appState.currentQA) appState.currentQA = JSON.parse(JSON.stringify(DEFAULT_APP_STATE.currentQA));
+      if (!appState.currentQA.answers) appState.currentQA.answers = { himanshu: null, gullu: null };
+
+      // Immediately write answer to current user & save locally
+      appState.currentQA.answers[currentUser] = text;
+      saveAppState(appState);
+
+      const isBoth = !!(appState.currentQA.answers.himanshu && appState.currentQA.answers.gullu);
+
+      if (isBoth) {
+        playCelebrationChime();
+        showAppModal('🎉 Both Answers Unlocked!', 'Aap dono ne answer lock kar diya hai! Dono answers reveal ho gaye hain! 💕');
+      } else {
+        playTone(587.33, 0.25);
+        const partnerName = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
+        showAppModal('🔒 Answer Locked!', `Aapka answer lock ho gaya hai! Jab tak <strong>${partnerName}</strong> apna answer lock nahi karegi/karega, tab tak hidden rahega! 😉`);
+      }
+
+      renderQA();
+
+      // Sync to server in background if active
       try {
-        const res = await fetch('/api/qa/answer', {
+        await fetch('/api/qa/answer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user: currentUser, answer: text })
         });
-        if (res.ok) {
-          playCelebrationChime();
-          fetchState();
-        }
       } catch (e) {}
     });
   }
 
   if (newQuestionBtn) {
     newQuestionBtn.addEventListener('click', async () => {
-      if (confirm("Roll a new random question for both of you?")) {
-        playTone(600, 0.2);
-        try {
-          const res = await fetch('/api/qa/new', { method: 'POST' });
-          if (res.ok) fetchState();
-        } catch (e) {}
+      playTone(600, 0.2);
+
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      if (!appState.pastQAs) appState.pastQAs = [];
+
+      // If previous question was answered by both, archive it to past QAs
+      if (appState.currentQA && appState.currentQA.answers && appState.currentQA.answers.himanshu && appState.currentQA.answers.gullu) {
+        appState.pastQAs.unshift({
+          id: appState.currentQA.id || Date.now(),
+          question: appState.currentQA.question,
+          answers: { ...appState.currentQA.answers }
+        });
       }
+
+      // Pick a random question different from current
+      const currentQText = appState.currentQA ? appState.currentQA.question : '';
+      const pool = QA_QUESTIONS_POOL.filter(item => item.q !== currentQText);
+      const chosen = pool[Math.floor(Math.random() * pool.length)] || QA_QUESTIONS_POOL[0];
+
+      appState.currentQA = {
+        id: Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        question: chosen.q,
+        category: chosen.cat,
+        answers: { himanshu: null, gullu: null }
+      };
+
+      saveAppState(appState);
+      renderQA();
+
+      // Animate question card pop
+      const qCard = document.querySelector('.qa-card');
+      if (qCard) {
+        qCard.style.animation = 'none';
+        qCard.offsetHeight;
+        qCard.style.animation = 'modalPop 0.35s ease';
+      }
+
+      // Sync to server in background if active
+      try {
+        await fetch('/api/qa/new', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: chosen.q, category: chosen.cat })
+        });
+      } catch (e) {}
     });
   }
 }
@@ -527,21 +686,26 @@ function renderCoupons() {
 }
 
 async function redeemCoupon(couponId) {
+  if (!appState || !appState.coupons) return;
   const coupon = appState.coupons.find(c => c.id === couponId);
-  if (!coupon) return;
+  if (!coupon || coupon.redeemed) return;
+
+  coupon.redeemed = true;
+  coupon.redeemedAt = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  coupon.redeemedBy = currentUser;
+  saveAppState(appState);
+  renderCoupons();
 
   playCelebrationChime();
+  const waMsg = `Oyeee! Maine app me yeh Love Coupon REDEEM kar liya: "${coupon.title}"! Ab tumhari baari hai ise poora karne ki! 😉☕❤️`;
+  showAppModal('🎟️ Coupon Redeemed!', `${coupon.title} is now officially stamped! Tap below to notify Himanshu on WhatsApp:`, waMsg);
+
   try {
-    const res = await fetch('/api/coupon/redeem', {
+    await fetch('/api/coupon/redeem', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ couponId, user: currentUser })
     });
-    if (res.ok) {
-      const waMsg = `Oyeee! Maine app me yeh Love Coupon REDEEM kar liya: "${coupon.title}"! Ab tumhari baari hai ise poora karne ki! 😉☕❤️`;
-      showAppModal('🎟️ Coupon Redeemed!', `${coupon.title} is now officially stamped! Tap below to notify Himanshu on WhatsApp:`, waMsg);
-      fetchState();
-    }
   } catch (e) {}
 }
 
@@ -576,16 +740,24 @@ function setupPulseArena() {
       const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
       showAppModal('💓 Heartbeat Delivered!', `A warm, loving heartbeat pulse was sent to ${partner}!`);
 
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      if (!appState.pulses) appState.pulses = [];
+      const newPulse = {
+        from: currentUser === 'himanshu' ? 'Himanshu' : 'Gullu',
+        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        note: `Sent a warm heartbeat pulse to ${partner} ❤️`
+      };
+      appState.pulses.unshift(newPulse);
+      if (appState.pulses.length > 20) appState.pulses.pop();
+      saveAppState(appState);
+      renderPulseHistory();
+
       try {
         await fetch('/api/pulse', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user: currentUser === 'himanshu' ? 'Himanshu' : 'Gullu',
-            note: `Sent a warm heartbeat pulse to ${partner} ❤️`
-          })
+          body: JSON.stringify(newPulse)
         });
-        fetchState();
       } catch (err) {}
     }, 1800);
   }
@@ -668,8 +840,24 @@ function setupMoodIndicator() {
       const note = customInput.value.trim() || moodInfo.defaultNote;
 
       playCelebrationChime();
+
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      if (!appState.currentMoods) appState.currentMoods = { ...DEFAULT_APP_STATE.currentMoods };
+
+      appState.currentMoods[currentUser] = {
+        mood: selectedMoodKey,
+        text: `${moodInfo.title} — "${note}"`,
+        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      };
+      saveAppState(appState);
+      renderMoods();
+      renderHeader();
+
+      showAppModal('🎭 Mood Updated!', `Your mood is now set to ${moodInfo.title}!`);
+      customInput.value = '';
+
       try {
-        const res = await fetch('/api/mood', {
+        await fetch('/api/mood', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -678,11 +866,6 @@ function setupMoodIndicator() {
             text: `${moodInfo.title} — "${note}"`
           })
         });
-        if (res.ok) {
-          showAppModal('🎭 Mood Updated!', `Your mood is now set to ${moodInfo.title}!`);
-          customInput.value = '';
-          fetchState();
-        }
       } catch (e) {}
     });
   }

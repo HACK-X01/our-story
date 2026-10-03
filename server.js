@@ -148,25 +148,34 @@ const server = http.createServer((req, res) => {
       // 3. New Random Question
       if (parsedUrl === '/api/qa/new') {
         const pool = [
-          "Agar hum dono ek kamre me band ho jayein aur chabhi kho jaye, toh sabse pehla kaam kya karenge? 😉🗝️",
-          "Gullu ki aisi kaunsi aadat hai jispe Himanshu ko sabse zyada pyaar aata hai? 🥰",
-          "Humari agli dream coffee date kahan honi chahiye? ☕✈️",
-          "Pehli baar milte hi dil me kya khayal aaya tha? ✨",
-          "Agar hum dono ek road-trip par nikle, toh car me sabse pehle kaunsa gaana bajega? 🚗🎶",
-          "Gullu ka kaunsa pout expression sabse zyada dangerous/cute hai? 🐷",
-          "Ek aisi baat jo tumne abhi tak mujhe khul ke nahi batai? 🤫❤️",
-          "Agar hum dono ko 1 din bina phone ke bitana ho, toh hum kya karenge? 📱❌"
+          { q: "Agar hum dono ek kamre me band ho jayein aur chabhi kho jaye, toh sabse pehli cheez kya karenge? 😉🗝️", cat: "Romantic & Naughty" },
+          { q: "Gullu ki aisi kaunsi aadat ya harkat hai jispe Himanshu ko sabse zyada pyaar aata hai? 🥰", cat: "Cute & Wholesome" },
+          { q: "Humari agli dream coffee date kahan honi chahiye aur kaun kya order karega? ☕✈️", cat: "Coffee Dates" },
+          { q: "Pehli baar milte hi dil me sabse pehla khayal kya aaya tha? Sach sach batana! ✨", cat: "First Impressions" },
+          { q: "Agar hum dono ek lambi road-trip par nikle, toh car me sabse pehle kaunsa gaana bajega? 🚗🎶", cat: "Music & Drives" },
+          { q: "Gullu ka kaunsa pout expression sabse zyada dangerous aur cute lagta hai? 🐷👑", cat: "Pout Queen Vibes" },
+          { q: "Ek aisi baat jo tumne abhi tak mujhe khul ke nahi batai par hamesha dil me rehti hai? 🤫❤️", cat: "Deep Secrets" },
+          { q: "Agar hum dono ko 1 poora din bina phone ke saath bitana ho, toh subah se shaam tak kya karenge? 📱❌", cat: "Quality Time" },
+          { q: "Jab hum dono ki choti si ladai hoti hai, toh sabse pehle manane kaun aata hai? ⚖️🤭", cat: "Sweet Banter" },
+          { q: "Humare pure rishte ka abhi tak ka sabse favorite aur memorable moment kaunsa hai? 📸💖", cat: "Core Memories" },
+          { q: "Agar hum dono ko raat ko 2 baje craving ho, toh late night kya khane jayenge? 🍦🍕", cat: "Midnight Cravings" },
+          { q: "Ek word me describe karo: Gullu Himanshu ke liye kya hai, aur Himanshu Gullu ke liye? 🌸☕", cat: "Pure Romance" }
         ];
+
         // Move current to past if both had answered
-        if (data.currentQA.answers.himanshu && data.currentQA.answers.gullu) {
+        if (data.currentQA && data.currentQA.answers && data.currentQA.answers.himanshu && data.currentQA.answers.gullu) {
           data.pastQAs.unshift(data.currentQA);
         }
-        const randomQ = pool[Math.floor(Math.random() * pool.length)];
+
+        const picked = pool[Math.floor(Math.random() * pool.length)];
+        const finalQ = payload.question || picked.q;
+        const finalCat = payload.category || picked.cat;
+
         data.currentQA = {
           id: Date.now(),
           date: new Date().toISOString().split('T')[0],
-          question: randomQ,
-          category: "Random Romance",
+          question: finalQ,
+          category: finalCat,
           answers: { himanshu: null, gullu: null }
         };
         saveData(data);
