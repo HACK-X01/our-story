@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
@@ -235,6 +235,68 @@
           <p class="section-desc">Redeemable anytime, anywhere. No questions asked!</p>
         </div>
 
+        <!-- Create Custom Coupon Button / Card -->
+        <div class="create-coupon-card" id="createCouponCard">
+          <div class="create-coupon-header" id="toggleCreateCouponBtn">
+            <div class="create-header-left">
+              <span class="create-icon">🎟️✨</span>
+              <div>
+                <h4 class="create-title">Create Custom Love Coupon ➕</h4>
+                <p class="create-subtitle">Tap to make a special coupon for your partner</p>
+              </div>
+            </div>
+            <button class="expand-btn" id="createCouponExpandBtn" type="button">+</button>
+          </div>
+
+          <!-- Expandable Form -->
+          <div class="create-coupon-form" id="createCouponForm" style="display: none;">
+            <div class="input-group">
+              <label class="input-label">Coupon Title:</label>
+              <input type="text" class="text-input" id="newCouponTitle" placeholder="e.g. 2 AM Maggi Date 🍜, 15 Min Massage 💆">
+            </div>
+
+            <!-- Preset Idea Chips -->
+            <div class="preset-chips-wrap">
+              <span class="preset-label">Quick Ideas:</span>
+              <div class="preset-chips-list">
+                <button type="button" class="preset-chip" data-title="Late Night Maggi 🍜" data-desc="Hot Maggi made by partner at 2 AM with extra cheese!">Maggi 🍜</button>
+                <button type="button" class="preset-chip" data-title="Head Massage on Demand 💆‍♂️" data-desc="15 minutes relaxing head massage, zero excuses!">Massage 💆</button>
+                <button type="button" class="preset-chip" data-title="No Questions Asked Kiss 💋" data-desc="Instant sweet kiss on demand, anytime anywhere.">Kiss 💋</button>
+                <button type="button" class="preset-chip" data-title="Shopping Partner Pass 🛍️" data-desc="Full patience and holding shopping bags with a sweet smile!">Shopping 🛍️</button>
+                <button type="button" class="preset-chip" data-title="Long Drive Under Stars 🚗" data-desc="Late night drive with slow music and open windows.">Drive 🚗</button>
+                <button type="button" class="preset-chip" data-title="Watch Gullu's Movie 🎬" data-desc="Zero complaining, full attention on Gullu's favorite film!">Movie 🎬</button>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Coupon Promise / Rules:</label>
+              <textarea class="text-input" id="newCouponDesc" rows="2" placeholder="e.g. Valid 24/7 without counter-arguments!"></textarea>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Who Can Redeem This Coupon?</label>
+              <div class="coupon-user-selector">
+                <label class="coupon-radio-label">
+                  <input type="radio" name="couponForUser" value="gullu" checked>
+                  <span>For Gullu 🌸</span>
+                </label>
+                <label class="coupon-radio-label">
+                  <input type="radio" name="couponForUser" value="himanshu">
+                  <span>For Himanshu ☕</span>
+                </label>
+                <label class="coupon-radio-label">
+                  <input type="radio" name="couponForUser" value="both">
+                  <span>Both 💑</span>
+                </label>
+              </div>
+            </div>
+
+            <button class="primary-btn" id="saveCustomCouponBtn" type="button">
+              💖 Add to Our Coupon Book
+            </button>
+          </div>
+        </div>
+
         <div class="coupons-grid" id="couponsGrid">
           <!-- Populated via script.js -->
         </div>
@@ -406,6 +468,6 @@
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" loop></audio>
 
-  <script src="script.js"></script>
+  <script src="script.js?v=4"></script>
 </body>
 </html>

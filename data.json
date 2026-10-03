@@ -42,6 +42,15 @@
   "pastQAs": [],
   "coupons": [
     {
+      "id": "c_1791029772506",
+      "title": "Love Coupon 🎟️",
+      "desc": "Redeemable anytime with love ❤️",
+      "forUser": "both",
+      "redeemed": false,
+      "isCustom": true,
+      "createdBy": "Himanshu"
+    },
+    {
       "id": "c1",
       "title": "Gullu Won The Argument Pass ⚖️",
       "desc": "Valid for 24 hours — no counter-arguments allowed. Gullu is 100% right!",

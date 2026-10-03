@@ -659,18 +659,28 @@ function setupQAHandlers() {
 // --- 5. ROMANTIC LOVE COUPONS LOGIC ---
 function renderCoupons() {
   const grid = document.getElementById('couponsGrid');
-  if (!grid || !appState || !appState.coupons) return;
+  if (!grid) return;
+
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.coupons || !Array.isArray(appState.coupons) || appState.coupons.length === 0) {
+    appState.coupons = JSON.parse(JSON.stringify(DEFAULT_APP_STATE.coupons));
+    saveAppState(appState);
+  }
 
   grid.innerHTML = appState.coupons.map(c => {
     const isRedeemed = c.redeemed;
     const canRedeem = !isRedeemed && (c.forUser === 'both' || c.forUser === currentUser);
+    const isCustom = c.isCustom;
     return `
-      <div class="coupon-ticket">
+      <div class="coupon-ticket ${isRedeemed ? 'is-redeemed' : ''}">
         <div class="coupon-header">
-          <span class="coupon-target">For: ${c.forUser === 'both' ? 'Both of Us 💑' : (c.forUser === 'gullu' ? 'Gullu 🌸' : 'Himanshu ☕')}</span>
-          <span class="coupon-badge ${isRedeemed ? 'redeemed' : 'available'}">
-            ${isRedeemed ? 'REDEEMED' : 'READY TO USE'}
-          </span>
+          <span class="coupon-target">For: ${c.forUser === 'both' ? 'Both of Us 💑' : (c.forUser === 'gullu' ? 'Gullu 🌸' : 'Himanshu ☕')}${isCustom ? ' <span style="color:var(--accent-gold); font-size:0.65rem;">(Custom Gift ✨)</span>' : ''}</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="coupon-badge ${isRedeemed ? 'redeemed' : 'available'}">
+              ${isRedeemed ? 'REDEEMED' : 'READY TO USE'}
+            </span>
+            ${isCustom ? `<button class="delete-coupon-btn" title="Delete custom coupon" onclick="deleteCustomCoupon('${c.id}')">✕</button>` : ''}
+          </div>
         </div>
         <h4 class="coupon-title">${c.title}</h4>
         <p class="coupon-desc">${c.desc}</p>
@@ -707,6 +717,110 @@ async function redeemCoupon(couponId) {
       body: JSON.stringify({ couponId, user: currentUser })
     });
   } catch (e) {}
+}
+
+function setupCouponCreation() {
+  const card = document.getElementById('createCouponCard');
+  const toggleHeader = document.getElementById('toggleCreateCouponBtn');
+  const form = document.getElementById('createCouponForm');
+  const titleInput = document.getElementById('newCouponTitle');
+  const descInput = document.getElementById('newCouponDesc');
+  const saveBtn = document.getElementById('saveCustomCouponBtn');
+  const presetChips = document.querySelectorAll('.preset-chip');
+
+  if (!card || !toggleHeader || !form) return;
+
+  function toggleForm() {
+    const isOpen = form.style.display !== 'none';
+    form.style.display = isOpen ? 'none' : 'flex';
+    card.classList.toggle('open', !isOpen);
+    playTone(isOpen ? 400 : 550, 0.1);
+  }
+
+  toggleHeader.addEventListener('click', (e) => {
+    // Don't toggle if clicking inside the form elements
+    if (e.target.closest('#createCouponForm')) return;
+    toggleForm();
+  });
+
+  presetChips.forEach(chip => {
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      titleInput.value = chip.getAttribute('data-title') || '';
+      descInput.value = chip.getAttribute('data-desc') || '';
+      playTone(650, 0.1);
+      titleInput.focus();
+    });
+  });
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const title = titleInput.value.trim();
+      const desc = descInput.value.trim() || 'Redeemable anytime with love ❤️';
+
+      if (!title) {
+        showAppModal('✏️ Title Zaroori Hai!', 'Pehle coupon ka cute sa title likho! e.g. Late Night Maggi 🍜');
+        playTone(300, 0.2);
+        titleInput.focus();
+        return;
+      }
+
+      const radioChecked = document.querySelector('input[name="couponForUser"]:checked');
+      const forUser = radioChecked ? radioChecked.value : 'both';
+
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      if (!appState.coupons) appState.coupons = [];
+
+      const newCoupon = {
+        id: 'c_' + Date.now(),
+        title: title,
+        desc: desc,
+        forUser: forUser,
+        redeemed: false,
+        isCustom: true,
+        createdBy: currentUser
+      };
+
+      appState.coupons.unshift(newCoupon);
+      saveAppState(appState);
+      renderCoupons();
+
+      playCelebrationChime();
+      showAppModal('🎟️ Love Coupon Created!', `Aapka naya coupon <strong>"${title}"</strong> coupon book me add ho gaya hai!`);
+
+      // Reset and close form
+      titleInput.value = '';
+      descInput.value = '';
+      form.style.display = 'none';
+      card.classList.remove('open');
+
+      try {
+        await fetch('/api/coupon/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newCoupon)
+        });
+      } catch (err) {}
+    });
+  }
+}
+
+function deleteCustomCoupon(couponId) {
+  if (!confirm("Are you sure you want to remove this custom coupon?")) return;
+  if (!appState || !appState.coupons) return;
+  appState.coupons = appState.coupons.filter(c => c.id !== couponId);
+  saveAppState(appState);
+  renderCoupons();
+  playTone(400, 0.15);
+
+  try {
+    fetch('/api/coupon/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ couponId })
+    });
+  } catch (err) {}
 }
 
 // --- 6. LIVE HEARTBEAT PULSE / MISS YOU ---
@@ -942,6 +1056,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupTabNavigation();
   setupMemoryVault();
   setupQAHandlers();
+  setupCouponCreation();
   setupPulseArena();
   setupMoodIndicator();
   setupModalDismiss();

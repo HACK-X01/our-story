@@ -199,6 +199,34 @@ const server = http.createServer((req, res) => {
         return;
       }
 
+      // 4b. Create Custom Coupon
+      if (parsedUrl === '/api/coupon/create') {
+        const newCoupon = {
+          id: payload.id || ('c_' + Date.now()),
+          title: payload.title || 'Love Coupon 🎟️',
+          desc: payload.desc || 'Redeemable anytime with love ❤️',
+          forUser: payload.forUser || 'both',
+          redeemed: false,
+          isCustom: true,
+          createdBy: payload.createdBy || 'Himanshu'
+        };
+        data.coupons.unshift(newCoupon);
+        saveData(data);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, coupon: newCoupon }));
+        return;
+      }
+
+      // 4c. Delete Custom Coupon
+      if (parsedUrl === '/api/coupon/delete') {
+        const { couponId } = payload;
+        data.coupons = data.coupons.filter(c => c.id !== couponId);
+        saveData(data);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+        return;
+      }
+
       // 5. Update Mood
       if (parsedUrl === '/api/mood') {
         const { user, mood, text } = payload;
