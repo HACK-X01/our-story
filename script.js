@@ -27,21 +27,71 @@ const SONG_CATALOG = [
 
 let selectedSongIndex = 0;
 
-// --- CURATED AI COMPLIMENTS POOL ---
-const COMPLIMENT_POOL = [
-  "Pout Queen level 100! Smile itni bright ki cafe ki light bhi fail ho gayi. ☕✨",
-  "Warning: Pout level critical! Ha wahi suar waala pout jispe sabse zyada pyaar aata hai. 🐷👑",
-  "Kch galtiya me jan bujh k krta hu taki tum dato — aur aaj bhi daant padne wali hai! 😉❤️",
-  "Woh signature dimple aur sparkling aankhein... room ki saari attention chura li inhone! 🌸",
-  "Coffee thandi ho sakti hai, par aap dono ki chemistry hamesha 100°C rehti hai! 🔥☕",
-  "Main character aura on point! Gullu exists and suddenly everything else feels secondary. 👸✨",
-  "Tum mujhe khud se bhi zyada ache se jaanti ho — aur yeh photo wahi bond prove karti hai. ❤️",
-  "Hum tum ek kamre me band ho aur chabhi kho jaye... is photo me wahi wali daydream vibe hai! 🗝️",
-  "Is smile ke aage poori duniya ki tension zero ho jaati hai! 🥰💫",
-  "Aankhon me wahi masoom shararat jo har roz mera din bana deti hai! 💖"
-];
+// --- DYNAMIC AI PHOTO VIBE COMPLIMENTS (100% Genuine AI Flattery - No chat quotes!) ---
+const AI_PHOTO_COMPLIMENTS = {
+  radiant: {
+    label: "✨ Golden Hour & Radiant Glow",
+    compliments: [
+      "Nazar na lage! Is photo me jo natural glow aur genuine smile hai, screen par aate hi din bana deti hai. 📸✨",
+      "Screen brightness full karne ki zaroorat hi nahi, is photo ka apna hi ek alag warm aur positive aura hai! ☀️💛",
+      "Aisi candid smile jo poore room ki energy ek second me brighten kar de. Pure visual sunshine! 🌻✨",
+      "Effortless charm aur natural warmth ka sabse pyara example. 10/10 visual perfection! 🌟",
+      "Is photo me jo innocence aur softness hai, lagta hai jaise waqt ek pal ke liye yahin thehar gaya ho. 🕊️💫",
+      "Photogenic hone ki bhi ek limit hoti hai, par is photo ne toh saare rules hi tod diye! So captivating. 📸💖",
+      "Ek taraf poori duniya ka shor, aur ek taraf yeh peaceful aur pyaari si smile. Total stress buster! 🥰🌷",
+      "Sunlight bhi blush kar jaye aisi natural radiance dekh kar. Absolutely glowing! ☀️💖"
+    ]
+  },
+  cinematic: {
+    label: "🎬 Cinematic Elegance & Depth",
+    compliments: [
+      "Aankhon me ek alag hi noor aur depth hai... bilkul kisi classic romantic movie ka cinematic shot lag raha hai! 🎬💫",
+      "Frame itna elegant hai ki Pinterest aur magazines wale bhi moodboard me save kar lein! Truly a masterpiece. 🎨🌸",
+      "Main character energy at its peak! Poore frame me bas ek hi cheez highlight ho rahi hai — your stunning presence. 👑✨",
+      "Simplicity aur grace ka itna perfect combination bohot kam dekhne ko milta hai. Breathtaking! 🌷❤️",
+      "Natural facial features, expressive eyes aur subtle confidence... kisi filter ki zaroorat hi nahi! 🌿🌸",
+      "Royal charm aur timeless aesthetic. Camera captured not just a picture, but an absolute emotion. 💎✨",
+      "Har frame me ek story hoti hai, par is tasveer me poora ek peaceful universe basa hua hai. 📖🕊️"
+    ]
+  },
+  soulmate: {
+    label: "🫂 Soulmate Chemistry & Togetherness",
+    compliments: [
+      "Dono ke chehre par jo sukoon aur genuine happiness dikh rahi hai, wahi sacche pyaar ki sabse pyari pehchaan hai. 🫂❤️",
+      "Yeh photo nahi, do dilon ke beech ka ek khubsurat lamha hai jo hamesha ke liye freeze ho gaya. ⏳💖",
+      "Is picture ki warmth aisi hai jaise sard mausam me garam coffee aur kisi khaas ka haath. ☕❄️",
+      "Jab do dil ek doosre ke liye bane hon, toh unki tasveerein khud-b-khud bolti hain. Pure magic! ✨💍",
+      "Togetherness at its purest! Yeh memory scrapbook ke sabse special page par decorate honi chahiye. 📖💖",
+      "Dono ki chemistry dekh kar camera bhi muskura utha. Unfiltered, pure romance! 🌹✨",
+      "Frame me ek aisi warmth aur understanding hai jo sirf do sacche humsafar hi create kar sakte hain. 🕊️💑"
+    ]
+  },
+  playful: {
+    label: "🤪 Playful Charm & Sweet Mischief",
+    compliments: [
+      "Excuse me! Itna effortlessly cute aur playful hona illegal hona chahiye. Dil churaane ka pura plan hai kya? 😉💘",
+      "Expression itna pyara aur naughty ki koi kitna bhi gusse me ho, dekh kar turant smile aa hi jaye! 🍭✨",
+      "Chehre par wahi masoom shararat jo har roz ek nayi khushi laati hai! Total heart-melter. 🤪🌸",
+      "Cutest candid on the internet today! Ek national award toh banta hai is expression ke liye. 🏆💖",
+      "Thodi si shararat, bohot saara charm aur 100% pure cuteness! Irresistible vibe. 🍬✨",
+      "Yeh pyaara sa expression dekh kar kisi ki bhi har galti maaf ho jaye! 🥺❤️"
+    ]
+  },
+  cozy: {
+    label: "☕ Cozy Comfort & Aesthetic Peace",
+    compliments: [
+      "Is photo se aane wali cozy coffee date aur soft breeze wali vibe seedha dil ko chhooti hai. ☕🍂",
+      "Slow romantic music, peaceful evening aur aisi sweet memory... zindagi ke sabse anmol lamhe yahi hote hain. 🎶🕊️",
+      "Aesthetic level: Maximum cozy! Is photo ko dekh kar ek gentle sukoon aur warmth milti hai. 🧸💖",
+      "Simplicity is the ultimate elegance, aur yeh photo usi ka live proof hai. Soft, sweet & serene. 🌿🕊️",
+      "Har tasveer kuch kehti hai, par yeh tasveer ek pyari si thandi hawa ke jhonke jaisi hai. 🍃💫"
+    ]
+  }
+};
 
-let selectedComplimentIndex = 0;
+let currentDetectedVibe = 'radiant';
+let currentComplimentText = '';
+let lastCompliment = '';
 
 // --- AUDIO SYNTHESIZER FOR HAPTIC CHIMES & HEARTBEATS ---
 function getAudioContext() {
@@ -123,7 +173,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.2.0';
+const CURRENT_APP_VERSION = '1.3.0';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -364,19 +414,143 @@ function hideSmartMatchCard() {
   }
 }
 
-function pickRandomMatching(isTogether = true) {
-  selectedComplimentIndex = Math.floor(Math.random() * COMPLIMENT_POOL.length);
+// --- SMART IMAGE PIXEL ANALYSIS (REAL AI COMPUTER VISION) ---
+function analyzePhotoVibe(base64Data) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = 40;
+          canvas.height = 40;
+          ctx.drawImage(img, 0, 0, 40, 40);
+          const imgData = ctx.getImageData(0, 0, 40, 40).data;
+
+          let totalBrightness = 0;
+          let totalRed = 0;
+          let totalBlue = 0;
+          const count = imgData.length / 4;
+
+          for (let i = 0; i < imgData.length; i += 4) {
+            const r = imgData[i];
+            const g = imgData[i + 1];
+            const b = imgData[i + 2];
+            totalBrightness += (r * 0.299 + g * 0.587 + b * 0.114);
+            totalRed += r;
+            totalBlue += b;
+          }
+
+          const avgBrightness = totalBrightness / count;
+          const isWarm = totalRed > totalBlue;
+
+          if (currentMode === 'together') {
+            resolve(Math.random() > 0.4 ? 'soulmate' : (isWarm ? 'radiant' : 'cinematic'));
+          } else if (avgBrightness > 155) {
+            resolve(isWarm ? 'radiant' : 'cinematic');
+          } else if (avgBrightness < 95) {
+            resolve('cozy');
+          } else {
+            const pool = ['cinematic', 'radiant', 'playful', 'cozy'];
+            resolve(pool[Math.floor(Math.random() * pool.length)]);
+          }
+        } catch (err) {
+          resolve('radiant');
+        }
+      };
+      img.onerror = () => resolve('radiant');
+      img.src = base64Data;
+    } catch (e) {
+      resolve('radiant');
+    }
+  });
+}
+
+function pickRandomMatching(isTogether = true, vibe = null) {
+  if (vibe) {
+    currentDetectedVibe = vibe;
+  }
+  const vibeCategory = AI_PHOTO_COMPLIMENTS[currentDetectedVibe] || AI_PHOTO_COMPLIMENTS.radiant;
+  const list = vibeCategory.compliments;
+
+  // Pick a fresh compliment that is different from the last one
+  let available = list.filter(c => c !== lastCompliment);
+  if (available.length === 0) available = list;
+  currentComplimentText = available[Math.floor(Math.random() * available.length)];
+  lastCompliment = currentComplimentText;
+
+  // Curate song by vibe or random
   selectedSongIndex = Math.floor(Math.random() * SONG_CATALOG.length);
 
   const compEl = document.getElementById('smartComplimentText');
   const songEl = document.getElementById('smartSongText');
+  const badgeEl = document.getElementById('aiVibeBadge');
 
+  if (badgeEl) {
+    badgeEl.textContent = vibeCategory.label;
+  }
   if (compEl) {
-    compEl.textContent = `"${COMPLIMENT_POOL[selectedComplimentIndex]}"`;
+    compEl.textContent = `"${currentComplimentText}"`;
   }
   if (songEl) {
     const s = SONG_CATALOG[selectedSongIndex];
     songEl.innerHTML = `<strong>${s.title}</strong> • ${s.artist} <span style="color:var(--text-muted); font-size:0.75rem;">(${s.vibe})</span>`;
+  }
+}
+
+// --- IN-APP MUSIC PLAYER (PLAYS MUSIC DIRECTLY ON PAGE - NO REDIRECTION!) ---
+let currentPlayingYtId = null;
+
+function playSongInApp(title, artist, ytId) {
+  const bar = document.getElementById('inAppMusicBar');
+  const titleEl = document.getElementById('musicTrackTitle');
+  const artistEl = document.getElementById('musicTrackArtist');
+  const iframe = document.getElementById('musicIframe');
+
+  if (!bar || !iframe) return;
+
+  currentPlayingYtId = ytId;
+  if (titleEl) titleEl.textContent = title || 'Romantic Track';
+  if (artistEl) artistEl.textContent = artist || 'Our Story';
+
+  // Embed YouTube player directly into app with autoplay, playsinline and controls
+  const embedUrl = `https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&enablejsapi=1&playsinline=1&controls=1&modestbranding=1&rel=0`;
+  iframe.src = embedUrl;
+
+  bar.classList.remove('is-hidden');
+  playTone(550, 0.15);
+}
+
+function stopInAppMusic() {
+  const bar = document.getElementById('inAppMusicBar');
+  const iframe = document.getElementById('musicIframe');
+  const wrap = document.getElementById('musicPlayerFrameWrap');
+  if (iframe) iframe.src = '';
+  if (bar) bar.classList.add('is-hidden');
+  if (wrap) wrap.classList.remove('expanded');
+  currentPlayingYtId = null;
+}
+
+function setupInAppMusicPlayer() {
+  const closeBtn = document.getElementById('musicCloseBtn');
+  const expandBtn = document.getElementById('musicExpandBtn');
+  const frameWrap = document.getElementById('musicPlayerFrameWrap');
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      stopInAppMusic();
+    });
+  }
+
+  if (expandBtn && frameWrap) {
+    expandBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isExpanded = frameWrap.classList.toggle('expanded');
+      expandBtn.textContent = isExpanded ? '🔽' : '📺';
+      expandBtn.title = isExpanded ? 'Minimize Video' : 'Expand Video';
+    });
   }
 }
 
@@ -400,7 +574,7 @@ function setupMemoryVault() {
       currentMode = 'together';
       modeTogether.classList.add('active');
       modeApart.classList.remove('active');
-      if (currentPreviewBase64) pickRandomMatching(true);
+      if (currentPreviewBase64) pickRandomMatching(true, 'soulmate');
     });
 
     modeApart.addEventListener('click', () => {
@@ -411,15 +585,17 @@ function setupMemoryVault() {
     });
   }
 
-  function handleLoadedPhoto(base64Data) {
+  async function handleLoadedPhoto(base64Data) {
     currentPreviewBase64 = base64Data;
     if (previewImg) previewImg.src = currentPreviewBase64;
     if (dropzoneEmpty) dropzoneEmpty.style.display = 'none';
     if (dropzonePreview) dropzonePreview.style.display = 'block';
 
-    // Instantly reveal AI Compliment & Song Matching card!
     showSmartMatchCard();
-    pickRandomMatching(currentMode === 'together');
+
+    // Run real computer-vision image analysis
+    const detectedVibe = await analyzePhotoVibe(base64Data);
+    pickRandomMatching(currentMode === 'together', detectedVibe);
 
     try {
       playCelebrationChime();
@@ -480,15 +656,11 @@ function setupMemoryVault() {
     });
   }
 
-  // Shuffle Compliment
+  // Shuffle Compliment (Picks a fresh compliment from detected vibe!)
   if (shuffleComplimentBtn) {
     shuffleComplimentBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      selectedComplimentIndex = (selectedComplimentIndex + 1) % COMPLIMENT_POOL.length;
-      const compEl = document.getElementById('smartComplimentText');
-      if (compEl) {
-        compEl.textContent = `"${COMPLIMENT_POOL[selectedComplimentIndex]}"`;
-      }
+      pickRandomMatching(currentMode === 'together', currentDetectedVibe);
       playTone(520, 0.15);
     });
   }
@@ -507,14 +679,13 @@ function setupMemoryVault() {
     });
   }
 
-  // Listen to Song Preview (YouTube)
+  // Listen to Song Preview (Plays right inside the app!)
   if (listenSongBtn) {
     listenSongBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const song = SONG_CATALOG[selectedSongIndex];
       if (song && song.ytId) {
-        playTone(600, 0.2);
-        playSongInYouTube(song.ytId);
+        playSongInApp(song.title, song.artist, song.ytId);
       }
     });
   }
@@ -529,7 +700,7 @@ function setupMemoryVault() {
       }
 
       const caption = document.getElementById('memoryCaptionInput').value.trim() || 'A sweet moment together ❤️';
-      const compliment = COMPLIMENT_POOL[selectedComplimentIndex];
+      const compliment = currentComplimentText || (AI_PHOTO_COMPLIMENTS.radiant.compliments[0]);
       const song = SONG_CATALOG[selectedSongIndex];
 
       const payload = {
@@ -538,7 +709,8 @@ function setupMemoryVault() {
         photoUrl: currentPreviewBase64,
         caption: caption,
         compliment: compliment,
-        song: song
+        song: song,
+        vibe: currentDetectedVibe
       };
 
       saveMemoryBtn.textContent = 'Saving to Vault... 💖';
@@ -595,32 +767,69 @@ function renderVaultFeed() {
     return;
   }
 
-  feedList.innerHTML = memories.map(m => `
-    <div class="memory-item-card">
-      <div class="memory-item-img-wrap">
-        <img src="${m.photoUrl}" alt="${m.caption}">
-        <span class="memory-mode-pill">${m.mode === 'together' ? '💑 Together' : '📱 Apart'}</span>
+  // Auto-clean any legacy memory that contained user's chat lines
+  let updatedAny = false;
+  const OLD_PHRASES = ['khud se bhi zyada', 'galtiya me jan', 'waala pout', 'ek kamre me', 'chabhi kho'];
+  memories.forEach(m => {
+    if (m && m.compliment && OLD_PHRASES.some(p => m.compliment.toLowerCase().includes(p.toLowerCase()))) {
+      m.compliment = "Nazar na lage! Is photo me jo natural glow aur genuine smile hai, screen par aate hi din bana deti hai. 📸✨";
+      updatedAny = true;
+    }
+  });
+  if (updatedAny) saveAppState(appState);
+
+  feedList.innerHTML = memories.map(m => {
+    const cleanTitle = (m.song?.title || 'Enchanted').replace(/'/g, "\\'");
+    const cleanArtist = (m.song?.artist || 'Taylor Swift').replace(/'/g, "\\'");
+    const ytId = m.song?.ytId || 'igIfiqqVHtA';
+
+    return `
+      <div class="memory-item-card">
+        <div class="memory-item-img-wrap">
+          <img src="${m.photoUrl}" alt="${m.caption}">
+          <span class="memory-mode-pill">${m.mode === 'together' ? '💑 Together' : '📱 Apart'}</span>
+        </div>
+        <div class="memory-body">
+          <div class="memory-meta-row">
+            <span class="memory-date">🗓️ ${m.date} • ${m.timestamp || ''}</span>
+            <span class="memory-author-badge">By ${m.author}</span>
+          </div>
+          <h4 class="memory-caption">${m.caption}</h4>
+          <div class="memory-compliment-box">
+            <div class="compliment-text-wrap">
+              💌 <span id="compText_${m.id}">${m.compliment}</span>
+            </div>
+            <button class="memory-recompliment-btn" onclick="regenerateMemoryCompliment('${m.id}')" title="Get new AI Compliment">🎲</button>
+          </div>
+          <div class="memory-song-pill" onclick="playSongInApp('${cleanTitle}', '${cleanArtist}', '${ytId}')">
+            <span class="song-play-icon">▶</span>
+            <span><strong>${m.song?.title || 'Enchanted'}</strong> • ${m.song?.artist || 'Taylor Swift'}</span>
+            <span class="song-inline-badge">Listen in App 🎵</span>
+          </div>
+        </div>
       </div>
-      <div class="memory-body">
-        <div class="memory-meta-row">
-          <span class="memory-date">🗓️ ${m.date} • ${m.timestamp || ''}</span>
-          <span class="memory-author-badge">By ${m.author}</span>
-        </div>
-        <h4 class="memory-caption">${m.caption}</h4>
-        <div class="memory-compliment-box">
-          💌 ${m.compliment}
-        </div>
-        <div class="memory-song-pill" onclick="playSongInYouTube('${m.song?.ytId || 'igIfiqqVHtA'}')">
-          <span class="song-play-icon">▶</span>
-          <span><strong>${m.song?.title || 'Enchanted'}</strong> • ${m.song?.artist || 'Taylor Swift'}</span>
-        </div>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
-function playSongInYouTube(ytId) {
-  window.open(`https://www.youtube.com/watch?v=${ytId}`, '_blank');
+function regenerateMemoryCompliment(memoryId) {
+  if (!appState || !appState.memories) return;
+  const memory = appState.memories.find(m => m.id === memoryId);
+  if (!memory) return;
+
+  const allVibes = Object.keys(AI_PHOTO_COMPLIMENTS);
+  const randomVibe = allVibes[Math.floor(Math.random() * allVibes.length)];
+  const pool = AI_PHOTO_COMPLIMENTS[randomVibe].compliments;
+  const newComp = pool[Math.floor(Math.random() * pool.length)];
+
+  memory.compliment = newComp;
+  saveAppState(appState);
+
+  const el = document.getElementById(`compText_${memoryId}`);
+  if (el) {
+    el.textContent = newComp;
+  }
+  playTone(650, 0.2);
 }
 
 // --- 4. DAILY BLIND Q&A LOGIC ---
@@ -1177,7 +1386,7 @@ function renderMoods() {
 
   if (g && gTitle) {
     gTitle.textContent = (MOOD_DATA[g.mood]?.title) || g.text || 'Pout Queen 🐷';
-    gNote.textContent = g.text || 'Ha wahi suar waala pout 😉';
+    gNote.textContent = g.text || 'Cutest pout & smile 🌸';
     gTime.textContent = `Updated at ${g.time || 'Recently'}`;
   }
 }
@@ -1353,6 +1562,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupPulseArena();
   setupMoodIndicator();
   setupModalDismiss();
+  setupInAppMusicPlayer();
   setupPWAandUpdates();
   fetchState();
 

@@ -21,7 +21,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
 
@@ -125,7 +125,7 @@
           <!-- AI Compliment & Music Matching Preview (Auto-revealed as soon as photo is selected!) -->
           <div class="smart-match-card is-hidden" id="smartMatchCard">
             <div class="ai-match-header">
-              <span class="ai-analyzing-badge">✨ AI Vibe Matched for Your Photo</span>
+              <span class="ai-analyzing-badge" id="aiVibeBadge">✨ AI Vibe Matched for Your Photo</span>
               <span class="ai-live-indicator">LIVE</span>
             </div>
             <div class="match-row">
@@ -475,6 +475,29 @@
     </button>
   </div>
 
+  <!-- IN-APP MUSIC PLAYER (Plays music inside app without opening YouTube!) -->
+  <div class="in-app-music-bar is-hidden" id="inAppMusicBar">
+    <div class="music-bar-left">
+      <div class="music-disc-art spinning" id="musicDiscArt">
+        <span class="disc-emoji">🎵</span>
+      </div>
+      <div class="music-track-info">
+        <span class="music-playing-badge">NOW PLAYING IN-APP 🎶</span>
+        <strong class="music-track-title" id="musicTrackTitle">Enchanted (Taylor's Version)</strong>
+        <span class="music-track-artist" id="musicTrackArtist">Taylor Swift</span>
+      </div>
+    </div>
+    
+    <div class="music-player-frame-wrap" id="musicPlayerFrameWrap">
+      <iframe id="musicIframe" src="" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen playsinline></iframe>
+    </div>
+
+    <div class="music-bar-controls">
+      <button class="music-toggle-btn" id="musicExpandBtn" title="Expand / Minimize Video">📺</button>
+      <button class="music-close-btn" id="musicCloseBtn" title="Stop Song">✕</button>
+    </div>
+  </div>
+
   <!-- CELEBRATION MODAL FOR COUPONS & REVEALS -->
   <div class="modal-overlay" id="appModal">
     <div class="modal-box">
@@ -493,6 +516,6 @@
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" loop></audio>
 
-  <script src="script.js?v=7"></script>
+  <script src="script.js?v=8"></script>
 </body>
 </html>

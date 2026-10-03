@@ -3,14 +3,15 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-const CACHE_NAME = 'our-story-v1';
+const CACHE_NAME = 'our-story-v2';
 
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './styles.css?v=6',
-  './script.js?v=6',
+  './styles.css?v=8',
+  './script.js?v=8',
   './manifest.json',
+  './version.json',
   './icon-192.png',
   './icon-512.png',
   './apple-touch-icon.png'

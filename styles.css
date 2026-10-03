@@ -780,6 +780,37 @@ body {
   color: #ffecb3;
   font-style: italic;
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.compliment-text-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.memory-recompliment-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--accent-gold);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.memory-recompliment-btn:hover {
+  background: rgba(245, 195, 102, 0.25);
+  border-color: var(--accent-gold);
+  transform: rotate(20deg) scale(1.1);
 }
 
 .memory-song-pill {
@@ -787,9 +818,9 @@ body {
   align-items: center;
   gap: 8px;
   background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 20px;
-  padding: 5px 12px;
+  padding: 6px 12px;
   font-size: 0.76rem;
   color: var(--text-muted);
   cursor: pointer;
@@ -799,10 +830,24 @@ body {
 .memory-song-pill:hover {
   border-color: var(--accent-rose);
   color: #fff;
+  background: rgba(255, 107, 138, 0.15);
 }
 
 .song-play-icon {
   color: var(--accent-rose);
+  font-size: 0.8rem;
+}
+
+.song-inline-badge {
+  margin-left: auto;
+  font-size: 0.62rem;
+  background: rgba(255, 107, 138, 0.2);
+  color: var(--accent-rose);
+  border: 1px solid rgba(255, 107, 138, 0.4);
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 /* ==========================================================================
@@ -1742,4 +1787,168 @@ body {
   transform: scale(1.05);
   box-shadow: 0 4px 18px var(--accent-rose-glow);
 }
+
+/* ==========================================================================
+   IN-APP MUSIC PLAYER STYLES (No Redirection!)
+   ========================================================================== */
+.in-app-music-bar {
+  position: fixed;
+  bottom: 74px; /* Right above the bottom navigation dock */
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 20px);
+  max-width: 500px;
+  background: linear-gradient(135deg, rgba(28, 12, 42, 0.98), rgba(16, 8, 24, 0.98));
+  border: 1.5px solid var(--accent-rose);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.9), 0 0 25px var(--accent-rose-glow);
+  z-index: 1002;
+  backdrop-filter: blur(20px);
+  animation: slideUpMusicBar 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.in-app-music-bar.is-hidden {
+  display: none !important;
+}
+
+@keyframes slideUpMusicBar {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 25px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.music-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.music-disc-art {
+  width: 40px;
+  height: 40px;
+  background: radial-gradient(circle, #381a4a 30%, #150a1d 75%);
+  border: 2px solid var(--accent-gold);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  box-shadow: 0 0 10px var(--accent-gold-glow);
+  flex-shrink: 0;
+}
+
+.music-disc-art.spinning {
+  animation: spinRecord 4s linear infinite;
+}
+
+@keyframes spinRecord {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.music-track-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.music-playing-badge {
+  font-size: 0.6rem;
+  color: var(--accent-rose);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.music-track-title {
+  font-size: 0.82rem;
+  color: #fff;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.music-track-artist {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.music-player-frame-wrap {
+  width: 95px;
+  height: 54px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(245, 195, 102, 0.4);
+  flex-shrink: 0;
+  background: #000;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.music-player-frame-wrap.expanded {
+  position: fixed;
+  bottom: 145px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100vw - 32px);
+  max-width: 440px;
+  height: 240px;
+  box-shadow: 0 15px 60px rgba(0, 0, 0, 0.95), 0 0 30px var(--accent-gold-glow);
+  border: 2px solid var(--accent-gold);
+  z-index: 1005;
+}
+
+.music-player-frame-wrap iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.music-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.music-toggle-btn, .music-close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+}
+
+.music-toggle-btn:hover {
+  background: rgba(245, 195, 102, 0.25);
+  border-color: var(--accent-gold);
+  transform: scale(1.05);
+}
+
+.music-close-btn:hover {
+  background: rgba(255, 75, 110, 0.35);
+  border-color: var(--accent-rose);
+  transform: scale(1.05);
+}
+
 
