@@ -10,68 +10,42 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// Initial seed data for Our Story
+// Initial seed data for Our Story (Fresh Start)
 const DEFAULT_DATA = {
   profiles: {
     himanshu: { name: "Himanshu", emoji: "☕", nickname: "Coffee Partner" },
     gullu: { name: "Gullu", emoji: "🌸", nickname: "Pout Queen 🐷" }
   },
   stats: {
-    startDate: "2026-09-05", // ~1 month since they met
-    coffeeDatesCount: 14,
-    poutsLoggedCount: 23,
-    scoldingsCount: 17
+    startDate: "2026-10-03", // Day 1 - Fresh Start
+    coffeeDatesCount: 0,
+    poutsLoggedCount: 0,
+    scoldingsCount: 0
   },
   currentMoods: {
-    himanshu: { mood: "coffee", text: "Craving an iced espresso with Gullu ☕", time: "Today, 4:30 pm" },
-    gullu: { mood: "pout", text: "Dant padne wali hai ready raho! 🐷", time: "Today, 5:10 pm" }
+    himanshu: { mood: "coffee", text: "Ready for our first story! ☕", time: "Just now" },
+    gullu: { mood: "romantic", text: "Our Story begins today! ✨", time: "Just now" }
   },
   currentQA: {
     id: 1,
-    date: new Date().toISOString().split('T')[0],
+    date: "2026-10-03",
     question: "Agar hum dono ek kamre me band ho jayein aur chabhi kho jaye, toh sabse pehli cheez kya karenge? 😉🗝️",
     category: "Romantic & Naughty",
     answers: {
-      himanshu: "Chabhi dhoondne ka natak karunga aur Gullu ke sath baith ke coffee piyunga ❤️",
-      gullu: null // null means locked!
+      himanshu: null,
+      gullu: null
     }
   },
-  pastQAs: [
-    {
-      id: 0,
-      question: "Pehli mulakat me sabse zyada cute kya laga tha?",
-      answers: {
-        himanshu: "Woh signature dimple aur jis tarah se hasi control kar rahi thi ✨",
-        gullu: "Jis tarah se nervous ho ke coffee order kar rahe the! 😂"
-      }
-    }
-  ],
+  pastQAs: [],
   coupons: [
     { id: "c1", title: "Gullu Won The Argument Pass ⚖️", desc: "Valid for 24 hours — no counter-arguments allowed. Gullu is 100% right!", forUser: "gullu", redeemed: false },
-    { id: "c2", title: "Unlimited Coffee On Himanshu ☕", desc: "Bill on Himanshu, coffee of Gullu's choice. Redeemable at any cafe!", forUser: "gullu", redeemed: true, redeemedAt: "Yesterday at Third Wave" },
+    { id: "c2", title: "Unlimited Coffee On Himanshu ☕", desc: "Bill on Himanshu, coffee of Gullu's choice. Redeemable at any cafe!", forUser: "gullu", redeemed: false },
     { id: "c3", title: "1 Tight Hug on Demand 🫂", desc: "No questions asked. Redeemable anytime, anywhere.", forUser: "both", redeemed: false },
     { id: "c4", title: "Late Night Ice-Cream & Drive 🍦", desc: "Midnight dessert run to Gullu's favorite spot under the stars.", forUser: "both", redeemed: false },
     { id: "c5", title: "Stop Scolding Me for 1 Hour 🤫", desc: "Himanshu's emergency shield against Gullu's cute scoldings.", forUser: "himanshu", redeemed: false },
     { id: "c6", title: "Hum Tum Ek Kamre Me Pass 🗝️", desc: "Recreate our special daydream: Just you and me, zero distractions.", forUser: "both", redeemed: false }
   ],
-  memories: [
-    {
-      id: "m1",
-      date: "2026-10-02",
-      mode: "together",
-      author: "Himanshu & Gullu",
-      photoUrl: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&auto=format&fit=crop&q=80",
-      caption: "Coffee date smile & endless banter",
-      compliment: "Pout Queen level 99! Smile itni bright ki cafe ki light bhi fail ho gayi. ☕✨",
-      song: {
-        title: "Enchanted (Taylor's Version)",
-        artist: "Taylor Swift",
-        ytId: "igIfiqqVHtA",
-        vibe: "Sparkling & Magical"
-      },
-      likes: 12
-    }
-  ],
+  memories: [],
   pulses: []
 };
 

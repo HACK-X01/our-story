@@ -12,21 +12,21 @@
     }
   },
   "stats": {
-    "startDate": "2026-09-05",
-    "coffeeDatesCount": 14,
-    "poutsLoggedCount": 23,
-    "scoldingsCount": 17
+    "startDate": "2026-10-03",
+    "coffeeDatesCount": 0,
+    "poutsLoggedCount": 0,
+    "scoldingsCount": 0
   },
   "currentMoods": {
     "himanshu": {
       "mood": "coffee",
-      "text": "Craving an iced espresso with Gullu ☕",
-      "time": "Today, 4:30 pm"
+      "text": "Ready for our first story! ☕",
+      "time": "Just now"
     },
     "gullu": {
-      "mood": "pout",
-      "text": "Dant padne wali hai ready raho! 🐷",
-      "time": "Today, 5:10 pm"
+      "mood": "romantic",
+      "text": "Our Story begins today! ✨",
+      "time": "Just now"
     }
   },
   "currentQA": {
@@ -35,20 +35,11 @@
     "question": "Agar hum dono ek kamre me band ho jayein aur chabhi kho jaye, toh sabse pehli cheez kya karenge? 😉🗝️",
     "category": "Romantic & Naughty",
     "answers": {
-      "himanshu": "Chabhi dhoondne ka natak karunga aur Gullu ke sath baith ke coffee piyunga ❤️",
+      "himanshu": null,
       "gullu": null
     }
   },
-  "pastQAs": [
-    {
-      "id": 0,
-      "question": "Pehli mulakat me sabse zyada cute kya laga tha?",
-      "answers": {
-        "himanshu": "Woh signature dimple aur jis tarah se hasi control kar rahi thi ✨",
-        "gullu": "Jis tarah se nervous ho ke coffee order kar rahe the! 😂"
-      }
-    }
-  ],
+  "pastQAs": [],
   "coupons": [
     {
       "id": "c1",
@@ -62,8 +53,7 @@
       "title": "Unlimited Coffee On Himanshu ☕",
       "desc": "Bill on Himanshu, coffee of Gullu's choice. Redeemable at any cafe!",
       "forUser": "gullu",
-      "redeemed": true,
-      "redeemedAt": "Yesterday at Third Wave"
+      "redeemed": false
     },
     {
       "id": "c3",
@@ -94,23 +84,6 @@
       "redeemed": false
     }
   ],
-  "memories": [
-    {
-      "id": "m1",
-      "date": "2026-10-02",
-      "mode": "together",
-      "author": "Himanshu & Gullu",
-      "photoUrl": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&auto=format&fit=crop&q=80",
-      "caption": "Coffee date smile & endless banter",
-      "compliment": "Pout Queen level 99! Smile itni bright ki cafe ki light bhi fail ho gayi. ☕✨",
-      "song": {
-        "title": "Enchanted (Taylor's Version)",
-        "artist": "Taylor Swift",
-        "ytId": "igIfiqqVHtA",
-        "vibe": "Sparkling & Magical"
-      },
-      "likes": 12
-    }
-  ],
+  "memories": [],
   "pulses": []
 }

@@ -77,16 +77,25 @@ function playCelebrationChime() {
 }
 
 // --- FETCH & SYNC APP STATE ---
+const CACHE_KEY = 'our_story_cache_v2';
+// Invalidate any old cache from previous test runs (e.g., 28 days or 1 dummy memory)
+if (localStorage.getItem('our_story_fresh_v2') !== 'done') {
+  localStorage.removeItem('our_story_cache');
+  localStorage.setItem('our_story_fresh_v2', 'done');
+}
+
 async function fetchState() {
   try {
     const res = await fetch('/api/state?t=' + Date.now());
     if (res.ok) {
       appState = await res.json();
-      localStorage.setItem('our_story_cache', JSON.stringify(appState));
+      localStorage.setItem(CACHE_KEY, JSON.stringify(appState));
     }
   } catch (e) {
-    const cached = localStorage.getItem('our_story_cache');
-    if (cached) appState = JSON.parse(cached);
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      try { appState = JSON.parse(cached); } catch (err) {}
+    }
   }
   if (appState) {
     renderAll();
@@ -103,8 +112,24 @@ function renderAll() {
   renderMoods();
 }
 
+// Dynamically compute Day Counter starting from startDate
+function updateDaysCounter() {
+  const streakDaysEl = document.getElementById('streakDays');
+  if (!streakDaysEl) return;
+  const startStr = (appState && appState.stats && appState.stats.startDate) ? appState.stats.startDate : '2026-10-03';
+  const parts = startStr.split('-').map(Number);
+  const startDate = new Date(parts[0], parts[1] - 1, parts[2]);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffTime = Math.max(0, today.getTime() - startDate.getTime());
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1; // 1-based, starts at Day 1
+  streakDaysEl.textContent = diffDays;
+}
+
 // --- 1. HEADER & PROFILES ---
 function renderHeader() {
+  updateDaysCounter();
+
   const himanshuMoodText = document.getElementById('himanshuMoodText');
   const gulluMoodText = document.getElementById('gulluMoodText');
   
@@ -188,6 +213,7 @@ function setupMemoryVault() {
   const shuffleComplimentBtn = document.getElementById('shuffleComplimentBtn');
   const shuffleSongBtn = document.getElementById('shuffleSongBtn');
   const saveMemoryBtn = document.getElementById('saveMemoryBtn');
+  const smartCard = document.getElementById('smartMatchCard');
 
   // Mode Toggle
   if (modeTogether && modeApart) {
@@ -195,14 +221,14 @@ function setupMemoryVault() {
       currentMode = 'together';
       modeTogether.classList.add('active');
       modeApart.classList.remove('active');
-      pickRandomMatching(true);
+      if (currentPreviewBase64) pickRandomMatching(true);
     });
 
     modeApart.addEventListener('click', () => {
       currentMode = 'apart';
       modeApart.classList.add('active');
       modeTogether.classList.remove('active');
-      pickRandomMatching(false);
+      if (currentPreviewBase64) pickRandomMatching(false);
     });
   }
 
@@ -221,6 +247,9 @@ function setupMemoryVault() {
           previewImg.src = currentPreviewBase64;
           dropzoneEmpty.style.display = 'none';
           dropzonePreview.style.display = 'block';
+          
+          // REVEAL AI compliment & song matching ONLY when a picture is uploaded!
+          if (smartCard) smartCard.style.display = 'flex';
           pickRandomMatching();
           playCelebrationChime();
         };
@@ -236,6 +265,8 @@ function setupMemoryVault() {
       dropzonePreview.style.display = 'none';
       dropzoneEmpty.style.display = 'block';
       fileInput.value = '';
+      // HIDE AI compliment & song when photo is removed
+      if (smartCard) smartCard.style.display = 'none';
     });
   }
 
@@ -259,15 +290,20 @@ function setupMemoryVault() {
   // Save Memory to Forever Vault
   if (saveMemoryBtn) {
     saveMemoryBtn.addEventListener('click', async () => {
+      if (!currentPreviewBase64) {
+        showAppModal('📸 Photo Required', 'Pehle ek pyaari si photo choose karo! Tabhi uske vibe se AI compliment aur song match hoga ✨');
+        playTone(300, 0.2);
+        return;
+      }
+
       const caption = document.getElementById('memoryCaptionInput').value.trim() || 'A sweet moment together ❤️';
       const compliment = COMPLIMENT_POOL[selectedComplimentIndex];
       const song = SONG_CATALOG[selectedSongIndex];
-      const defaultImg = "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&auto=format&fit=crop&q=80";
 
       const payload = {
         mode: currentMode,
         author: currentMode === 'together' ? 'Himanshu & Gullu' : (currentUser === 'himanshu' ? 'Himanshu' : 'Gullu'),
-        photoUrl: currentPreviewBase64 || defaultImg,
+        photoUrl: currentPreviewBase64,
         caption: caption,
         compliment: compliment,
         song: song
@@ -285,6 +321,7 @@ function setupMemoryVault() {
           playCelebrationChime();
           showAppModal('💖 Memory Saved!', `Your daily memory with "${song.title}" is permanently stored in your Forever Scrapbook!`);
           document.getElementById('memoryCaptionInput').value = '';
+          if (smartCard) smartCard.style.display = 'none';
           if (removePhotoBtn) removePhotoBtn.click();
           fetchState();
         }
@@ -314,11 +351,25 @@ function pickRandomMatching(isTogether = true) {
 function renderVaultFeed() {
   const feedList = document.getElementById('timelineList');
   const feedCount = document.getElementById('feedCount');
-  if (!feedList || !appState || !appState.memories) return;
+  if (!feedList || !appState) return;
 
-  feedCount.textContent = `${appState.memories.length} Memories Saved`;
+  const memories = appState.memories || [];
+  if (feedCount) {
+    feedCount.textContent = memories.length === 1 ? '1 Memory Saved' : `${memories.length} Memories Saved`;
+  }
 
-  feedList.innerHTML = appState.memories.map(m => `
+  if (memories.length === 0) {
+    feedList.innerHTML = `
+      <div class="empty-feed-card">
+        <span class="empty-icon">📖✨</span>
+        <h4 class="empty-title">Your Scrapbook is Waiting!</h4>
+        <p class="empty-desc">Abhi tak koi memory save nahi hui hai. Aaj ki pehli photo upar add karo aur apni story start karo! 💖</p>
+      </div>
+    `;
+    return;
+  }
+
+  feedList.innerHTML = memories.map(m => `
     <div class="memory-item-card">
       <div class="memory-item-img-wrap">
         <img src="${m.photoUrl}" alt="${m.caption}">

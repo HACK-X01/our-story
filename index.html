@@ -33,7 +33,7 @@
           <p class="brand-subtitle">Himanshu & Gullu • Forever & Always</p>
         </div>
         <div class="counter-badge" id="daysCounter">
-          <span class="heart-pulse-icon">❤️</span> Day <strong id="streakDays">28</strong>
+          <span class="heart-pulse-icon">❤️</span> Day <strong id="streakDays">1</strong>
         </div>
       </div>
 
@@ -115,8 +115,11 @@
             <input type="text" class="text-input" id="memoryCaptionInput" placeholder="e.g. Coffee date smile, late night gossip, or silly pout 🐷">
           </div>
 
-          <!-- AI Compliment & Music Matching Preview -->
-          <div class="smart-match-card" id="smartMatchCard">
+          <!-- AI Compliment & Music Matching Preview (Unlocked when photo is selected) -->
+          <div class="smart-match-card" id="smartMatchCard" style="display: none;">
+            <div class="ai-match-header">
+              <span class="ai-analyzing-badge">✨ Vibe Matched for Your Photo</span>
+            </div>
             <div class="match-row">
               <span class="match-icon">💌</span>
               <div class="match-info">
@@ -149,7 +152,7 @@
         <div class="memories-feed">
           <div class="feed-header">
             <h3 class="feed-title">Our Memory Scrapbook</h3>
-            <span class="feed-count" id="feedCount">1 Memory Saved</span>
+            <span class="feed-count" id="feedCount">0 Memories Saved</span>
           </div>
 
           <div class="timeline-list" id="timelineList">
