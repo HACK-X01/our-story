@@ -116,12 +116,13 @@ const DEFAULT_APP_STATE = {
 };
 
 // --- FETCH & SYNC APP STATE ---
-const CACHE_KEY = 'our_story_cache_v3';
+const CACHE_KEY = 'our_story_cache_v5';
 // Invalidate any older cache
-if (localStorage.getItem('our_story_fresh_v3') !== 'done') {
+if (localStorage.getItem('our_story_fresh_v5') !== 'done') {
   localStorage.removeItem('our_story_cache');
   localStorage.removeItem('our_story_cache_v2');
-  localStorage.setItem('our_story_fresh_v3', 'done');
+  localStorage.removeItem('our_story_cache_v3');
+  localStorage.setItem('our_story_fresh_v5', 'done');
 }
 
 function saveAppState(newState) {
@@ -213,6 +214,13 @@ function renderHeader() {
   const qaLabel = document.getElementById('qaAnswerLabel');
   if (qaLabel) {
     qaLabel.textContent = `Your Answer (${currentUser === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸'}):`;
+  }
+
+  // Update Pulse Status Prompt for active partner
+  const pulseText = document.getElementById('pulseStatusText');
+  if (pulseText) {
+    const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
+    pulseText.textContent = `Hold for 2 seconds to send warmth to ${partner}...`;
   }
 }
 
@@ -836,6 +844,10 @@ function setupPulseArena() {
     heart.classList.add('holding');
     playHeartbeatSound();
 
+    const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
+    const statusText = document.getElementById('pulseStatusText');
+    if (statusText) statusText.textContent = `Sending warm heartbeat to ${partner}... 💓`;
+
     if (navigator.vibrate) {
       navigator.vibrate([70, 50, 90]);
     }
@@ -853,6 +865,8 @@ function setupPulseArena() {
       
       const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
       showAppModal('💓 Heartbeat Delivered!', `A warm, loving heartbeat pulse was sent to ${partner}!`);
+
+      if (statusText) statusText.textContent = `Hold for 2 seconds to send warmth to ${partner}...`;
 
       if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
       if (!appState.pulses) appState.pulses = [];
@@ -880,6 +894,9 @@ function setupPulseArena() {
     clearTimeout(holdTimer);
     clearInterval(heartbeatAudioInterval);
     heart.classList.remove('holding');
+    const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
+    const statusText = document.getElementById('pulseStatusText');
+    if (statusText) statusText.textContent = `Hold for 2 seconds to send warmth to ${partner}...`;
   }
 
   heart.addEventListener('mousedown', startHold);
@@ -906,10 +923,10 @@ function createFloatingHeart(parent) {
 
 function renderPulseHistory() {
   const logList = document.getElementById('pulseLogList');
-  if (!logList || !appState || !appState.pulses) return;
+  if (!logList) return;
 
-  if (appState.pulses.length === 0) {
-    logList.innerHTML = `<div class="pulse-log-item"><span class="pulse-item-text">Touch & hold the heart above to send your first pulse! ❤️</span></div>`;
+  if (!appState || !appState.pulses || appState.pulses.length === 0) {
+    logList.innerHTML = `<div class="pulse-log-item" style="justify-content:center; text-align:center;"><span class="pulse-item-text" style="color:var(--text-muted); font-size:0.8rem;">Touch & hold the heart above to send your first pulse! ❤️</span></div>`;
     return;
   }
 
