@@ -13,7 +13,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css?v=5">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
 
@@ -109,16 +112,11 @@
             </div>
           </div>
 
-          <!-- Caption Input -->
-          <div class="input-group">
-            <label class="input-label">Today's Story / Caption:</label>
-            <input type="text" class="text-input" id="memoryCaptionInput" placeholder="e.g. Coffee date smile, late night gossip, or silly pout 🐷">
-          </div>
-
-          <!-- AI Compliment & Music Matching Preview (Unlocked when photo is selected) -->
-          <div class="smart-match-card" id="smartMatchCard" style="display: none;">
+          <!-- AI Compliment & Music Matching Preview (Auto-revealed as soon as photo is selected!) -->
+          <div class="smart-match-card is-hidden" id="smartMatchCard">
             <div class="ai-match-header">
-              <span class="ai-analyzing-badge">✨ Vibe Matched for Your Photo</span>
+              <span class="ai-analyzing-badge">✨ AI Vibe Matched for Your Photo</span>
+              <span class="ai-live-indicator">LIVE</span>
             </div>
             <div class="match-row">
               <span class="match-icon">💌</span>
@@ -128,7 +126,7 @@
                   "Pout Queen level 100! Smile itni bright ki cafe ki light bhi fail ho gayi. ☕✨"
                 </p>
               </div>
-              <button class="shuffle-btn" id="shuffleComplimentBtn" title="New compliment">🎲</button>
+              <button class="shuffle-btn" id="shuffleComplimentBtn" title="Shuffle Compliment">🎲</button>
             </div>
 
             <div class="match-row">
@@ -139,8 +137,17 @@
                   <strong>Enchanted (Taylor's Version)</strong> • Taylor Swift
                 </p>
               </div>
-              <button class="shuffle-btn" id="shuffleSongBtn" title="Change song">🎵</button>
+              <div class="match-action-btns">
+                <button class="song-listen-btn" id="listenSongBtn" title="Listen on YouTube">▶ Play</button>
+                <button class="shuffle-btn" id="shuffleSongBtn" title="Change Song">🔀</button>
+              </div>
             </div>
+          </div>
+
+          <!-- Caption Input -->
+          <div class="input-group">
+            <label class="input-label">Today's Story / Caption:</label>
+            <input type="text" class="text-input" id="memoryCaptionInput" placeholder="e.g. Coffee date smile, late night gossip, or silly pout 🐷">
           </div>
 
           <button class="primary-btn" id="saveMemoryBtn">
@@ -464,6 +471,6 @@
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" loop></audio>
 
-  <script src="script.js?v=5"></script>
+  <script src="script.js?v=6"></script>
 </body>
 </html>

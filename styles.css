@@ -485,21 +485,45 @@ body {
   cursor: pointer;
 }
 
+.photo-dropzone.drag-active {
+  border-color: var(--accent-rose);
+  background: rgba(255, 107, 138, 0.1);
+  transform: scale(1.01);
+}
+
 .smart-match-card {
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(245, 195, 102, 0.3);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(38, 20, 52, 0.95), rgba(18, 9, 28, 0.95));
+  border: 1.5px solid rgba(245, 195, 102, 0.45);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-top: 14px;
   margin-bottom: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  animation: modalPop 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  gap: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(245, 195, 102, 0.15);
+  animation: fadeInSmartCard 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.smart-match-card.is-hidden {
+  display: none !important;
+}
+
+@keyframes fadeInSmartCard {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .ai-match-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 2px;
 }
 
@@ -507,24 +531,47 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: linear-gradient(135deg, rgba(245, 195, 102, 0.18), rgba(255, 107, 138, 0.18));
-  border: 1px solid rgba(245, 195, 102, 0.35);
+  background: linear-gradient(135deg, rgba(245, 195, 102, 0.25), rgba(255, 107, 138, 0.25));
+  border: 1px solid rgba(245, 195, 102, 0.5);
   color: var(--accent-gold);
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.4px;
+  box-shadow: 0 2px 8px rgba(245, 195, 102, 0.2);
+}
+
+.ai-live-indicator {
+  font-size: 0.62rem;
+  font-weight: 800;
+  background: rgba(255, 75, 110, 0.25);
+  color: var(--accent-rose);
+  border: 1px solid rgba(255, 75, 110, 0.5);
+  padding: 2px 7px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+  animation: pulseLiveBadge 1.5s infinite;
+}
+
+@keyframes pulseLiveBadge {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 .match-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .match-icon {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
+  flex-shrink: 0;
 }
 
 .match-info {
@@ -539,26 +586,63 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.4px;
   display: block;
+  margin-bottom: 2px;
 }
 
 .match-content {
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   color: var(--text-main);
   line-height: 1.4;
 }
 
-.shuffle-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+.match-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.song-listen-btn {
+  background: linear-gradient(135deg, var(--accent-rose), #e63960);
+  border: none;
   color: #fff;
-  width: 28px;
-  height: 28px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.song-listen-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 10px var(--accent-rose-glow);
+}
+
+.shuffle-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.shuffle-btn:hover {
+  background: rgba(245, 195, 102, 0.25);
+  border-color: var(--accent-gold);
+  transform: rotate(20deg);
 }
 
 /* Feed Timeline */

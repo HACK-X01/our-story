@@ -15,10 +15,14 @@ const SONG_CATALOG = [
   { id: 'tumsehi', title: "Tum Se Hi", artist: "Mohit Chauhan", vibe: "Soft Rain & Road Trips 🌧️", ytId: "cbTKYt8fTvg" },
   { id: 'lover', title: "Lover", artist: "Taylor Swift", vibe: "Candlelight & Coffee ☕", ytId: "-BjZmE2gtdo" },
   { id: 'kesariya', title: "Kesariya", artist: "Arijit Singh", vibe: "Pure Heart Romance 🧡", ytId: "BddP6PYo2gs" },
+  { id: 'apnabanale', title: "Apna Bana Le", artist: "Arijit Singh", vibe: "Warm Hugs & Whispers 🫂", ytId: "ElZfdU54Cp8" },
+  { id: 'perfect', title: "Perfect", artist: "Ed Sheeran", vibe: "Dancing Under Stars 🌟", ytId: "2Vv-BfVoq4g" },
   { id: 'matargashti', title: "Matargashti", artist: "Mohit Chauhan", vibe: "Silly Pout & Banter 🤪", ytId: "6vKucgAeF_Q" },
   { id: 'cardigan', title: "Cardigan", artist: "Taylor Swift", vibe: "Cozy Weather & Warm Tea 🍂", ytId: "K-a8s8OLBSE" },
   { id: 'peeloon', title: "Pee Loon", artist: "Mohit Chauhan", vibe: "Soulful Eyes & Dimples 🌸", ytId: "yW8D_u2v0-w" },
-  { id: 'untilifoundyou', title: "Until I Found You", artist: "Stephen Sanchez", vibe: "Retro Slow Dance 🕊️", ytId: "GxldQ9eX2wo" }
+  { id: 'untilifoundyou', title: "Until I Found You", artist: "Stephen Sanchez", vibe: "Retro Slow Dance 🕊️", ytId: "GxldQ9eX2wo" },
+  { id: 'goldenhour', title: "Golden Hour", artist: "JVKE", vibe: "Your Face in Sunset Glow 🌅", ytId: "PEM0Vs8jf1w" },
+  { id: 'raataan', title: "Raataan Lambiyan", artist: "Jubin Nautiyal & Asees Kaur", vibe: "Late Night Calls 🌙", ytId: "gvyUuxdRdR4" }
 ];
 
 let selectedSongIndex = 0;
@@ -32,7 +36,9 @@ const COMPLIMENT_POOL = [
   "Coffee thandi ho sakti hai, par aap dono ki chemistry hamesha 100°C rehti hai! 🔥☕",
   "Main character aura on point! Gullu exists and suddenly everything else feels secondary. 👸✨",
   "Tum mujhe khud se bhi zyada ache se jaanti ho — aur yeh photo wahi bond prove karti hai. ❤️",
-  "Hum tum ek kamre me band ho aur chabhi kho jaye... is photo me wahi wali daydream vibe hai! 🗝️"
+  "Hum tum ek kamre me band ho aur chabhi kho jaye... is photo me wahi wali daydream vibe hai! 🗝️",
+  "Is smile ke aage poori duniya ki tension zero ho jaati hai! 🥰💫",
+  "Aankhon me wahi masoom shararat jo har roz mera din bana deti hai! 💖"
 ];
 
 let selectedComplimentIndex = 0;
@@ -116,13 +122,14 @@ const DEFAULT_APP_STATE = {
 };
 
 // --- FETCH & SYNC APP STATE ---
-const CACHE_KEY = 'our_story_cache_v5';
+const CACHE_KEY = 'our_story_cache_v6';
 // Invalidate any older cache
-if (localStorage.getItem('our_story_fresh_v5') !== 'done') {
+if (localStorage.getItem('our_story_fresh_v6') !== 'done') {
   localStorage.removeItem('our_story_cache');
   localStorage.removeItem('our_story_cache_v2');
   localStorage.removeItem('our_story_cache_v3');
-  localStorage.setItem('our_story_fresh_v5', 'done');
+  localStorage.removeItem('our_story_cache_v5');
+  localStorage.setItem('our_story_fresh_v6', 'done');
 }
 
 function saveAppState(newState) {
@@ -265,7 +272,40 @@ function setupTabNavigation() {
   });
 }
 
-// --- 3. MEMORY VAULT LOGIC ---
+// --- 3. MEMORY VAULT LOGIC & SMART MATCH CARD ---
+function showSmartMatchCard() {
+  const card = document.getElementById('smartMatchCard');
+  if (card) {
+    card.classList.remove('is-hidden');
+    card.style.removeProperty('display');
+    card.style.display = 'flex';
+  }
+}
+
+function hideSmartMatchCard() {
+  const card = document.getElementById('smartMatchCard');
+  if (card) {
+    card.classList.add('is-hidden');
+    card.style.display = 'none';
+  }
+}
+
+function pickRandomMatching(isTogether = true) {
+  selectedComplimentIndex = Math.floor(Math.random() * COMPLIMENT_POOL.length);
+  selectedSongIndex = Math.floor(Math.random() * SONG_CATALOG.length);
+
+  const compEl = document.getElementById('smartComplimentText');
+  const songEl = document.getElementById('smartSongText');
+
+  if (compEl) {
+    compEl.textContent = `"${COMPLIMENT_POOL[selectedComplimentIndex]}"`;
+  }
+  if (songEl) {
+    const s = SONG_CATALOG[selectedSongIndex];
+    songEl.innerHTML = `<strong>${s.title}</strong> • ${s.artist} <span style="color:var(--text-muted); font-size:0.75rem;">(${s.vibe})</span>`;
+  }
+}
+
 function setupMemoryVault() {
   const modeTogether = document.getElementById('modeTogether');
   const modeApart = document.getElementById('modeApart');
@@ -277,8 +317,8 @@ function setupMemoryVault() {
   const removePhotoBtn = document.getElementById('removePhotoBtn');
   const shuffleComplimentBtn = document.getElementById('shuffleComplimentBtn');
   const shuffleSongBtn = document.getElementById('shuffleSongBtn');
+  const listenSongBtn = document.getElementById('listenSongBtn');
   const saveMemoryBtn = document.getElementById('saveMemoryBtn');
-  const smartCard = document.getElementById('smartMatchCard');
 
   // Mode Toggle
   if (modeTogether && modeApart) {
@@ -297,58 +337,111 @@ function setupMemoryVault() {
     });
   }
 
-  // Photo Input Trigger
+  function handleLoadedPhoto(base64Data) {
+    currentPreviewBase64 = base64Data;
+    if (previewImg) previewImg.src = currentPreviewBase64;
+    if (dropzoneEmpty) dropzoneEmpty.style.display = 'none';
+    if (dropzonePreview) dropzonePreview.style.display = 'block';
+
+    // Instantly reveal AI Compliment & Song Matching card!
+    showSmartMatchCard();
+    pickRandomMatching(currentMode === 'together');
+
+    try {
+      playCelebrationChime();
+    } catch (e) {}
+  }
+
+  // Photo Input Trigger & Change
   if (dropzone && fileInput) {
     dropzone.addEventListener('click', (e) => {
-      if (e.target !== removePhotoBtn) fileInput.click();
+      if (e.target.id === 'removePhotoBtn' || e.target.closest('#removePhotoBtn')) return;
+      fileInput.click();
     });
 
     fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
+      const file = e.target.files && e.target.files[0];
       if (file) {
         const reader = new FileReader();
         reader.onload = (event) => {
-          currentPreviewBase64 = event.target.result;
-          previewImg.src = currentPreviewBase64;
-          dropzoneEmpty.style.display = 'none';
-          dropzonePreview.style.display = 'block';
-          
-          // REVEAL AI compliment & song matching ONLY when a picture is uploaded!
-          if (smartCard) smartCard.style.display = 'flex';
-          pickRandomMatching();
-          playCelebrationChime();
+          handleLoadedPhoto(event.target.result);
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Drag & Drop
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('drag-active');
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('drag-active');
+    });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('drag-active');
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          handleLoadedPhoto(event.target.result);
         };
         reader.readAsDataURL(file);
       }
     });
   }
 
+  // Remove Photo Button
   if (removePhotoBtn) {
     removePhotoBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      e.preventDefault();
       currentPreviewBase64 = null;
-      dropzonePreview.style.display = 'none';
-      dropzoneEmpty.style.display = 'block';
-      fileInput.value = '';
-      // HIDE AI compliment & song when photo is removed
-      if (smartCard) smartCard.style.display = 'none';
+      if (dropzonePreview) dropzonePreview.style.display = 'none';
+      if (dropzoneEmpty) dropzoneEmpty.style.display = 'block';
+      if (fileInput) fileInput.value = '';
+      hideSmartMatchCard();
+      playTone(350, 0.1);
     });
   }
 
+  // Shuffle Compliment
   if (shuffleComplimentBtn) {
-    shuffleComplimentBtn.addEventListener('click', () => {
+    shuffleComplimentBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       selectedComplimentIndex = (selectedComplimentIndex + 1) % COMPLIMENT_POOL.length;
-      document.getElementById('smartComplimentText').textContent = `"${COMPLIMENT_POOL[selectedComplimentIndex]}"`;
+      const compEl = document.getElementById('smartComplimentText');
+      if (compEl) {
+        compEl.textContent = `"${COMPLIMENT_POOL[selectedComplimentIndex]}"`;
+      }
       playTone(520, 0.15);
     });
   }
 
+  // Shuffle Song
   if (shuffleSongBtn) {
-    shuffleSongBtn.addEventListener('click', () => {
+    shuffleSongBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       selectedSongIndex = (selectedSongIndex + 1) % SONG_CATALOG.length;
       const song = SONG_CATALOG[selectedSongIndex];
-      document.getElementById('smartSongText').innerHTML = `<strong>${song.title}</strong> • ${song.artist} <span style="color:var(--text-muted); font-size:0.75rem;">(${song.vibe})</span>`;
+      const songEl = document.getElementById('smartSongText');
+      if (songEl) {
+        songEl.innerHTML = `<strong>${song.title}</strong> • ${song.artist} <span style="color:var(--text-muted); font-size:0.75rem;">(${song.vibe})</span>`;
+      }
       playTone(680, 0.15);
+    });
+  }
+
+  // Listen to Song Preview (YouTube)
+  if (listenSongBtn) {
+    listenSongBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const song = SONG_CATALOG[selectedSongIndex];
+      if (song && song.ytId) {
+        playTone(600, 0.2);
+        playSongInYouTube(song.ytId);
+      }
     });
   }
 
@@ -392,7 +485,7 @@ function setupMemoryVault() {
       playCelebrationChime();
       showAppModal('💖 Memory Saved!', `Your daily memory with "${song.title}" is permanently stored in your Forever Scrapbook!`);
       document.getElementById('memoryCaptionInput').value = '';
-      if (smartCard) smartCard.style.display = 'none';
+      hideSmartMatchCard();
       if (removePhotoBtn) removePhotoBtn.click();
       saveMemoryBtn.textContent = '💖 Save to Our Forever Vault';
 
@@ -404,20 +497,6 @@ function setupMemoryVault() {
         });
       } catch (err) {}
     });
-  }
-}
-
-function pickRandomMatching(isTogether = true) {
-  selectedComplimentIndex = Math.floor(Math.random() * COMPLIMENT_POOL.length);
-  selectedSongIndex = Math.floor(Math.random() * SONG_CATALOG.length);
-
-  const compEl = document.getElementById('smartComplimentText');
-  const songEl = document.getElementById('smartSongText');
-
-  if (compEl) compEl.textContent = `"${COMPLIMENT_POOL[selectedComplimentIndex]}"`;
-  if (songEl) {
-    const s = SONG_CATALOG[selectedSongIndex];
-    songEl.innerHTML = `<strong>${s.title}</strong> • ${s.artist} <span style="color:var(--text-muted); font-size:0.75rem;">(${s.vibe})</span>`;
   }
 }
 
