@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Our Story ✨ Himanshu & Gullu</title>
+  <meta name="description" content="A private couple app for Himanshu & Gullu — Daily Memory Vault, Blind Q&A, Love Coupons, Live Pulse & Mood Check-in.">
+  <meta name="theme-color" content="#180c25">
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Google Fonts: Editorial Romantic Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Ambient Glow Canvas & Particles -->
+  <canvas id="ambientCanvas"></canvas>
+  <div class="ambient-orb orb-1"></div>
+  <div class="ambient-orb orb-2"></div>
+
+  <!-- MAIN APP CONTAINER -->
+  <div class="app-layout">
+
+    <!-- TOP HEADER -->
+    <header class="app-header">
+      <div class="brand-row">
+        <div class="brand-title-wrap">
+          <h1 class="brand-title">Our Story <span class="sparkle-star">✨</span></h1>
+          <p class="brand-subtitle">Himanshu & Gullu • Forever & Always</p>
+        </div>
+        <div class="counter-badge" id="daysCounter">
+          <span class="heart-pulse-icon">❤️</span> Day <strong id="streakDays">28</strong>
+        </div>
+      </div>
+
+      <!-- Profile View Switcher (Himanshu vs Gullu) -->
+      <div class="profile-switch-bar">
+        <span class="switch-label">Viewing As:</span>
+        <div class="profile-toggle-pills">
+          <button class="profile-pill active" id="pillHimanshu" data-user="himanshu">
+            <span class="user-emoji">☕</span> Himanshu
+          </button>
+          <button class="profile-pill" id="pillGullu" data-user="gullu">
+            <span class="user-emoji">🌸</span> Gullu
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Mood Status Strip -->
+      <div class="mini-mood-strip">
+        <div class="partner-mood-chip" id="himanshuMoodChip">
+          <span class="chip-avatar">☕</span>
+          <div class="chip-info">
+            <span class="chip-name">Himanshu</span>
+            <span class="chip-mood" id="himanshuMoodText">Craving coffee with you ☕</span>
+          </div>
+        </div>
+        <div class="chip-divider">❤️</div>
+        <div class="partner-mood-chip" id="gulluMoodChip">
+          <span class="chip-avatar">🌸</span>
+          <div class="chip-info">
+            <span class="chip-name">Gullu</span>
+            <span class="chip-mood" id="gulluMoodText">Pout Queen strikes 🐷</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- CONTENT TABS -->
+    <main class="tabs-container">
+
+      <!-- ============================================================
+           TAB 1: 📸 DAILY MEMORY VAULT & SMART MUSIC
+           ============================================================ -->
+      <section class="tab-pane active" id="paneVault">
+        
+        <!-- Add Memory Action Card -->
+        <div class="card add-memory-card">
+          <div class="card-header">
+            <h3 class="card-title">📸 Capture Today's Memory</h3>
+            <span class="card-tag">Forever Vault</span>
+          </div>
+
+          <!-- Mode Toggle: Together vs Apart -->
+          <div class="memory-mode-toggle">
+            <button class="mode-btn active" id="modeTogether" data-mode="together">
+              💑 Together (Meeting Today)
+            </button>
+            <button class="mode-btn" id="modeApart" data-mode="apart">
+              📱 Apart (Missing You)
+            </button>
+          </div>
+
+          <!-- Upload Dropzone & Live Preview -->
+          <div class="photo-dropzone" id="photoDropzone">
+            <input type="file" id="memoryFileInput" accept="image/*" style="display:none;">
+            <div class="dropzone-empty" id="dropzoneEmpty">
+              <span class="dropzone-icon">📷</span>
+              <p class="dropzone-text">Tap to take photo or choose from gallery</p>
+              <span class="dropzone-hint">Auto-matched with Bollywood/Hollywood & AI Compliment ✨</span>
+            </div>
+            <div class="dropzone-preview" id="dropzonePreview" style="display:none;">
+              <img id="previewImg" src="" alt="Memory preview">
+              <button class="remove-photo-btn" id="removePhotoBtn">✕</button>
+            </div>
+          </div>
+
+          <!-- Caption Input -->
+          <div class="input-group">
+            <label class="input-label">Today's Story / Caption:</label>
+            <input type="text" class="text-input" id="memoryCaptionInput" placeholder="e.g. Coffee date smile, late night gossip, or silly pout 🐷">
+          </div>
+
+          <!-- AI Compliment & Music Matching Preview -->
+          <div class="smart-match-card" id="smartMatchCard">
+            <div class="match-row">
+              <span class="match-icon">💌</span>
+              <div class="match-info">
+                <span class="match-label">AI Compliment:</span>
+                <p class="match-content" id="smartComplimentText">
+                  "Pout Queen level 100! Smile itni bright ki cafe ki light bhi fail ho gayi. ☕✨"
+                </p>
+              </div>
+              <button class="shuffle-btn" id="shuffleComplimentBtn" title="New compliment">🎲</button>
+            </div>
+
+            <div class="match-row">
+              <span class="match-icon">🎶</span>
+              <div class="match-info">
+                <span class="match-label">Auto-Paired Song:</span>
+                <p class="match-content" id="smartSongText">
+                  <strong>Enchanted (Taylor's Version)</strong> • Taylor Swift
+                </p>
+              </div>
+              <button class="shuffle-btn" id="shuffleSongBtn" title="Change song">🎵</button>
+            </div>
+          </div>
+
+          <button class="primary-btn" id="saveMemoryBtn">
+            💖 Save to Our Forever Vault
+          </button>
+        </div>
+
+        <!-- Memories Timeline Feed -->
+        <div class="memories-feed">
+          <div class="feed-header">
+            <h3 class="feed-title">Our Memory Scrapbook</h3>
+            <span class="feed-count" id="feedCount">1 Memory Saved</span>
+          </div>
+
+          <div class="timeline-list" id="timelineList">
+            <!-- Populated via script.js -->
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ============================================================
+           TAB 2: 🔒 DAILY BLIND Q&A
+           ============================================================ -->
+      <section class="tab-pane" id="paneQA">
+        
+        <div class="card qa-card">
+          <div class="qa-badge-row">
+            <span class="qa-badge">🔒 Daily Blind Q&A</span>
+            <span class="qa-category" id="qaCategory">Romantic & Naughty</span>
+          </div>
+
+          <h2 class="qa-question" id="qaQuestion">
+            "Agar hum dono ek kamre me band ho jayein aur chabhi kho jaye, toh sabse pehli cheez kya karenge? 😉🗝️"
+          </h2>
+
+          <!-- User's Answer Input -->
+          <div class="qa-answer-box" id="qaAnswerBox">
+            <label class="input-label" id="qaAnswerLabel">Your Answer (Himanshu):</label>
+            <textarea class="qa-textarea" id="qaTextarea" placeholder="Type your honest heart answer here..."></textarea>
+            <button class="primary-btn" id="submitQABtn">
+              🔒 Lock & Submit My Answer
+            </button>
+          </div>
+
+          <!-- Reveal Container (Shown after both answer) -->
+          <div class="qa-reveal-card" id="qaRevealCard" style="display:none;">
+            <div class="reveal-header">
+              <span class="reveal-icon">🎉</span>
+              <h4 class="reveal-title">Both Answers Revealed!</h4>
+            </div>
+
+            <div class="answers-comparison">
+              <div class="answer-card himanshu-answer">
+                <div class="answer-author"><span class="author-emoji">☕</span> Himanshu:</div>
+                <p class="answer-body" id="himanshuAnswerText">"Chabhi dhoondne ka natak karunga aur Gullu ke sath baith ke coffee piyunga ❤️"</p>
+              </div>
+
+              <div class="answer-card gullu-answer">
+                <div class="answer-author"><span class="author-emoji">🌸</span> Gullu:</div>
+                <p class="answer-body" id="gulluAnswerText">"Tumhe pehle dantungi, phir baith ke baatein karenge! 🐷"</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="qa-footer-actions">
+            <button class="secondary-btn" id="newQuestionBtn">
+              🎲 Random New Question
+            </button>
+          </div>
+        </div>
+
+        <!-- Past Questions Archive -->
+        <div class="past-qa-section">
+          <h4 class="past-qa-title">Past Q&A Moments 💭</h4>
+          <div class="past-qa-list" id="pastQAList">
+            <!-- Populated via script.js -->
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ============================================================
+           TAB 3: 🎟️ ROMANTIC LOVE COUPONS
+           ============================================================ -->
+      <section class="tab-pane" id="paneCoupons">
+        
+        <div class="section-intro">
+          <h3 class="section-title">Romantic Love Coupons 🎟️</h3>
+          <p class="section-desc">Redeemable anytime, anywhere. No questions asked!</p>
+        </div>
+
+        <div class="coupons-grid" id="couponsGrid">
+          <!-- Populated via script.js -->
+        </div>
+
+      </section>
+
+
+      <!-- ============================================================
+           TAB 4: 💓 LIVE HEARTBEAT PULSE / MISS YOU
+           ============================================================ -->
+      <section class="tab-pane" id="panePulse">
+        
+        <div class="pulse-container">
+          <div class="pulse-header">
+            <h3 class="pulse-title">Touch & Hold to Send Heartbeat</h3>
+            <p class="pulse-subtitle">Feel each other's pulse across any distance ❤️</p>
+          </div>
+
+          <!-- Interactive Glowing 3D Heart -->
+          <div class="heartbeat-arena">
+            <div class="heart-pulse-wave wave-1"></div>
+            <div class="heart-pulse-wave wave-2"></div>
+            <div class="heart-pulse-wave wave-3"></div>
+            
+            <div class="interactive-heart" id="interactiveHeart">
+              <span class="heart-svg-icon">💖</span>
+              <span class="heart-hold-text">PRESS & HOLD</span>
+            </div>
+          </div>
+
+          <div class="pulse-status-box" id="pulseStatusBox">
+            <span class="pulse-status-text">Hold for 2 seconds to send warmth to Gullu...</span>
+          </div>
+
+          <!-- Pulse History Log -->
+          <div class="pulse-history-card">
+            <h4 class="history-title">Recent Heartbeats 💓</h4>
+            <div class="pulse-log-list" id="pulseLogList">
+              <div class="pulse-log-item">
+                <span class="pulse-item-icon">💌</span>
+                <span class="pulse-item-text">Himanshu sent a heartbeat</span>
+                <span class="pulse-item-time">5 mins ago</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ============================================================
+           TAB 5: 🎭 "AAJ KA MOOD" INDICATOR
+           ============================================================ -->
+      <section class="tab-pane" id="paneMood">
+        
+        <div class="card mood-card">
+          <div class="card-header">
+            <h3 class="card-title">🎭 Aaj Ka Mood Check-In</h3>
+            <span class="card-tag" id="currentMoodUserTag">For Himanshu</span>
+          </div>
+
+          <p class="mood-prompt">Pick how you are feeling right now:</p>
+
+          <div class="mood-options-grid" id="moodOptionsGrid">
+            <button class="mood-option-btn active" data-mood="coffee">
+              <span class="mood-emoji">☕</span>
+              <span class="mood-name">Craving Coffee</span>
+            </button>
+            <button class="mood-option-btn" data-mood="pout">
+              <span class="mood-emoji">🐷</span>
+              <span class="mood-name">Pout Queen Mode</span>
+            </button>
+            <button class="mood-option-btn" data-mood="scold">
+              <span class="mood-emoji">😤</span>
+              <span class="mood-name">Dantne Ka Mann</span>
+            </button>
+            <button class="mood-option-btn" data-mood="romantic">
+              <span class="mood-emoji">🥰</span>
+              <span class="mood-name">Super Romantic</span>
+            </button>
+            <button class="mood-option-btn" data-mood="sleepy">
+              <span class="mood-emoji">😴</span>
+              <span class="mood-name">Sleepy Baby</span>
+            </button>
+            <button class="mood-option-btn" data-mood="hungry">
+              <span class="mood-emoji">🍕</span>
+              <span class="mood-name">Bhook Lagi Hai</span>
+            </button>
+          </div>
+
+          <div class="input-group" style="margin-top: 16px;">
+            <label class="input-label">Add a sweet note (optional):</label>
+            <input type="text" class="text-input" id="moodCustomNote" placeholder="e.g. Jaldi milo, coffee peete hain!">
+          </div>
+
+          <button class="primary-btn" id="updateMoodBtn">
+            ✨ Update My Mood
+          </button>
+        </div>
+
+        <!-- Detailed Both Moods Card -->
+        <div class="both-moods-display">
+          <div class="mood-detail-box himanshu-mood-box">
+            <div class="mood-avatar">☕</div>
+            <div class="mood-detail-info">
+              <span class="mood-owner">Himanshu</span>
+              <h4 class="mood-curr-title" id="himanshuMoodFullTitle">Craving Coffee ☕</h4>
+              <p class="mood-curr-note" id="himanshuMoodFullNote">"Iced Americano date on Gullu soon!"</p>
+              <span class="mood-curr-time" id="himanshuMoodFullTime">Updated at 4:30 pm</span>
+            </div>
+          </div>
+
+          <div class="mood-detail-box gullu-mood-box">
+            <div class="mood-avatar">🌸</div>
+            <div class="mood-detail-info">
+              <span class="mood-owner">Gullu (Pout Queen)</span>
+              <h4 class="mood-curr-title" id="gulluMoodFullTitle">Pout Queen Mode 🐷</h4>
+              <p class="mood-curr-note" id="gulluMoodFullNote">"Kch galtiya me jan bujh k krta hu taki tum dato 😉"</p>
+              <span class="mood-curr-time" id="gulluMoodFullTime">Updated at 5:10 pm</span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- STICKY BOTTOM NAVIGATION DOCK -->
+    <nav class="bottom-dock" aria-label="Main Navigation">
+      <button class="dock-item active" data-tab="paneVault">
+        <span class="dock-icon">📸</span>
+        <span class="dock-label">Vault</span>
+      </button>
+      <button class="dock-item" data-tab="paneQA">
+        <span class="dock-icon">🔒</span>
+        <span class="dock-label">Blind Q&A</span>
+      </button>
+      <button class="dock-item" data-tab="paneCoupons">
+        <span class="dock-icon">🎟️</span>
+        <span class="dock-label">Coupons</span>
+      </button>
+      <button class="dock-item" data-tab="panePulse">
+        <span class="dock-icon">💓</span>
+        <span class="dock-label">Pulse</span>
+      </button>
+      <button class="dock-item" data-tab="paneMood">
+        <span class="dock-icon">🎭</span>
+        <span class="dock-label">Mood</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- CELEBRATION MODAL FOR COUPONS & REVEALS -->
+  <div class="modal-overlay" id="appModal">
+    <div class="modal-box">
+      <button class="modal-dismiss" id="modalDismissBtn">✕</button>
+      <div class="modal-celebration-emoji" id="modalEmoji">🎉</div>
+      <h3 class="modal-heading" id="modalHeading">Coupon Redeemed!</h3>
+      <p class="modal-desc" id="modalDesc">Gullu just redeemed <strong>1 Free Coffee</strong>!</p>
+      <div class="modal-action-row">
+        <a href="#" class="modal-wa-btn" id="modalWaShareBtn" target="_blank">
+          <span class="wa-ico">💬</span> Share on WhatsApp
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
+  <audio id="globalAudioPlayer" loop></audio>
+
+  <script src="script.js"></script>
+</body>
+</html>
