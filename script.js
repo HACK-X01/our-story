@@ -183,7 +183,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.3.0';
+const CURRENT_APP_VERSION = '1.5.4';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -2421,30 +2421,29 @@ function showUpdateBanner(worker = null) {
 }
 
 function setupPWAandUpdates() {
-  // 1. Service Worker Registration & Live Update Detection
+  // 1. Silent Background Auto-Update Engine
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').then((registration) => {
-      // Check if an update is already waiting (e.g. cached from previous visit)
+      // Auto-activate waiting worker immediately
       if (registration.waiting) {
-        showUpdateBanner(registration.waiting);
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
       }
 
-      // Check when a new service worker is installing
       registration.addEventListener('updatefound', () => {
         const newWorker = registration.installing;
         if (newWorker) {
           newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              showUpdateBanner(newWorker);
+            if (newWorker.state === 'installed') {
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
             }
           });
         }
       });
 
-      // Periodically check for SW updates (every 30 seconds)
+      // Periodically check for updates silently in the background
       setInterval(() => {
         registration.update().catch(() => {});
-      }, 15000);
+      }, 30000);
 
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
@@ -2455,54 +2454,19 @@ function setupPWAandUpdates() {
       console.warn('PWA Service Worker registration skipped:', err);
     });
 
-    // When the new worker takes control, reload smoothly
-    let refreshing = false;
+    // When the new worker takes control, save data silently
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    });
-  }
-
-  // 2. Wire up the "Update Now" Action Button
-  const updateBtn = document.getElementById('updateAppBtn');
-  if (updateBtn) {
-    updateBtn.addEventListener('click', () => {
-      updateBtn.textContent = 'Updating... ✨';
-      updateBtn.disabled = true;
-
-      // Ensure all current memories and answers are saved into permanent storage before reload!
       if (appState) saveAppState(appState);
-
-      if (waitingServiceWorker) {
-        waitingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
-      } else {
-        // Fallback for static host / hard reload
-        window.location.reload();
-      }
+      console.log('App auto-updated silently in the background ✨');
     });
   }
 
-  // 3. Periodic Remote Version Checker (Detects git commits / version.json changes)
-  async function checkRemoteVersion() {
-    try {
-      const res = await fetch('./version.json?t=' + Date.now());
-      if (res.ok) {
-        const info = await res.json();
-        if (info && info.version && info.version !== CURRENT_APP_VERSION) {
-          showUpdateBanner();
-        }
-      }
-    } catch (e) {}
+  // 2. Hide any update banner permanently (Silent Auto-Update Mode)
+  const banner = document.getElementById('appUpdateBanner');
+  if (banner) {
+    banner.classList.add('is-hidden');
+    banner.style.display = 'none';
   }
-
-  // Check version on load, periodically, and when switching back to app tab
-  setTimeout(checkRemoteVersion, 3000);
-  setInterval(checkRemoteVersion, 35000);
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) checkRemoteVersion();
-  });
 
   // 4. PWA "Add to Home Screen" Install Prompt Handler
   let deferredInstallPrompt = null;

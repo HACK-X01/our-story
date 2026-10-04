@@ -1,5 +1,5 @@
 {
-  "version": "1.5.3",
-  "buildTime": 1791116200000,
-  "notes": "Instant PWA auto-update on visibility change and enforce modal hidden"
+  "version": "1.5.4",
+  "buildTime": 1791117000000,
+  "notes": "Seamless silent background auto-updates without nagging banners"
 }
