@@ -1,5 +1,5 @@
 {
-  "version": "1.5.0",
-  "buildTime": 1791113500000,
-  "notes": "Added Firebase Realtime Cloud Database for permanent cloud persistence across devices"
+  "version": "1.5.1",
+  "buildTime": 1791115500000,
+  "notes": "Connected to our-story-71a36 Firebase Realtime Database for live cross-device sync"
 }

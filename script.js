@@ -333,12 +333,17 @@ let firebaseApp = null;
 let firebaseDb = null;
 let isFirebaseConnected = false;
 
+const DEFAULT_FIREBASE_CONFIG = {
+  databaseURL: 'https://our-story-71a36-default-rtdb.firebaseio.com',
+  projectId: 'our-story-71a36'
+};
+
 function getStoredFirebaseConfig() {
   try {
     const raw = localStorage.getItem('our_story_firebase_config');
     if (raw) return JSON.parse(raw);
   } catch (e) {}
-  return window.FIREBASE_CONFIG || null;
+  return window.FIREBASE_CONFIG || DEFAULT_FIREBASE_CONFIG;
 }
 
 function initFirebaseDatabase() {

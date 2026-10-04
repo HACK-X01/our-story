@@ -3,7 +3,7 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-const CACHE_NAME = 'our-story-v4';
+const CACHE_NAME = 'our-story-v5';
 
 const ASSETS_TO_CACHE = [
   './',
