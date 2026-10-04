@@ -1,5 +1,5 @@
 {
-  "version": "1.5.2",
-  "buildTime": 1791116000000,
-  "notes": "Fixed incoming heartbeat modal visibility and added close buttons and tap handlers"
+  "version": "1.5.3",
+  "buildTime": 1791116200000,
+  "notes": "Instant PWA auto-update on visibility change and enforce modal hidden"
 }

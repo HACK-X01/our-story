@@ -2444,7 +2444,13 @@ function setupPWAandUpdates() {
       // Periodically check for SW updates (every 30 seconds)
       setInterval(() => {
         registration.update().catch(() => {});
-      }, 30000);
+      }, 15000);
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          registration.update().catch(() => {});
+        }
+      });
     }).catch((err) => {
       console.warn('PWA Service Worker registration skipped:', err);
     });
