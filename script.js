@@ -14,6 +14,12 @@ let currentUser = (['himanshu', 'gullu'].includes(queryUser) ? queryUser : null)
   || 'himanshu';
 localStorage.setItem('our_story_current_user', currentUser);
 
+let myDeviceId = localStorage.getItem('our_story_device_id');
+if (!myDeviceId) {
+  myDeviceId = 'dev_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+  localStorage.setItem('our_story_device_id', myDeviceId);
+}
+
 let currentMode = 'together';  // 'together' or 'apart'
 let appState = null;
 let currentPreviewBase64 = null;
@@ -183,7 +189,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.5.7';
+const CURRENT_APP_VERSION = '1.5.8';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -436,11 +442,40 @@ function setupFirebaseRealtimeListeners() {
     }
   });
 
-  firebaseDb.ref('our_story/pulses').limitToLast(1).on('child_added', (snapshot) => {
+  // 1. Dedicated Realtime Listener on our_story/latestPulse (Fires within 50ms)
+  firebaseDb.ref('our_story/latestPulse').on('value', (snapshot) => {
     const pulse = snapshot.val();
-    if (pulse && pulse.from !== (currentUser === 'himanshu' ? 'Himanshu' : 'Gullu')) {
-      if (pulse.timestamp && (Date.now() - pulse.timestamp < 60000)) {
-        handleIncomingPulse(pulse);
+    if (!pulse) return;
+    const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+    const isFromOtherDevice = pulse.deviceId && pulse.deviceId !== myDeviceId;
+    const isFromPartner = pulse.from && pulse.from.toLowerCase() !== myName.toLowerCase();
+
+    if (isFromPartner || isFromOtherDevice) {
+      const lastAck = localStorage.getItem('our_story_last_pulse_ack');
+      if (pulse.id && pulse.id !== lastAck) {
+        const timeDiff = Math.abs(Date.now() - (pulse.timestamp || 0));
+        if (timeDiff < 600000 || !pulse.timestamp) {
+          handleIncomingPulse(pulse);
+        }
+      }
+    }
+  });
+
+  // 2. Also listen for child_added in pulses list
+  firebaseDb.ref('our_story/pulses').limitToLast(5).on('child_added', (snapshot) => {
+    const pulse = snapshot.val();
+    if (!pulse) return;
+    const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+    const isFromOtherDevice = pulse.deviceId && pulse.deviceId !== myDeviceId;
+    const isFromPartner = pulse.from && pulse.from.toLowerCase() !== myName.toLowerCase();
+
+    if (isFromPartner || isFromOtherDevice) {
+      const lastAck = localStorage.getItem('our_story_last_pulse_ack');
+      if (pulse.id && pulse.id !== lastAck) {
+        const timeDiff = Math.abs(Date.now() - (pulse.timestamp || 0));
+        if (timeDiff < 180000) {
+          handleIncomingPulse(pulse);
+        }
       }
     }
   });
@@ -524,6 +559,29 @@ function initFirebaseRestSync(dbUrl) {
     .catch(err => {
       console.warn('Firebase REST sync warning:', err);
     });
+
+  // Background Realtime Pulse Poller (Every 3.5s for instant mobile sync & REST clients)
+  setInterval(() => {
+    fetch(`${dbUrl}/our_story/latestPulse.json?t=` + Date.now())
+      .then(r => r.ok ? r.json() : null)
+      .then(pulse => {
+        if (!pulse) return;
+        const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+        const isFromOtherDevice = pulse.deviceId && pulse.deviceId !== myDeviceId;
+        const isFromPartner = pulse.from && pulse.from.toLowerCase() !== myName.toLowerCase();
+
+        if (isFromPartner || isFromOtherDevice) {
+          const lastAck = localStorage.getItem('our_story_last_pulse_ack');
+          if (pulse.id && pulse.id !== lastAck) {
+            const timeDiff = Math.abs(Date.now() - (pulse.timestamp || 0));
+            if (timeDiff < 600000 || !pulse.timestamp) {
+              handleIncomingPulse(pulse);
+            }
+          }
+        }
+      })
+      .catch(() => {});
+  }, 3500);
 }
 
 function syncToFirebase(type, data) {
@@ -537,6 +595,7 @@ function syncToFirebase(type, data) {
       if (type === 'MOOD_UPDATE') {
         firebaseDb.ref('our_story/currentMoods/' + data.user).set(data);
       } else if (type === 'PULSE_SENT') {
+        firebaseDb.ref('our_story/latestPulse').set(data);
         firebaseDb.ref('our_story/pulses').push(data);
       } else if (type === 'QA_ANSWER') {
         firebaseDb.ref('our_story/currentQA/answers/' + data.user).set(data.answer);
@@ -565,6 +624,11 @@ function syncToFirebase(type, data) {
       method = 'PUT';
       body = data;
     } else if (type === 'PULSE_SENT') {
+      fetch(`${dbUrl}/our_story/latestPulse.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).catch(() => {});
       endpoint += `/pulses.json`;
       method = 'POST';
       body = data;
@@ -950,29 +1014,47 @@ function sendSystemNotificationForPulse(pulse) {
 
 function handleIncomingPulse(pulse) {
   if (!pulse) return;
-  const myPartner = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
-  if (pulse.from !== myPartner) return;
+
+  const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+  const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
+
+  // Smart partner resolution (handles case where partner sent from other device without switching username)
+  let senderName = pulse.from || partnerName;
+  if (pulse.deviceId && pulse.deviceId !== myDeviceId && pulse.from && pulse.from.toLowerCase() === myName.toLowerCase()) {
+    senderName = partnerName; // sender is on partner's phone
+  }
+
+  // If self-pulse from THIS device, ignore
+  if (pulse.deviceId && pulse.deviceId === myDeviceId) return;
+
+  const pulseId = pulse.id || ('pulse_' + (pulse.timestamp || Date.now()));
+  const lastAck = localStorage.getItem('our_story_last_pulse_ack');
+
+  const normalizedPulse = {
+    ...pulse,
+    id: pulseId,
+    from: senderName
+  };
 
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
   if (!appState.pulses) appState.pulses = [];
 
-  const pulseId = pulse.id || ('pulse_' + pulse.timestamp);
-  const exists = appState.pulses.some(p => p.id === pulse.id || (p.time === pulse.time && p.from === pulse.from));
+  const exists = appState.pulses.some(p => p.id === pulseId || (p.timestamp && p.timestamp === pulse.timestamp));
   if (!exists) {
-    appState.pulses.unshift(pulse);
+    appState.pulses.unshift(normalizedPulse);
     if (appState.pulses.length > 25) appState.pulses.pop();
     saveAppState(appState);
     renderPulseHistory();
   }
 
-  // Trigger mobile system notification (vibration, status bar notification, sound)
-  sendSystemNotificationForPulse(pulse);
+  // Trigger mobile system notification (status bar & system vibration)
+  sendSystemNotificationForPulse(normalizedPulse);
 
   // Trigger sensory alert if pulse hasn't been acknowledged yet!
   if (lastAcknowledgedPulseId !== pulseId) {
-    triggerIncomingHeartbeatAlert(pulse);
+    triggerIncomingHeartbeatAlert(normalizedPulse);
   } else {
-    updatePulseTabIncomingState(pulse);
+    updatePulseTabIncomingState(normalizedPulse);
   }
 }
 
@@ -1095,32 +1177,7 @@ function setupIncomingPulseModal() {
 }
 
 function sendReturnHeartbeat(toPartner) {
-  const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
-  const returnPulse = {
-    id: 'pulse_' + Date.now(),
-    from: myName,
-    to: toPartner,
-    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-    timestamp: Date.now(),
-    note: `Returned a warm heartbeat pulse to ${toPartner} ❤️`
-  };
-
-  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-  if (!appState.pulses) appState.pulses = [];
-  appState.pulses.unshift(returnPulse);
-  if (appState.pulses.length > 25) appState.pulses.pop();
-  saveAppState(appState);
-  renderPulseHistory();
-
-  // Broadcast to partner!
-  broadcastUpdate('PULSE_SENT', returnPulse, true);
-
-  if (navigator.vibrate) {
-    try { navigator.vibrate([160, 80, 220, 80, 400]); } catch (e) {}
-  }
-
-  playCelebrationChime();
-  showAppModal('💓 Heartbeat Returned!', `A return heartbeat was sent to ${toPartner}!`);
+  dispatchHeartbeatPulse(`Returned a warm heartbeat pulse to ${toPartner} ❤️`);
 }
 
 function updatePulseTabIncomingState(pulse) {
@@ -1427,7 +1484,20 @@ function renderHeader() {
   const pulseText = document.getElementById('pulseStatusText');
   if (pulseText) {
     const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
-    pulseText.textContent = `Hold for 2 seconds to send warmth to ${partner}...`;
+    pulseText.textContent = `Hold for 1.5 seconds to send warmth to ${partner}...`;
+  }
+
+  updatePulseIdentityUI();
+}
+
+function updatePulseIdentityUI() {
+  const senderLabel = document.getElementById('pulseSenderLabel');
+  const switchBtn = document.getElementById('pulseSwitchUserBtn');
+  if (senderLabel) {
+    senderLabel.textContent = currentUser === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸';
+  }
+  if (switchBtn) {
+    switchBtn.textContent = currentUser === 'himanshu' ? 'Switch to Gullu 🌸' : 'Switch to Himanshu ☕';
   }
 }
 
@@ -1439,9 +1509,11 @@ function setupProfileSwitcher() {
   function switchUser(newUser) {
     currentUser = newUser;
     localStorage.setItem('our_story_current_user', currentUser);
+    localStorage.setItem('our_story_profile_selected', 'true');
     window.location.hash = currentUser;
     playTone(currentUser === 'himanshu' ? 440 : 554.37, 0.15);
     renderAll();
+    updatePulseIdentityUI();
     checkForIncomingPulseOnPortalSwitch();
   }
 
@@ -2332,20 +2404,101 @@ function deleteCustomCoupon(couponId) {
   } catch (err) {}
 }
 
+function dispatchHeartbeatPulse(customNote = null) {
+  playCelebrationChime();
+  if (navigator.vibrate) {
+    try { navigator.vibrate([160, 80, 220, 80, 400]); } catch (err) {}
+  }
+
+  // Request notification permission if still default
+  if ('Notification' in window && Notification.permission === 'default') {
+    try { Notification.requestPermission(); } catch (e) {}
+  }
+
+  const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
+  const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+  const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
+  const pulseId = 'pulse_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+
+  const newPulse = {
+    id: pulseId,
+    from: myName,
+    to: partnerName,
+    senderUser: currentUser,
+    deviceId: myDeviceId,
+    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    timestamp: Date.now(),
+    note: customNote || `Sent a warm heartbeat pulse to ${partner} ❤️`
+  };
+
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.pulses) appState.pulses = [];
+  appState.pulses.unshift(newPulse);
+  if (appState.pulses.length > 25) appState.pulses.pop();
+  saveAppState(appState);
+  renderPulseHistory();
+
+  // Mark our own sent pulse as acknowledged so we don't trigger incoming alert on ourselves
+  lastAcknowledgedPulseId = pulseId;
+  localStorage.setItem('our_story_last_pulse_ack', pulseId);
+
+  // Broadcast in real-time across Cloud (MQTT) + Cross-tab (BroadcastChannel) + Firebase RTDB
+  broadcastUpdate('PULSE_SENT', newPulse, true);
+
+  showAppModal('💓 Heartbeat Delivered!', `A warm, loving heartbeat was sent to ${partner}! Dil ki dhadkan deliver ho gayi!`);
+
+  const statusText = document.getElementById('pulseStatusText');
+  if (statusText) statusText.textContent = `Delivered to ${partner}! Hold or tap to send another warmth.`;
+}
+
 // --- 6. LIVE HEARTBEAT PULSE / MISS YOU ---
 function setupPulseArena() {
   const heart = document.getElementById('interactiveHeart');
+  const instantBtn = document.getElementById('pulseInstantSendBtn');
+  const switchBtn = document.getElementById('pulseSwitchUserBtn');
+  const progressWrap = document.getElementById('pulseHoldBarWrap');
+  const progressFill = document.getElementById('pulseHoldBarFill');
+  const statusText = document.getElementById('pulseStatusText');
+
   let holdTimer = null;
   let heartbeatAudioInterval = null;
+  let progressInterval = null;
+  let holdStartTime = 0;
   let touchStartX = 0;
   let touchStartY = 0;
+
+  if (switchBtn) {
+    switchBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const newUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+      currentUser = newUser;
+      localStorage.setItem('our_story_current_user', currentUser);
+      localStorage.setItem('our_story_profile_selected', 'true');
+      window.location.hash = currentUser;
+      renderAll();
+      updatePulseIdentityUI();
+      playTone(currentUser === 'himanshu' ? 440 : 554.37, 0.15);
+    });
+  }
+
+  if (instantBtn) {
+    instantBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      dispatchHeartbeatPulse();
+      if (heart) {
+        heart.classList.add('holding');
+        setTimeout(() => heart.classList.remove('holding'), 400);
+        createFloatingHeart(heart);
+        createFloatingHeart(heart);
+      }
+    });
+  }
 
   if (!heart) return;
 
   function doHeartbeatHaptic() {
     if (navigator.vibrate) {
       try {
-        // True lub-dub heartbeat vibration (heavy thump, short pause, second thump)
         navigator.vibrate([140, 70, 220]);
       } catch (err) {}
     }
@@ -2353,88 +2506,68 @@ function setupPulseArena() {
 
   function startHold(e) {
     if (e.cancelable) e.preventDefault();
+
+    // If there is an active incoming pulse waiting to be felt, feeling takes precedence
+    if (heart.classList.contains('has-incoming-pulse')) {
+      const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
+      const latestPulse = appState?.pulses?.find(p => p.from === partnerName);
+      if (latestPulse) {
+        feelIncomingHeartbeat(latestPulse);
+        return;
+      }
+    }
+
+    holdStartTime = Date.now();
     heart.classList.add('holding');
     playHeartbeatSound();
     doHeartbeatHaptic();
 
+    if (progressWrap) progressWrap.classList.add('active');
+    if (progressFill) progressFill.style.width = '0%';
+
     const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
-    const statusText = document.getElementById('pulseStatusText');
-    if (statusText) statusText.textContent = `Sending warm heartbeat to ${partner}... 💓`;
+    if (statusText) statusText.textContent = `Holding... sending warm heartbeat to ${partner} 💓`;
+
+    // Animate progress bar fill over 1400ms
+    progressInterval = setInterval(() => {
+      const elapsed = Date.now() - holdStartTime;
+      const pct = Math.min(100, Math.round((elapsed / 1400) * 100));
+      if (progressFill) progressFill.style.width = pct + '%';
+    }, 40);
 
     heartbeatAudioInterval = setInterval(() => {
       playHeartbeatSound();
       doHeartbeatHaptic();
       createFloatingHeart(heart);
-    }, 600);
+    }, 550);
 
-    holdTimer = setTimeout(async () => {
-      clearInterval(heartbeatAudioInterval);
+    holdTimer = setTimeout(() => {
+      cancelHoldIntervals();
       heart.classList.remove('holding');
-      playCelebrationChime();
+      if (progressWrap) progressWrap.classList.remove('active');
+      if (progressFill) progressFill.style.width = '0%';
 
-      // Strong celebration pulse vibration upon successful delivery
-      if (navigator.vibrate) {
-        try {
-          navigator.vibrate([160, 80, 220, 80, 400]);
-        } catch (err) {}
-      }
-
-      const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
-      showAppModal('💓 Heartbeat Delivered!', `A warm, loving heartbeat pulse was sent to ${partner}!`);
-
-      if (statusText) statusText.textContent = `Hold for 2 seconds to send warmth to ${partner}...`;
-
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-
-      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-      if (!appState.pulses) appState.pulses = [];
-      const newPulse = {
-        id: 'pulse_' + Date.now(),
-        from: currentUser === 'himanshu' ? 'Himanshu' : 'Gullu',
-        to: currentUser === 'himanshu' ? 'Gullu' : 'Himanshu',
-        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-        timestamp: Date.now(),
-        note: `Sent a warm heartbeat pulse to ${partner} ❤️`
-      };
-      appState.pulses.unshift(newPulse);
-      if (appState.pulses.length > 25) appState.pulses.pop();
-      saveAppState(appState);
-      renderPulseHistory();
-
-      // Broadcast in real-time across Cloud (MQTT) + Cross-tab (BroadcastChannel)
-      broadcastUpdate('PULSE_SENT', newPulse, true);
-
-      try {
-        await fetch('/api/pulse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newPulse)
-        });
-      } catch (err) {}
-    }, 1800);
+      dispatchHeartbeatPulse();
+    }, 1400);
   }
 
-  // Handle tap on heart when there is an active incoming pulse
-  heart.addEventListener('click', () => {
-    if (heart.classList.contains('has-incoming-pulse')) {
-      const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
-      const latestPulse = appState?.pulses?.find(p => p.from === partnerName);
-      if (latestPulse) feelIncomingHeartbeat(latestPulse);
-    }
-  });
-
-  function cancelHold() {
+  function cancelHoldIntervals() {
     clearTimeout(holdTimer);
     clearInterval(heartbeatAudioInterval);
+    clearInterval(progressInterval);
+  }
+
+  function cancelHold() {
+    cancelHoldIntervals();
     if (navigator.vibrate) {
       try { navigator.vibrate(0); } catch (e) {}
     }
     heart.classList.remove('holding');
+    if (progressWrap) progressWrap.classList.remove('active');
+    if (progressFill) progressFill.style.width = '0%';
+
     const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
-    const statusText = document.getElementById('pulseStatusText');
-    if (statusText) statusText.textContent = `Hold for 2 seconds to send warmth to ${partner}...`;
+    if (statusText) statusText.textContent = `Hold for 1.5 seconds or tap button below to send warmth to ${partner}...`;
   }
 
   heart.addEventListener('mousedown', startHold);
@@ -2453,7 +2586,7 @@ function setupPulseArena() {
     if (e.touches && e.touches[0]) {
       const dx = Math.abs(e.touches[0].clientX - touchStartX);
       const dy = Math.abs(e.touches[0].clientY - touchStartY);
-      if (dx > 40 || dy > 40) {
+      if (dx > 45 || dy > 45) {
         cancelHold();
       }
     }
@@ -2465,6 +2598,8 @@ function setupPulseArena() {
     e.preventDefault();
     return false;
   });
+
+  updatePulseIdentityUI();
 }
 
 function createFloatingHeart(parent) {
@@ -2729,6 +2864,36 @@ function setupPWAandUpdates() {
   });
 }
 
+// First-Time User Identity Setup Modal Check
+function checkFirstTimeIdentity() {
+  const isSelected = localStorage.getItem('our_story_profile_selected');
+  const modal = document.getElementById('identitySetupModal');
+  const btnH = document.getElementById('identityChooseHimanshuBtn');
+  const btnG = document.getElementById('identityChooseGulluBtn');
+
+  if (!isSelected && modal) {
+    modal.classList.remove('is-hidden');
+    modal.style.display = 'flex';
+  }
+
+  function chooseUser(user) {
+    currentUser = user;
+    localStorage.setItem('our_story_current_user', currentUser);
+    localStorage.setItem('our_story_profile_selected', 'true');
+    window.location.hash = currentUser;
+    if (modal) {
+      modal.classList.add('is-hidden');
+      modal.style.display = 'none';
+    }
+    renderAll();
+    updatePulseIdentityUI();
+    playTone(currentUser === 'himanshu' ? 440 : 554.37, 0.15);
+  }
+
+  if (btnH) btnH.onclick = () => chooseUser('himanshu');
+  if (btnG) btnG.onclick = () => chooseUser('gullu');
+}
+
 // --- INITIALIZE EVERYTHING ON LOAD ---
 document.addEventListener('DOMContentLoaded', () => {
   setupProfileSwitcher();
@@ -2744,6 +2909,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupInAppMusicPlayer();
   setupPWAandUpdates();
   fetchState();
+
+  // Check first-time identity selection
+  checkFirstTimeIdentity();
 
   // Initialize Real-Time Cloud (MQTT WSS) & Cross-Tab Sync
   initCloudSync();

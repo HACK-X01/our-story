@@ -21,7 +21,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
 
@@ -351,6 +351,12 @@
             <button class="banner-feel-btn" id="bannerFeelBtn">Feel Pulse 💓</button>
           </div>
 
+          <!-- Identity Strip -->
+          <div class="pulse-identity-strip">
+            <span class="pulse-identity-text">Sending as: <strong id="pulseSenderLabel">Himanshu ☕</strong></span>
+            <button class="pulse-switch-btn" id="pulseSwitchUserBtn" title="Switch between Himanshu & Gullu">Switch to Gullu 🌸</button>
+          </div>
+
           <!-- Interactive Glowing 3D Heart -->
           <div class="heartbeat-arena">
             <div class="heart-pulse-wave wave-1"></div>
@@ -361,6 +367,18 @@
               <span class="heart-svg-icon">💖</span>
               <span class="heart-hold-text">PRESS & HOLD</span>
             </div>
+          </div>
+
+          <!-- Hold Progress Bar -->
+          <div class="pulse-hold-bar-container" id="pulseHoldBarWrap">
+            <div class="pulse-hold-bar-fill" id="pulseHoldBarFill"></div>
+          </div>
+
+          <!-- Quick Send Actions -->
+          <div class="pulse-action-strip">
+            <button class="pulse-instant-btn" id="pulseInstantSendBtn">
+              💓 Tap to Send Instant Heartbeat
+            </button>
           </div>
 
           <!-- Mobile Notification Permission Prompt Box -->
@@ -623,6 +641,29 @@
     </div>
   </div>
 
+  <!-- FIRST-TIME USER IDENTITY SETUP MODAL -->
+  <div class="identity-modal is-hidden" id="identitySetupModal" style="display: none !important;">
+    <div class="identity-modal-backdrop"></div>
+    <div class="identity-modal-card">
+      <div class="identity-modal-icon">💑</div>
+      <h3 class="identity-modal-title">Welcome to Our Story ✨</h3>
+      <p class="identity-modal-subtitle">Choose who is using this phone right now so your heartbeats & moods reach each other accurately:</p>
+      
+      <div class="identity-options">
+        <button class="identity-btn himanshu" id="identityChooseHimanshuBtn">
+          <span class="identity-btn-emoji">☕</span>
+          <span class="identity-btn-name">I am Himanshu</span>
+          <small class="identity-btn-sub">Sending love to Gullu 🌸</small>
+        </button>
+        <button class="identity-btn gullu" id="identityChooseGulluBtn">
+          <span class="identity-btn-emoji">🌸</span>
+          <span class="identity-btn-name">I am Gullu</span>
+          <small class="identity-btn-sub">Sending love to Himanshu ☕</small>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" loop></audio>
 
@@ -631,6 +672,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=15"></script>
+  <script src="script.js?v=16"></script>
 </body>
 </html>
