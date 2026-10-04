@@ -183,7 +183,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.5.5';
+const CURRENT_APP_VERSION = '1.5.6';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -416,11 +416,23 @@ function setupFirebaseRealtimeListeners() {
   firebaseDb.ref('our_story/currentMoods').on('value', (snapshot) => {
     const moods = snapshot.val();
     if (moods) {
+      const partnerKey = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+      const partnerMood = moods[partnerKey];
+      const prevPartnerMood = appState && appState.currentMoods ? appState.currentMoods[partnerKey] : null;
+
       if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
       appState.currentMoods = moods;
       saveAppState(appState);
       renderMoods();
       renderHeader();
+
+      // Trigger instant alert if partner's mood is fresh (within 2 mins)
+      if (partnerMood && (!prevPartnerMood || prevPartnerMood.text !== partnerMood.text || prevPartnerMood.mood !== partnerMood.mood)) {
+        if (partnerMood.timestamp && (Date.now() - partnerMood.timestamp < 120000)) {
+          showPartnerMoodToast({ user: partnerKey, ...partnerMood });
+          sendSystemNotificationForMood({ user: partnerKey, ...partnerMood });
+        }
+      }
     }
   });
 
@@ -845,6 +857,46 @@ function handleIncomingSyncMessage(payload) {
   }
 }
 
+function sendSystemNotificationForMood(data) {
+  if (!data || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+
+  const partnerName = data.user === 'himanshu' ? 'Himanshu' : 'Gullu';
+  const moodEmojiMap = {
+    romantic: '✨',
+    coffee: '☕',
+    pout: '🐷',
+    hug: '🫂',
+    missyou: '🥺',
+    naughty: '😉',
+    sleepy: '😴',
+    scold: '😤'
+  };
+  const emoji = moodEmojiMap[data.mood] || '🎭';
+  const moodDesc = data.text || `${data.title || ''} ${data.note ? '"' + data.note + '"' : ''}`.trim();
+
+  const title = `${emoji} ${partnerName} ne apna mood update kiya!`;
+  const options = {
+    body: `${partnerName}: ${moodDesc || 'Abhi naya mood share kiya hai! ❤️'}`,
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    vibrate: [200, 80, 200, 80, 300],
+    tag: 'partner-mood-update',
+    renotify: true,
+    data: { url: './#paneMood' }
+  };
+
+  if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+    navigator.serviceWorker.ready.then((reg) => {
+      reg.showNotification(title, options);
+    }).catch(() => {
+      try { new Notification(title, options); } catch (e) {}
+    });
+  } else {
+    try { new Notification(title, options); } catch (e) {}
+  }
+}
+
 function handleIncomingMood(data) {
   if (!data || !data.user) return;
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
@@ -853,16 +905,18 @@ function handleIncomingMood(data) {
   appState.currentMoods[data.user] = {
     mood: data.mood,
     text: data.text || `${data.title} — "${data.note}"`,
-    time: data.time || 'Recently'
+    time: data.time || 'Recently',
+    timestamp: data.timestamp || Date.now()
   };
   saveAppState(appState);
   renderMoods();
   renderHeader();
 
-  // If partner updated their mood, play soft chime & show gentle toast notification!
+  // If partner updated their mood, play soft chime, show toast & send mobile system notification!
   if (data.user !== currentUser) {
     playTone(600, 0.15);
     showPartnerMoodToast(data);
+    sendSystemNotificationForMood(data);
   }
 }
 
@@ -1414,20 +1468,41 @@ function checkForIncomingPulseOnPortalSwitch() {
 // --- 2. TAB NAVIGATION ---
 function setupTabNavigation() {
   const dockItems = document.querySelectorAll('.dock-item');
+
+  function switchTab(tabId) {
+    if (!tabId) return;
+    dockItems.forEach(d => {
+      if (d.getAttribute('data-tab') === tabId) d.classList.add('active');
+      else d.classList.remove('active');
+    });
+
+    document.querySelectorAll('.tab-pane').forEach(p => {
+      if (p.id === tabId) p.classList.add('active');
+      else p.classList.remove('active');
+    });
+  }
+
   dockItems.forEach(item => {
     item.addEventListener('click', () => {
       const tabId = item.getAttribute('data-tab');
-      dockItems.forEach(d => d.classList.remove('active'));
-      item.classList.add('active');
-
-      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-      const targetPane = document.getElementById(tabId);
-      if (targetPane) targetPane.classList.add('active');
-
+      switchTab(tabId);
       playTone(600, 0.1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
   });
+
+  // Check URL hash for direct tab navigation from notification click
+  function handleHashNavigation() {
+    const rawHash = (window.location.hash || '').replace('#', '').toLowerCase();
+    if (rawHash === 'pulse' || rawHash === 'panepulse') switchTab('panePulse');
+    else if (rawHash === 'panemood' || rawHash === 'mood') switchTab('paneMood');
+    else if (rawHash === 'panevault' || rawHash === 'vault') switchTab('paneVault');
+    else if (rawHash === 'paneqa' || rawHash === 'qa') switchTab('paneQA');
+    else if (rawHash === 'panecoupons' || rawHash === 'coupons') switchTab('paneCoupons');
+  }
+
+  window.addEventListener('hashchange', handleHashNavigation);
+  setTimeout(handleHashNavigation, 200);
 }
 
 // --- 3. MEMORY VAULT LOGIC & SMART MATCH CARD ---
@@ -2416,13 +2491,15 @@ function setupMoodIndicator() {
         note: note,
         text: `${moodInfo.title} — "${note}"`,
         time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: Date.now(),
         user: currentUser
       };
 
       appState.currentMoods[currentUser] = {
         mood: selectedMoodKey,
         text: moodPayload.text,
-        time: moodPayload.time
+        time: moodPayload.time,
+        timestamp: moodPayload.timestamp
       };
       saveAppState(appState);
       renderMoods();
