@@ -21,7 +21,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
 
@@ -41,6 +41,9 @@
           <p class="brand-subtitle">Himanshu & Gullu • Forever & Always</p>
         </div>
         <div class="header-right-actions">
+          <button class="notif-bell-btn" id="notifBellBtn" title="Enable Mobile Heartbeat Notifications">
+            <span id="notifBellIcon">🔔</span>
+          </button>
           <button class="firebase-status-pill" id="firebaseStatusPill" title="Firebase Cloud Database Connection">
             <span class="fb-pill-icon">🔥</span> <span id="fbPillText">Cloud DB</span>
           </button>
@@ -360,6 +363,16 @@
             </div>
           </div>
 
+          <!-- Mobile Notification Permission Prompt Box -->
+          <div class="notif-prompt-box is-hidden" id="notifPromptBox">
+            <span class="notif-prompt-icon">🔔</span>
+            <div class="notif-prompt-text">
+              <strong>Enable Mobile Notifications</strong>
+              <small>Jab partner heartbeat bheje toh phone vibrate & ring kare!</small>
+            </div>
+            <button class="notif-enable-btn" id="enableNotifBtn">Enable 🔔</button>
+          </div>
+
           <div class="pulse-status-box" id="pulseStatusBox">
             <span class="pulse-status-text" id="pulseStatusText">Hold for 2 seconds to send warmth to Gullu...</span>
           </div>
@@ -618,6 +631,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=12"></script>
+  <script src="script.js?v=13"></script>
 </body>
 </html>

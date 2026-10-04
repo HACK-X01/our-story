@@ -3,13 +3,13 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-const CACHE_NAME = 'our-story-v8';
+const CACHE_NAME = 'our-story-v9';
 
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './styles.css?v=12',
-  './script.js?v=12',
+  './styles.css?v=13',
+  './script.js?v=13',
   './paho-mqtt.min.js',
   './manifest.json',
   './version.json',
@@ -93,4 +93,47 @@ self.addEventListener('message', (event) => {
   if (event.data && (event.data.type === 'SKIP_WAITING' || event.data.action === 'skipWaiting')) {
     self.skipWaiting();
   }
+});
+
+// 5. Notification Click Handler - Focus app or open heartbeat tab
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const urlToOpen = new URL('./#pulse', self.location.origin).href;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    })
+  );
+});
+
+// 6. Push Event Handler (for Web Push payloads)
+self.addEventListener('push', (event) => {
+  let data = { title: '💓 Dil Ki Dhadkan Received!', body: 'Partner ne dil ki dhadkan bheji hai! ❤️' };
+  try {
+    if (event.data) {
+      data = event.data.json();
+    }
+  } catch (e) {
+    if (event.data) data.body = event.data.text();
+  }
+
+  const options = {
+    body: data.body,
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    vibrate: [300, 100, 300, 100, 600],
+    tag: 'heartbeat-pulse',
+    renotify: true,
+    data: { url: './#pulse' }
+  };
+
+  event.waitUntil(self.registration.showNotification(data.title, options));
 });

@@ -1,5 +1,5 @@
 {
-  "version": "1.5.4",
-  "buildTime": 1791117000000,
-  "notes": "Seamless silent background auto-updates without nagging banners"
+  "version": "1.5.5",
+  "buildTime": 1791117500000,
+  "notes": "Added Mobile System & Push Notifications for Live Heartbeats"
 }

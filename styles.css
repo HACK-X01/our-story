@@ -142,6 +142,88 @@ body {
   letter-spacing: 0.4px;
 }
 
+.notif-bell-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s ease;
+}
+
+.notif-bell-btn.granted {
+  border-color: rgba(76, 175, 80, 0.6);
+  background: rgba(76, 175, 80, 0.15);
+}
+
+.notif-bell-btn.denied {
+  opacity: 0.45;
+}
+
+.notif-prompt-box {
+  background: linear-gradient(135deg, rgba(255, 107, 139, 0.15), rgba(245, 195, 102, 0.15));
+  border: 1px solid rgba(255, 107, 139, 0.4);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  animation: fadeIn 0.4s ease;
+}
+
+.notif-prompt-icon {
+  font-size: 1.5rem;
+  animation: ringBell 2s infinite ease-in-out;
+}
+
+@keyframes ringBell {
+  0%, 100% { transform: rotate(0); }
+  10%, 30% { transform: rotate(14deg); }
+  20%, 40% { transform: rotate(-14deg); }
+  50% { transform: rotate(0); }
+}
+
+.notif-prompt-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notif-prompt-text strong {
+  font-size: 0.85rem;
+  color: #fff;
+}
+
+.notif-prompt-text small {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.notif-enable-btn {
+  background: linear-gradient(135deg, #ff4b6e, #f5c366);
+  border: none;
+  border-radius: 16px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1a0a2a;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(255, 75, 110, 0.4);
+  transition: transform 0.2s ease;
+}
+
+.notif-enable-btn:active {
+  transform: scale(0.95);
+}
+
 .counter-badge {
   background: rgba(245, 195, 102, 0.12);
   border: 1px solid rgba(245, 195, 102, 0.4);

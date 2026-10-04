@@ -183,7 +183,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.5.4';
+const CURRENT_APP_VERSION = '1.5.5';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -866,6 +866,34 @@ function handleIncomingMood(data) {
   }
 }
 
+function sendSystemNotificationForPulse(pulse) {
+  if (!pulse || !('Notification' in window)) return;
+
+  if (Notification.permission === 'granted') {
+    const title = `💓 Dil Ki Dhadkan from ${pulse.from}!`;
+    const options = {
+      body: `${pulse.from}: "${pulse.note || 'Feel my heartbeat... thinking of you right now! ❤️'}"`,
+      icon: './icon-192.png',
+      badge: './icon-192.png',
+      vibrate: [300, 100, 300, 100, 600],
+      tag: 'heartbeat-pulse',
+      renotify: true,
+      requireInteraction: true,
+      data: { url: './#pulse' }
+    };
+
+    if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.showNotification(title, options);
+      }).catch(() => {
+        try { new Notification(title, options); } catch (e) {}
+      });
+    } else {
+      try { new Notification(title, options); } catch (e) {}
+    }
+  }
+}
+
 function handleIncomingPulse(pulse) {
   if (!pulse) return;
   const myPartner = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
@@ -882,6 +910,9 @@ function handleIncomingPulse(pulse) {
     saveAppState(appState);
     renderPulseHistory();
   }
+
+  // Trigger mobile system notification (vibration, status bar notification, sound)
+  sendSystemNotificationForPulse(pulse);
 
   // Trigger sensory alert if pulse hasn't been acknowledged yet!
   if (lastAcknowledgedPulseId !== pulseId) {
@@ -1099,6 +1130,79 @@ function feelIncomingHeartbeat(pulse) {
       statusText.textContent = `Hold for 2 seconds to send warmth to ${partner}...`;
     }, 4000);
   }
+}
+
+function setupNotificationPermissions() {
+  const bellBtn = document.getElementById('notifBellBtn');
+  const promptBox = document.getElementById('notifPromptBox');
+  const enableBtn = document.getElementById('enableNotifBtn');
+
+  function updateNotifUI() {
+    if (!('Notification' in window)) {
+      if (bellBtn) bellBtn.style.display = 'none';
+      if (promptBox) promptBox.classList.add('is-hidden');
+      return;
+    }
+
+    if (Notification.permission === 'granted') {
+      if (bellBtn) {
+        bellBtn.classList.add('granted');
+        bellBtn.title = 'Heartbeat Notifications Active 🔔';
+        bellBtn.innerHTML = '🔔';
+      }
+      if (promptBox) promptBox.classList.add('is-hidden');
+    } else if (Notification.permission === 'denied') {
+      if (bellBtn) {
+        bellBtn.classList.add('denied');
+        bellBtn.title = 'Notifications Blocked in Browser Settings 🔕';
+        bellBtn.innerHTML = '🔕';
+      }
+      if (promptBox) promptBox.classList.add('is-hidden');
+    } else {
+      if (bellBtn) {
+        bellBtn.classList.remove('granted', 'denied');
+        bellBtn.title = 'Enable Heartbeat Notifications 🔔';
+        bellBtn.innerHTML = '🔔';
+      }
+      if (promptBox) promptBox.classList.remove('is-hidden');
+    }
+  }
+
+  async function requestNotifPermission() {
+    if (!('Notification' in window)) {
+      showAppModal('ℹ️ Notifications Not Supported', 'Aapka browser system notifications support nahi karta.');
+      return;
+    }
+
+    try {
+      const perm = await Notification.requestPermission();
+      updateNotifUI();
+      if (perm === 'granted') {
+        playCelebrationChime();
+        showAppModal('🔔 Notifications Enabled!', 'Ab jab bhi partner heartbeat bhejega, phone vibrate hoga aur notification aayegi! ❤️');
+
+        if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+          navigator.serviceWorker.ready.then((reg) => {
+            reg.showNotification('Our Story 💖', {
+              body: 'Heartbeat notifications enabled successfully!',
+              icon: './icon-192.png',
+              badge: './icon-192.png',
+              vibrate: [200, 100, 200]
+            });
+          });
+        }
+      } else if (perm === 'denied') {
+        showAppModal('⚠️ Notifications Blocked', 'Phone ya browser settings mein notifications blocked hain. Site settings me jaakar allow karein.');
+      }
+    } catch (e) {
+      console.warn('Notification permission error:', e);
+    }
+  }
+
+  if (bellBtn) bellBtn.addEventListener('click', requestNotifPermission);
+  if (enableBtn) enableBtn.addEventListener('click', requestNotifPermission);
+
+  updateNotifUI();
 }
 
 function showPartnerMoodToast(data) {
@@ -2510,6 +2614,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupMoodIndicator();
   setupModalDismiss();
   setupIncomingPulseModal();
+  setupNotificationPermissions();
   setupInAppMusicPlayer();
   setupPWAandUpdates();
   fetchState();
