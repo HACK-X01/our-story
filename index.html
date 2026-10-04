@@ -41,6 +41,9 @@
           <p class="brand-subtitle">Himanshu & Gullu • Forever & Always</p>
         </div>
         <div class="header-right-actions">
+          <span class="live-sync-pill" id="liveSyncPill" title="Real-Time Partner Sync">
+            <span class="sync-dot"></span> <span class="sync-label">Sync</span>
+          </span>
           <button class="install-pwa-btn is-hidden" id="installPwaBtn" title="Install to Home Screen">
             📲 Install App
           </button>
@@ -332,6 +335,16 @@
             <p class="pulse-subtitle">Feel each other's pulse across any distance ❤️</p>
           </div>
 
+          <!-- Live Partner Incoming Heartbeat Alert Banner -->
+          <div class="incoming-pulse-banner is-hidden" id="incomingPulseBanner">
+            <div class="banner-pulse-icon">💓</div>
+            <div class="banner-pulse-info">
+              <strong class="banner-pulse-title" id="bannerPulseTitle">Incoming Heartbeat from Himanshu!</strong>
+              <span class="banner-pulse-subtitle" id="bannerPulseSubtitle">Received just now • Tap below to feel it</span>
+            </div>
+            <button class="banner-feel-btn" id="bannerFeelBtn">Feel Pulse 💓</button>
+          </div>
+
           <!-- Interactive Glowing 3D Heart -->
           <div class="heartbeat-arena">
             <div class="heart-pulse-wave wave-1"></div>
@@ -451,9 +464,10 @@
         <span class="dock-icon">🎟️</span>
         <span class="dock-label">Coupons</span>
       </button>
-      <button class="dock-item" data-tab="panePulse">
+      <button class="dock-item" data-tab="panePulse" id="dockBtnPulse">
         <span class="dock-icon">💓</span>
         <span class="dock-label">Pulse</span>
+        <span class="dock-pulse-badge is-hidden" id="dockPulseBadge">!</span>
       </button>
       <button class="dock-item" data-tab="paneMood">
         <span class="dock-icon">🎭</span>
@@ -498,6 +512,40 @@
     </div>
   </div>
 
+  <!-- ============================================================
+       INCOMING HEARTBEAT PULSE MODAL
+       ============================================================ -->
+  <div class="incoming-heartbeat-modal is-hidden" id="incomingHeartbeatModal">
+    <div class="incoming-pulse-backdrop" id="incomingPulseBackdrop"></div>
+    <div class="incoming-pulse-card">
+      <div class="incoming-pulse-wave-ring ring-1"></div>
+      <div class="incoming-pulse-wave-ring ring-2"></div>
+      <div class="incoming-pulse-wave-ring ring-3"></div>
+      
+      <div class="incoming-heart-symbol" id="incomingHeartSymbol">💓</div>
+      
+      <span class="incoming-pulse-tag">LIVE HEARTBEAT RECEIVED ❤️</span>
+      <h3 class="incoming-pulse-heading" id="incomingPulseHeading">Dil Ki Dhadkan Received!</h3>
+      <p class="incoming-pulse-message" id="incomingPulseMessage">
+        Himanshu ne abhi abhi tumhein ek warm heartbeat bheji hai!
+      </p>
+      
+      <div class="incoming-pulse-meta-box">
+        <span class="incoming-meta-time" id="incomingMetaTime">Just now</span>
+        <p class="incoming-meta-note" id="incomingMetaNote">"Feel my heartbeat... thinking of you right now! ❤️"</p>
+      </div>
+
+      <div class="incoming-pulse-btn-row">
+        <button class="incoming-pulse-btn primary" id="incomingSendBackBtn">
+          💓 Send Heartbeat Back
+        </button>
+        <button class="incoming-pulse-btn secondary" id="incomingDismissBtn">
+          🥰 Feel the Warmth
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- CELEBRATION MODAL FOR COUPONS & REVEALS -->
   <div class="modal-overlay" id="appModal">
     <div class="modal-box">
@@ -516,6 +564,7 @@
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" loop></audio>
 
-  <script src="script.js?v=8"></script>
+  <script src="paho-mqtt.min.js"></script>
+  <script src="script.js?v=9"></script>
 </body>
 </html>

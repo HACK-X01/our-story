@@ -1951,4 +1951,335 @@ body {
   transform: scale(1.05);
 }
 
+/* ============================================================
+   LIVE REAL-TIME SYNC & INCOMING HEARTBEAT STYLES
+   ============================================================ */
+
+/* 1. Header Live Sync Pill */
+.live-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px 9px;
+  border-radius: 20px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+}
+
+.live-sync-pill .sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: syncPulseDot 2s infinite ease-in-out;
+}
+
+.live-sync-pill.offline .sync-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+  animation: none;
+}
+
+@keyframes syncPulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+/* 2. Bottom Dock Pulse Badge */
+.dock-item {
+  position: relative;
+}
+
+.dock-pulse-badge {
+  position: absolute;
+  top: 2px;
+  right: 18%;
+  background: linear-gradient(135deg, #ff2a6d, #ff6b8b);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 10px rgba(255, 42, 109, 0.8);
+  animation: badgeBounce 1.2s infinite ease-in-out;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  z-index: 10;
+}
+
+@keyframes badgeBounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-4px) scale(1.15); }
+}
+
+/* 3. Incoming Pulse Banner in Tab 4 */
+.incoming-pulse-banner {
+  background: linear-gradient(135deg, rgba(233, 30, 99, 0.22) 0%, rgba(255, 107, 139, 0.15) 100%);
+  border: 1.5px solid rgba(255, 75, 110, 0.6);
+  border-radius: 18px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 30px rgba(233, 30, 99, 0.25);
+  animation: bannerGlow 2s infinite alternate ease-in-out;
+}
+
+@keyframes bannerGlow {
+  0% { box-shadow: 0 0 15px rgba(255, 42, 109, 0.3); border-color: rgba(255, 75, 110, 0.5); }
+  100% { box-shadow: 0 0 30px rgba(255, 42, 109, 0.7); border-color: rgba(255, 215, 0, 0.8); }
+}
+
+.banner-pulse-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+  animation: heartThump 1s infinite ease-in-out;
+}
+
+.banner-pulse-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.banner-pulse-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.banner-pulse-subtitle {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.banner-feel-btn {
+  background: linear-gradient(135deg, #ff4b6e, #ff2a6d);
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(255, 42, 109, 0.4);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.banner-feel-btn:active {
+  transform: scale(0.95);
+}
+
+/* 4. Active Incoming Heartbeat Pulsating Aura on Interactive Heart */
+.interactive-heart.has-incoming-pulse {
+  animation: incomingHeartBeat 0.85s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
+  box-shadow: 0 0 60px rgba(255, 75, 145, 0.9), 0 0 30px rgba(255, 215, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.6);
+  border: 2px solid #ffd700;
+}
+
+@keyframes incomingHeartBeat {
+  0% { transform: scale(1); }
+  15% { transform: scale(1.22); }
+  30% { transform: scale(1.08); }
+  45% { transform: scale(1.28); }
+  70% { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+
+.interactive-heart.has-incoming-pulse ~ .wave-1 {
+  animation: pulseWave 1.2s infinite ease-out;
+  border-color: rgba(255, 215, 0, 0.7);
+}
+
+.interactive-heart.has-incoming-pulse ~ .wave-2 {
+  animation: pulseWave 1.2s infinite ease-out 0.4s;
+  border-color: rgba(255, 75, 145, 0.7);
+}
+
+/* 5. Fullscreen Romantic Incoming Heartbeat Modal */
+.incoming-heartbeat-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  transition: opacity 0.3s ease;
+}
+
+.incoming-pulse-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 8, 18, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.incoming-pulse-card {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  background: linear-gradient(145deg, rgba(32, 22, 45, 0.95), rgba(20, 14, 30, 0.98));
+  border: 1.5px solid rgba(255, 107, 139, 0.5);
+  border-radius: 28px;
+  padding: 34px 24px 26px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 50px rgba(233, 30, 99, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  animation: cardPopIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes cardPopIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.incoming-pulse-wave-ring {
+  position: absolute;
+  top: 55px;
+  left: 50%;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 75, 110, 0.6);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.ring-1 { animation: modalPulseRing 1.6s infinite ease-out; }
+.ring-2 { animation: modalPulseRing 1.6s infinite ease-out 0.5s; }
+.ring-3 { animation: modalPulseRing 1.6s infinite ease-out 1s; }
+
+@keyframes modalPulseRing {
+  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 1; border-color: #ffd700; }
+  100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; border-color: #ff2a6d; }
+}
+
+.incoming-heart-symbol {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ff2a6d 0%, #ad1457 70%, #6a0036 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.6rem;
+  box-shadow: 0 0 40px rgba(255, 42, 109, 0.8);
+  margin-bottom: 18px;
+  position: relative;
+  z-index: 2;
+  animation: incomingHeartBeat 0.85s infinite ease-in-out;
+}
+
+.incoming-pulse-tag {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffd700;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.incoming-pulse-heading {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.incoming-pulse-message {
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.45;
+  margin-bottom: 16px;
+}
+
+.incoming-pulse-meta-box {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 10px 14px;
+  width: 100%;
+  margin-bottom: 22px;
+}
+
+.incoming-meta-time {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent-gold);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.incoming-meta-note {
+  font-size: 0.82rem;
+  font-style: italic;
+  color: #fff;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.incoming-pulse-btn-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.incoming-pulse-btn {
+  width: 100%;
+  padding: 13px 18px;
+  border-radius: 22px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.incoming-pulse-btn.primary {
+  background: linear-gradient(135deg, #ff4b6e, #ff2a6d);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(255, 42, 109, 0.5);
+}
+
+.incoming-pulse-btn.primary:active {
+  transform: scale(0.97);
+}
+
+.incoming-pulse-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.incoming-pulse-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 

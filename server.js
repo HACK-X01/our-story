@@ -246,15 +246,19 @@ const server = http.createServer((req, res) => {
       // 6. Send Heartbeat Pulse
       if (parsedUrl === '/api/pulse') {
         const pulse = {
-          from: payload.user || 'Himanshu',
-          time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          id: payload.id || ('pulse_' + Date.now()),
+          from: payload.from || payload.user || 'Himanshu',
+          to: payload.to || (payload.from === 'Himanshu' ? 'Gullu' : 'Himanshu'),
+          time: payload.time || new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          timestamp: payload.timestamp || Date.now(),
           note: payload.note || "Sent a warm heartbeat ❤️"
         };
+        if (!data.pulses) data.pulses = [];
         data.pulses.unshift(pulse);
-        if (data.pulses.length > 20) data.pulses.pop();
+        if (data.pulses.length > 30) data.pulses.pop();
         saveData(data);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, pulse }));
+        res.end(JSON.stringify({ success: true, pulse, pulses: data.pulses }));
         return;
       }
 

@@ -3,7 +3,17 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-let currentUser = 'himanshu'; // 'himanshu' or 'gullu'
+// Persistent user detection (supports query param ?user=..., hash #user, and localStorage)
+const urlParams = new URLSearchParams(window.location.search);
+const hashUser = (window.location.hash || '').replace('#', '').toLowerCase();
+const queryUser = (urlParams.get('user') || '').toLowerCase();
+const storedUser = localStorage.getItem('our_story_current_user');
+let currentUser = (['himanshu', 'gullu'].includes(queryUser) ? queryUser : null)
+  || (['himanshu', 'gullu'].includes(hashUser) ? hashUser : null)
+  || (['himanshu', 'gullu'].includes(storedUser) ? storedUser : null)
+  || 'himanshu';
+localStorage.setItem('our_story_current_user', currentUser);
+
 let currentMode = 'together';  // 'together' or 'apart'
 let appState = null;
 let currentPreviewBase64 = null;
@@ -301,6 +311,508 @@ function renderAll() {
   renderMoods();
 }
 
+// ==========================================================================
+// REAL-TIME CLOUD (MQTT WSS) & CROSS-TAB SYNC ENGINE
+// ==========================================================================
+
+const SYNC_BROKER_HOST = 'broker.emqx.io';
+const SYNC_BROKER_PORT = 8084;
+const SYNC_BROKER_PATH = '/mqtt';
+const SYNC_TOPIC_PREFIX = 'ourstory/himanshu_gullu_2026/';
+
+let mqttClient = null;
+let isMqttConnected = false;
+const crossTabChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('our_story_sync_channel') : null;
+let lastAcknowledgedPulseId = localStorage.getItem('our_story_last_pulse_ack') || null;
+
+function initCloudSync() {
+  updateSyncIndicator(false, 'Connecting to Live Cloud Sync...');
+
+  // 1. Cross-tab BroadcastChannel listener (0ms on same phone/PC)
+  if (crossTabChannel) {
+    crossTabChannel.onmessage = (event) => {
+      if (event.data) handleIncomingSyncMessage(event.data);
+    };
+  }
+
+  // 2. Storage event listener (fallback for cross-tab)
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'our_story_last_sync_event' && e.newValue) {
+      try {
+        const evt = JSON.parse(e.newValue);
+        handleIncomingSyncMessage(evt);
+      } catch (err) {}
+    } else if (e.key === 'our_story_persistent_data' && e.newValue) {
+      try {
+        const fresh = JSON.parse(e.newValue);
+        appState = fresh;
+        renderAll();
+      } catch (err) {}
+    }
+  });
+
+  // 3. Connect to MQTT WebSocket Broker (Live Cloud Relay for GitHub Pages)
+  if (typeof Paho === 'undefined' || !Paho.MQTT) {
+    console.warn('Paho MQTT not loaded yet. Running in Local/Server sync mode.');
+    updateSyncIndicator(false, 'Offline / Local Sync');
+    return;
+  }
+
+  try {
+    const clientId = 'ourstory_web_' + (currentUser || 'user') + '_' + Math.random().toString(36).substring(2, 8);
+    mqttClient = new Paho.MQTT.Client(SYNC_BROKER_HOST, SYNC_BROKER_PORT, SYNC_BROKER_PATH, clientId);
+
+    mqttClient.onConnectionLost = (responseObject) => {
+      isMqttConnected = false;
+      updateSyncIndicator(false, 'Reconnecting...');
+      if (responseObject.errorCode !== 0) {
+        console.log('MQTT Connection Lost:', responseObject.errorMessage);
+        setTimeout(initCloudSync, 4000);
+      }
+    };
+
+    mqttClient.onMessageArrived = (message) => {
+      try {
+        const payload = JSON.parse(message.payloadString);
+        handleIncomingSyncMessage(payload);
+      } catch (e) {
+        console.error('Error parsing sync message:', e);
+      }
+    };
+
+    mqttClient.connect({
+      useSSL: true,
+      timeout: 6,
+      keepAliveInterval: 30,
+      cleanSession: true,
+      onSuccess: () => {
+        isMqttConnected = true;
+        updateSyncIndicator(true, 'Live Sync Active ✨');
+        console.log('Connected to EMQX Cloud Relay! Subscribing to couple topics...');
+        // Subscribe to all topics under our couple prefix
+        mqttClient.subscribe(SYNC_TOPIC_PREFIX + '#', { qos: 0 });
+      },
+      onFailure: (err) => {
+        isMqttConnected = false;
+        updateSyncIndicator(false, 'Sync Reconnecting...');
+        console.log('MQTT connection failed, retrying in 8s:', err);
+        setTimeout(initCloudSync, 8000);
+      }
+    });
+  } catch (err) {
+    console.error('MQTT init error:', err);
+  }
+
+  // 4. Local Server Poller (if running on node server)
+  setInterval(async () => {
+    try {
+      const res = await fetch('/api/state?t=' + Date.now());
+      if (res.ok) {
+        const serverState = await res.json();
+        if (serverState && serverState.stats) {
+          const merged = mergePreservingUserData(appState, serverState);
+          if (JSON.stringify(merged) !== JSON.stringify(appState)) {
+            appState = merged;
+            saveAppState(appState);
+            renderAll();
+          }
+        }
+      }
+    } catch (e) {}
+  }, 3500);
+}
+
+function updateSyncIndicator(online, text) {
+  const pill = document.getElementById('liveSyncPill');
+  if (!pill) return;
+  if (online) {
+    pill.classList.remove('offline');
+    pill.title = text || 'Live Cloud Sync Connected';
+    const label = pill.querySelector('.sync-label');
+    if (label) label.textContent = 'Live';
+  } else {
+    pill.classList.add('offline');
+    pill.title = text || 'Connecting...';
+    const label = pill.querySelector('.sync-label');
+    if (label) label.textContent = 'Sync';
+  }
+}
+
+function broadcastUpdate(type, data, retain = true) {
+  const payload = {
+    type,
+    data,
+    sender: currentUser,
+    timestamp: Date.now()
+  };
+
+  // 1. Cross-tab BroadcastChannel (0ms)
+  if (crossTabChannel) {
+    try { crossTabChannel.postMessage(payload); } catch (e) {}
+  }
+
+  // 2. Storage event
+  try {
+    localStorage.setItem('our_story_last_sync_event', JSON.stringify(payload));
+  } catch (e) {}
+
+  // 3. Cloud MQTT WebSocket
+  if (mqttClient && isMqttConnected) {
+    try {
+      let subTopic = 'sync';
+      if (type === 'PULSE_SENT') subTopic = 'pulse';
+      else if (type === 'MOOD_UPDATE') subTopic = 'mood';
+      else if (type === 'QA_ANSWER' || type === 'QA_NEW') subTopic = 'qa';
+      else if (type.startsWith('COUPON_')) subTopic = 'coupon';
+      else if (type === 'MEMORY_ADD') subTopic = 'memory';
+
+      const msg = new Paho.MQTT.Message(JSON.stringify(payload));
+      msg.destinationName = SYNC_TOPIC_PREFIX + subTopic;
+      msg.retained = retain;
+      mqttClient.send(msg);
+    } catch (e) {
+      console.warn('MQTT send failed:', e);
+    }
+  }
+}
+
+function handleIncomingSyncMessage(payload) {
+  if (!payload || !payload.type) return;
+
+  // Ignore self-broadcasts
+  if (payload.sender === currentUser) return;
+
+  if (payload.type === 'PULSE_SENT') {
+    handleIncomingPulse(payload.data);
+  } else if (payload.type === 'MOOD_UPDATE') {
+    handleIncomingMood(payload.data);
+  } else if (payload.type === 'QA_ANSWER') {
+    handleIncomingQAAnswer(payload.data);
+  } else if (payload.type === 'QA_NEW') {
+    handleIncomingNewQA(payload.data);
+  } else if (payload.type === 'COUPON_REDEEM' || payload.type === 'COUPON_CREATE' || payload.type === 'COUPON_DELETE') {
+    handleIncomingCoupon(payload);
+  } else if (payload.type === 'MEMORY_ADD') {
+    handleIncomingMemory(payload.data);
+  }
+}
+
+function handleIncomingMood(data) {
+  if (!data || !data.user) return;
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.currentMoods) appState.currentMoods = { ...DEFAULT_APP_STATE.currentMoods };
+
+  appState.currentMoods[data.user] = {
+    mood: data.mood,
+    text: data.text || `${data.title} — "${data.note}"`,
+    time: data.time || 'Recently'
+  };
+  saveAppState(appState);
+  renderMoods();
+  renderHeader();
+
+  // If partner updated their mood, play soft chime & show gentle toast notification!
+  if (data.user !== currentUser) {
+    playTone(600, 0.15);
+    showPartnerMoodToast(data);
+  }
+}
+
+function handleIncomingPulse(pulse) {
+  if (!pulse) return;
+  const myPartner = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
+  if (pulse.from !== myPartner) return;
+
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.pulses) appState.pulses = [];
+
+  const pulseId = pulse.id || ('pulse_' + pulse.timestamp);
+  const exists = appState.pulses.some(p => p.id === pulse.id || (p.time === pulse.time && p.from === pulse.from));
+  if (!exists) {
+    appState.pulses.unshift(pulse);
+    if (appState.pulses.length > 25) appState.pulses.pop();
+    saveAppState(appState);
+    renderPulseHistory();
+  }
+
+  // Trigger sensory alert if pulse hasn't been acknowledged yet!
+  if (lastAcknowledgedPulseId !== pulseId) {
+    triggerIncomingHeartbeatAlert(pulse);
+  } else {
+    updatePulseTabIncomingState(pulse);
+  }
+}
+
+function triggerIncomingHeartbeatAlert(pulse) {
+  if (!pulse) return;
+  const pulseId = pulse.id || ('pulse_' + pulse.timestamp);
+  lastAcknowledgedPulseId = pulseId;
+  localStorage.setItem('our_story_last_pulse_ack', pulseId);
+
+  // 1. Double heartbeat sound (lub-dub... lub-dub)
+  playHeartbeatSound();
+  setTimeout(playHeartbeatSound, 350);
+  setTimeout(playHeartbeatSound, 900);
+  setTimeout(playHeartbeatSound, 1250);
+
+  // 2. Haptic vibration
+  if (navigator.vibrate) {
+    navigator.vibrate([120, 80, 160, 250, 120, 80, 160]);
+  }
+
+  // 3. Highlight Bottom Dock Pulse Tab
+  const dockBadge = document.getElementById('dockPulseBadge');
+  if (dockBadge) {
+    dockBadge.classList.remove('is-hidden');
+    dockBadge.textContent = '1';
+  }
+
+  // 4. Update Heartbeat Tab UI
+  updatePulseTabIncomingState(pulse);
+
+  // 5. Open Fullscreen Romantic Modal
+  const modal = document.getElementById('incomingHeartbeatModal');
+  const heading = document.getElementById('incomingPulseHeading');
+  const msg = document.getElementById('incomingPulseMessage');
+  const timeEl = document.getElementById('incomingMetaTime');
+  const noteEl = document.getElementById('incomingMetaNote');
+  const sendBackBtn = document.getElementById('incomingSendBackBtn');
+  const dismissBtn = document.getElementById('incomingDismissBtn');
+
+  if (heading) heading.textContent = `Dil Ki Dhadkan Received! 💓`;
+  if (msg) msg.textContent = `${pulse.from} ne abhi abhi tumhein ek warm heartbeat bheji hai!`;
+  if (timeEl) timeEl.textContent = `Received at ${pulse.time || 'Just now'}`;
+  if (noteEl) noteEl.textContent = `"${pulse.note || 'Feel my heartbeat... miss you!'}"`;
+
+  if (sendBackBtn) {
+    sendBackBtn.textContent = `💓 Send Heartbeat Back to ${pulse.from}`;
+    sendBackBtn.onclick = () => {
+      closeIncomingHeartbeatModal();
+      sendReturnHeartbeat(pulse.from);
+    };
+  }
+
+  if (dismissBtn) {
+    dismissBtn.onclick = () => {
+      closeIncomingHeartbeatModal();
+      playTone(550, 0.2);
+    };
+  }
+
+  if (modal) {
+    modal.classList.remove('is-hidden');
+  }
+}
+
+function closeIncomingHeartbeatModal() {
+  const modal = document.getElementById('incomingHeartbeatModal');
+  if (modal) modal.classList.add('is-hidden');
+}
+
+function sendReturnHeartbeat(toPartner) {
+  const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+  const returnPulse = {
+    id: 'pulse_' + Date.now(),
+    from: myName,
+    to: toPartner,
+    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    timestamp: Date.now(),
+    note: `Returned a warm heartbeat pulse to ${toPartner} ❤️`
+  };
+
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.pulses) appState.pulses = [];
+  appState.pulses.unshift(returnPulse);
+  if (appState.pulses.length > 25) appState.pulses.pop();
+  saveAppState(appState);
+  renderPulseHistory();
+
+  // Broadcast to partner!
+  broadcastUpdate('PULSE_SENT', returnPulse, true);
+
+  playCelebrationChime();
+  showAppModal('💓 Heartbeat Returned!', `A return heartbeat was sent to ${toPartner}!`);
+}
+
+function updatePulseTabIncomingState(pulse) {
+  const banner = document.getElementById('incomingPulseBanner');
+  const bannerTitle = document.getElementById('bannerPulseTitle');
+  const bannerSubtitle = document.getElementById('bannerPulseSubtitle');
+  const heart = document.getElementById('interactiveHeart');
+  const statusText = document.getElementById('pulseStatusText');
+  const bannerBtn = document.getElementById('bannerFeelBtn');
+
+  const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
+
+  if (pulse && pulse.from === partnerName) {
+    if (banner) {
+      banner.classList.remove('is-hidden');
+      if (bannerTitle) bannerTitle.textContent = `Incoming Heartbeat from ${pulse.from}! 💓`;
+      if (bannerSubtitle) bannerSubtitle.textContent = `Sent at ${pulse.time} • Tap below to feel the warmth`;
+    }
+    if (heart) {
+      heart.classList.add('has-incoming-pulse');
+    }
+    if (statusText) {
+      statusText.innerHTML = `💓 <strong>${pulse.from} is thinking of you!</strong> Touch the heart to feel their pulse.`;
+    }
+    if (bannerBtn) {
+      bannerBtn.onclick = () => {
+        feelIncomingHeartbeat(pulse);
+      };
+    }
+  } else {
+    if (banner) banner.classList.add('is-hidden');
+    if (heart) heart.classList.remove('has-incoming-pulse');
+    const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
+    if (statusText) statusText.textContent = `Hold for 2 seconds to send warmth to ${partner}...`;
+  }
+}
+
+function feelIncomingHeartbeat(pulse) {
+  playHeartbeatSound();
+  setTimeout(playHeartbeatSound, 300);
+  setTimeout(playHeartbeatSound, 700);
+
+  if (navigator.vibrate) {
+    navigator.vibrate([100, 80, 150]);
+  }
+
+  const heart = document.getElementById('interactiveHeart');
+  if (heart) {
+    for (let i = 0; i < 6; i++) {
+      setTimeout(() => createFloatingHeart(heart), i * 150);
+    }
+  }
+
+  const dockBadge = document.getElementById('dockPulseBadge');
+  if (dockBadge) dockBadge.classList.add('is-hidden');
+
+  const banner = document.getElementById('incomingPulseBanner');
+  if (banner) banner.classList.add('is-hidden');
+
+  const statusText = document.getElementById('pulseStatusText');
+  if (statusText) {
+    statusText.textContent = `🥰 Felt ${pulse.from}'s heartbeat! Connection alive.`;
+    setTimeout(() => {
+      const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
+      statusText.textContent = `Hold for 2 seconds to send warmth to ${partner}...`;
+    }, 4000);
+  }
+}
+
+function showPartnerMoodToast(data) {
+  let toast = document.getElementById('partnerMoodToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'partnerMoodToast';
+    toast.style.cssText = `
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, rgba(233, 30, 99, 0.95), rgba(120, 20, 80, 0.95));
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 25px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      box-shadow: 0 8px 25px rgba(233, 30, 99, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      z-index: 10000;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 90%;
+      pointer-events: none;
+    `;
+    document.body.appendChild(toast);
+  }
+
+  const partnerEmoji = data.user === 'himanshu' ? '☕' : '🌸';
+  const partnerName = data.user === 'himanshu' ? 'Himanshu' : 'Gullu';
+  toast.innerHTML = `<span>${partnerEmoji}</span> <span>${partnerName} updated mood: <strong>${data.text || data.title}</strong></span>`;
+  toast.style.opacity = '1';
+  toast.style.transform = 'translateX(-50%) translateY(0)';
+
+  clearTimeout(toast.dismissTimer);
+  toast.dismissTimer = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(-20px)';
+  }, 4000);
+}
+
+function handleIncomingQAAnswer(data) {
+  if (!data || !data.user) return;
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.currentQA) appState.currentQA = { ...DEFAULT_APP_STATE.currentQA };
+  if (!appState.currentQA.answers) appState.currentQA.answers = {};
+
+  appState.currentQA.answers[data.user] = data.answer;
+  saveAppState(appState);
+  renderQA();
+
+  if (appState.currentQA.answers.himanshu && appState.currentQA.answers.gullu) {
+    playCelebrationChime();
+    showAppModal('🔓 Both Answers Unlocked!', 'Aap dono ne answer lock kar diya hai! Dono answers reveal ho gaye hain! 💕');
+  }
+}
+
+function handleIncomingNewQA(data) {
+  if (!data || !data.newQA) return;
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  appState.currentQA = data.newQA;
+  if (data.pastQA) {
+    if (!appState.pastQAs) appState.pastQAs = [];
+    appState.pastQAs.unshift(data.pastQA);
+  }
+  saveAppState(appState);
+  renderQA();
+}
+
+function handleIncomingCoupon(payload) {
+  if (!payload || !payload.data) return;
+  if (!appState || !appState.coupons) return;
+
+  if (payload.type === 'COUPON_REDEEM') {
+    const { couponId, user } = payload.data;
+    const coupon = appState.coupons.find(c => c.id === couponId);
+    if (coupon) {
+      coupon.redeemed = true;
+      coupon.redeemedBy = user;
+      coupon.redeemedAt = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      saveAppState(appState);
+      renderCoupons();
+    }
+  } else if (payload.type === 'COUPON_CREATE') {
+    const newCoupon = payload.data;
+    if (newCoupon && !appState.coupons.some(c => c.id === newCoupon.id)) {
+      appState.coupons.unshift(newCoupon);
+      saveAppState(appState);
+      renderCoupons();
+    }
+  } else if (payload.type === 'COUPON_DELETE') {
+    const { couponId } = payload.data;
+    appState.coupons = appState.coupons.filter(c => c.id !== couponId);
+    saveAppState(appState);
+    renderCoupons();
+  }
+}
+
+function handleIncomingMemory(memory) {
+  if (!memory || !memory.id) return;
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.memories) appState.memories = [];
+  const exists = appState.memories.some(m => m.id === memory.id);
+  if (!exists) {
+    appState.memories.unshift(memory);
+    saveAppState(appState);
+    renderVaultFeed();
+    playTone(520, 0.15);
+  }
+}
+
 // Dynamically compute Day Counter starting from startDate
 function updateDaysCounter() {
   const streakDaysEl = document.getElementById('streakDays');
@@ -360,20 +872,36 @@ function setupProfileSwitcher() {
   const pillH = document.getElementById('pillHimanshu');
   const pillG = document.getElementById('pillGullu');
 
-  if (pillH) {
-    pillH.addEventListener('click', () => {
-      currentUser = 'himanshu';
-      playTone(440, 0.15);
-      renderAll();
-    });
+  function switchUser(newUser) {
+    currentUser = newUser;
+    localStorage.setItem('our_story_current_user', currentUser);
+    window.location.hash = currentUser;
+    playTone(currentUser === 'himanshu' ? 440 : 554.37, 0.15);
+    renderAll();
+    checkForIncomingPulseOnPortalSwitch();
   }
 
-  if (pillG) {
-    pillG.addEventListener('click', () => {
-      currentUser = 'gullu';
-      playTone(554.37, 0.15);
-      renderAll();
-    });
+  if (pillH) pillH.addEventListener('click', () => switchUser('himanshu'));
+  if (pillG) pillG.addEventListener('click', () => switchUser('gullu'));
+}
+
+function checkForIncomingPulseOnPortalSwitch() {
+  if (!appState || !appState.pulses || appState.pulses.length === 0) {
+    updatePulseTabIncomingState(null);
+    return;
+  }
+  const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
+  const latestPulse = appState.pulses[0];
+
+  if (latestPulse && latestPulse.from === partnerName) {
+    const pulseKey = latestPulse.id || ('pulse_' + latestPulse.time);
+    if (lastAcknowledgedPulseId !== pulseKey) {
+      triggerIncomingHeartbeatAlert(latestPulse);
+    } else {
+      updatePulseTabIncomingState(latestPulse);
+    }
+  } else {
+    updatePulseTabIncomingState(null);
   }
 }
 
@@ -728,6 +1256,9 @@ function setupMemoryVault() {
       saveAppState(appState);
       renderVaultFeed();
 
+      // Broadcast new memory across Cloud & Cross-Tab
+      broadcastUpdate('MEMORY_ADD', newMemory, true);
+
       playCelebrationChime();
       showAppModal('💖 Memory Saved!', `Your daily memory with "${song.title}" is permanently stored in your Forever Scrapbook!`);
       document.getElementById('memoryCaptionInput').value = '';
@@ -950,6 +1481,13 @@ function setupQAHandlers() {
       appState.currentQA.answers[currentUser] = text;
       saveAppState(appState);
 
+      // Broadcast Q&A Answer in real-time across Cloud & Cross-Tab
+      broadcastUpdate('QA_ANSWER', {
+        user: currentUser,
+        answer: text,
+        qId: appState.currentQA.id
+      }, true);
+
       const isBoth = !!(appState.currentQA.answers.himanshu && appState.currentQA.answers.gullu);
 
       if (isBoth) {
@@ -1005,6 +1543,12 @@ function setupQAHandlers() {
 
       saveAppState(appState);
       renderQA();
+
+      // Broadcast New Question in real-time across Cloud & Cross-Tab
+      broadcastUpdate('QA_NEW', {
+        newQA: appState.currentQA,
+        pastQA: appState.pastQAs[0] || null
+      }, true);
 
       // Animate question card pop
       const qCard = document.querySelector('.qa-card');
@@ -1075,6 +1619,9 @@ async function redeemCoupon(couponId) {
   coupon.redeemedBy = currentUser;
   saveAppState(appState);
   renderCoupons();
+
+  // Broadcast coupon redemption across Cloud & Cross-Tab
+  broadcastUpdate('COUPON_REDEEM', { couponId, user: currentUser }, true);
 
   playCelebrationChime();
   const waMsg = `Oyeee! Maine app me yeh Love Coupon REDEEM kar liya: "${coupon.title}"! Ab tumhari baari hai ise poora karne ki! 😉☕❤️`;
@@ -1156,6 +1703,9 @@ function setupCouponCreation() {
       saveAppState(appState);
       renderCoupons();
 
+      // Broadcast new coupon across Cloud & Cross-Tab
+      broadcastUpdate('COUPON_CREATE', newCoupon, true);
+
       playCelebrationChime();
       showAppModal('🎟️ Love Coupon Created!', `Aapka naya coupon <strong>"${title}"</strong> coupon book me add ho gaya hai!`);
 
@@ -1183,6 +1733,8 @@ function deleteCustomCoupon(couponId) {
   saveAppState(appState);
   renderCoupons();
   playTone(400, 0.15);
+
+  broadcastUpdate('COUPON_DELETE', { couponId }, true);
 
   try {
     fetch('/api/coupon/delete', {
@@ -1233,14 +1785,20 @@ function setupPulseArena() {
       if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
       if (!appState.pulses) appState.pulses = [];
       const newPulse = {
+        id: 'pulse_' + Date.now(),
         from: currentUser === 'himanshu' ? 'Himanshu' : 'Gullu',
+        to: currentUser === 'himanshu' ? 'Gullu' : 'Himanshu',
         time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: Date.now(),
         note: `Sent a warm heartbeat pulse to ${partner} ❤️`
       };
       appState.pulses.unshift(newPulse);
-      if (appState.pulses.length > 20) appState.pulses.pop();
+      if (appState.pulses.length > 25) appState.pulses.pop();
       saveAppState(appState);
       renderPulseHistory();
+
+      // Broadcast in real-time across Cloud (MQTT) + Cross-tab (BroadcastChannel)
+      broadcastUpdate('PULSE_SENT', newPulse, true);
 
       try {
         await fetch('/api/pulse', {
@@ -1251,6 +1809,15 @@ function setupPulseArena() {
       } catch (err) {}
     }, 1800);
   }
+
+  // Handle tap on heart when there is an active incoming pulse
+  heart.addEventListener('click', () => {
+    if (heart.classList.contains('has-incoming-pulse')) {
+      const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
+      const latestPulse = appState?.pulses?.find(p => p.from === partnerName);
+      if (latestPulse) feelIncomingHeartbeat(latestPulse);
+    }
+  });
 
   function cancelHold() {
     clearTimeout(holdTimer);
@@ -1337,14 +1904,26 @@ function setupMoodIndicator() {
       if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
       if (!appState.currentMoods) appState.currentMoods = { ...DEFAULT_APP_STATE.currentMoods };
 
+      const moodPayload = {
+        mood: selectedMoodKey,
+        title: moodInfo.title,
+        note: note,
+        text: `${moodInfo.title} — "${note}"`,
+        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        user: currentUser
+      };
+
       appState.currentMoods[currentUser] = {
         mood: selectedMoodKey,
-        text: `${moodInfo.title} — "${note}"`,
-        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        text: moodPayload.text,
+        time: moodPayload.time
       };
       saveAppState(appState);
       renderMoods();
       renderHeader();
+
+      // Realtime Cloud & Cross-Tab Broadcast (Retained so partner receives it immediately!)
+      broadcastUpdate('MOOD_UPDATE', moodPayload, true);
 
       showAppModal('🎭 Mood Updated!', `Your mood is now set to ${moodInfo.title}!`);
       customInput.value = '';
@@ -1353,11 +1932,7 @@ function setupMoodIndicator() {
         await fetch('/api/mood', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user: currentUser,
-            mood: selectedMoodKey,
-            text: `${moodInfo.title} — "${note}"`
-          })
+          body: JSON.stringify(moodPayload)
         });
       } catch (e) {}
     });
@@ -1566,6 +2141,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupPWAandUpdates();
   fetchState();
 
-  // Poll state every 4 seconds for live sync between phones
-  setInterval(fetchState, 4000);
+  // Initialize Real-Time Cloud (MQTT WSS) & Cross-Tab Sync
+  initCloudSync();
+
+  // Check if an incoming heartbeat was already waiting for this user on boot
+  setTimeout(checkForIncomingPulseOnPortalSwitch, 600);
 });
