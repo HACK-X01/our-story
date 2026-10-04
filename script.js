@@ -183,7 +183,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.5.6';
+const CURRENT_APP_VERSION = '1.5.7';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -1115,6 +1115,10 @@ function sendReturnHeartbeat(toPartner) {
   // Broadcast to partner!
   broadcastUpdate('PULSE_SENT', returnPulse, true);
 
+  if (navigator.vibrate) {
+    try { navigator.vibrate([160, 80, 220, 80, 400]); } catch (e) {}
+  }
+
   playCelebrationChime();
   showAppModal('💓 Heartbeat Returned!', `A return heartbeat was sent to ${toPartner}!`);
 }
@@ -1160,7 +1164,9 @@ function feelIncomingHeartbeat(pulse) {
   setTimeout(playHeartbeatSound, 700);
 
   if (navigator.vibrate) {
-    navigator.vibrate([100, 80, 150]);
+    try {
+      navigator.vibrate([140, 70, 220, 70, 260]);
+    } catch (e) {}
   }
 
   const heart = document.getElementById('interactiveHeart');
@@ -2331,37 +2337,56 @@ function setupPulseArena() {
   const heart = document.getElementById('interactiveHeart');
   let holdTimer = null;
   let heartbeatAudioInterval = null;
+  let touchStartX = 0;
+  let touchStartY = 0;
 
   if (!heart) return;
 
+  function doHeartbeatHaptic() {
+    if (navigator.vibrate) {
+      try {
+        // True lub-dub heartbeat vibration (heavy thump, short pause, second thump)
+        navigator.vibrate([140, 70, 220]);
+      } catch (err) {}
+    }
+  }
+
   function startHold(e) {
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     heart.classList.add('holding');
     playHeartbeatSound();
+    doHeartbeatHaptic();
 
     const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
     const statusText = document.getElementById('pulseStatusText');
     if (statusText) statusText.textContent = `Sending warm heartbeat to ${partner}... 💓`;
 
-    if (navigator.vibrate) {
-      navigator.vibrate([70, 50, 90]);
-    }
-
     heartbeatAudioInterval = setInterval(() => {
       playHeartbeatSound();
-      if (navigator.vibrate) navigator.vibrate([70, 50, 90]);
+      doHeartbeatHaptic();
       createFloatingHeart(heart);
-    }, 700);
+    }, 600);
 
     holdTimer = setTimeout(async () => {
       clearInterval(heartbeatAudioInterval);
       heart.classList.remove('holding');
       playCelebrationChime();
-      
+
+      // Strong celebration pulse vibration upon successful delivery
+      if (navigator.vibrate) {
+        try {
+          navigator.vibrate([160, 80, 220, 80, 400]);
+        } catch (err) {}
+      }
+
       const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
       showAppModal('💓 Heartbeat Delivered!', `A warm, loving heartbeat pulse was sent to ${partner}!`);
 
       if (statusText) statusText.textContent = `Hold for 2 seconds to send warmth to ${partner}...`;
+
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
 
       if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
       if (!appState.pulses) appState.pulses = [];
@@ -2403,6 +2428,9 @@ function setupPulseArena() {
   function cancelHold() {
     clearTimeout(holdTimer);
     clearInterval(heartbeatAudioInterval);
+    if (navigator.vibrate) {
+      try { navigator.vibrate(0); } catch (e) {}
+    }
     heart.classList.remove('holding');
     const partner = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
     const statusText = document.getElementById('pulseStatusText');
@@ -2413,9 +2441,30 @@ function setupPulseArena() {
   heart.addEventListener('mouseup', cancelHold);
   heart.addEventListener('mouseleave', cancelHold);
 
-  heart.addEventListener('touchstart', startHold, { passive: false });
+  heart.addEventListener('touchstart', (e) => {
+    if (e.touches && e.touches[0]) {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }
+    startHold(e);
+  }, { passive: false });
+
+  heart.addEventListener('touchmove', (e) => {
+    if (e.touches && e.touches[0]) {
+      const dx = Math.abs(e.touches[0].clientX - touchStartX);
+      const dy = Math.abs(e.touches[0].clientY - touchStartY);
+      if (dx > 40 || dy > 40) {
+        cancelHold();
+      }
+    }
+  }, { passive: true });
+
   heart.addEventListener('touchend', cancelHold);
   heart.addEventListener('touchcancel', cancelHold);
+  heart.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    return false;
+  });
 }
 
 function createFloatingHeart(parent) {

@@ -1,5 +1,5 @@
 {
-  "version": "1.5.6",
-  "buildTime": 1791118000000,
-  "notes": "Instant Mobile System Notifications and vibration on Partner Mood Update"
+  "version": "1.5.7",
+  "buildTime": 1791122000000,
+  "notes": "Continuous heartbeat haptic vibration during long press and heart interaction"
 }
