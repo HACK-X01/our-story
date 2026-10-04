@@ -1,5 +1,5 @@
 {
-  "version": "1.5.1",
-  "buildTime": 1791115500000,
-  "notes": "Connected to our-story-71a36 Firebase Realtime Database for live cross-device sync"
+  "version": "1.5.2",
+  "buildTime": 1791116000000,
+  "notes": "Fixed incoming heartbeat modal visibility and added close buttons and tap handlers"
 }

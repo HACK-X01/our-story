@@ -48,6 +48,8 @@ body {
   overflow-x: hidden;
   position: relative;
   line-height: 1.5;
+.is-hidden {
+  display: none !important;
 }
 
 /* Background Ambient Orbs */
@@ -2124,16 +2126,25 @@ body {
   transition: opacity 0.3s ease;
 }
 
+.incoming-heartbeat-modal.is-hidden {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+
 .incoming-pulse-backdrop {
   position: absolute;
   inset: 0;
   background: rgba(10, 8, 18, 0.88);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+  cursor: pointer;
+  z-index: 1;
 }
 
 .incoming-pulse-card {
   position: relative;
+  z-index: 10;
   width: 100%;
   max-width: 360px;
   background: linear-gradient(145deg, rgba(32, 22, 45, 0.95), rgba(20, 14, 30, 0.98));
@@ -2147,6 +2158,7 @@ body {
   align-items: center;
   overflow: hidden;
   animation: cardPopIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  pointer-events: auto;
 }
 
 @keyframes cardPopIn {
@@ -2249,17 +2261,24 @@ body {
   flex-direction: column;
   gap: 10px;
   width: 100%;
+  position: relative;
+  z-index: 20;
 }
 
 .incoming-pulse-btn {
   width: 100%;
-  padding: 13px 18px;
+  padding: 14px 18px;
   border-radius: 22px;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
   border: none;
   transition: all 0.2s ease;
+  position: relative;
+  z-index: 22;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .incoming-pulse-btn.primary {

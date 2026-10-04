@@ -934,27 +934,79 @@ function triggerIncomingHeartbeatAlert(pulse) {
 
   if (sendBackBtn) {
     sendBackBtn.textContent = `💓 Send Heartbeat Back to ${pulse.from}`;
-    sendBackBtn.onclick = () => {
+    sendBackBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       closeIncomingHeartbeatModal();
       sendReturnHeartbeat(pulse.from);
     };
   }
 
   if (dismissBtn) {
-    dismissBtn.onclick = () => {
+    dismissBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       closeIncomingHeartbeatModal();
-      playTone(550, 0.2);
+      feelIncomingHeartbeat(pulse);
     };
   }
 
   if (modal) {
     modal.classList.remove('is-hidden');
+    modal.style.display = 'flex';
   }
 }
 
 function closeIncomingHeartbeatModal() {
   const modal = document.getElementById('incomingHeartbeatModal');
-  if (modal) modal.classList.add('is-hidden');
+  if (modal) {
+    modal.classList.add('is-hidden');
+    modal.style.display = 'none';
+  }
+}
+
+function setupIncomingPulseModal() {
+  const modal = document.getElementById('incomingHeartbeatModal');
+  const backdrop = document.getElementById('incomingPulseBackdrop');
+  const closeBtn = document.getElementById('incomingPulseCloseBtn');
+  const dismissBtn = document.getElementById('incomingDismissBtn');
+  const sendBackBtn = document.getElementById('incomingSendBackBtn');
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeIncomingHeartbeatModal();
+      playTone(400, 0.1);
+    });
+  }
+
+  if (backdrop) {
+    backdrop.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeIncomingHeartbeatModal();
+    });
+  }
+
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeIncomingHeartbeatModal();
+      playTone(550, 0.2);
+    });
+  }
+
+  if (sendBackBtn) {
+    sendBackBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeIncomingHeartbeatModal();
+      const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
+      sendReturnHeartbeat(partnerName);
+    });
+  }
 }
 
 function sendReturnHeartbeat(toPartner) {
@@ -1242,8 +1294,10 @@ function checkForIncomingPulseOnPortalSwitch() {
   const latestPulse = appState.pulses[0];
 
   if (latestPulse && latestPulse.from === partnerName) {
-    const pulseKey = latestPulse.id || ('pulse_' + latestPulse.time);
-    if (lastAcknowledgedPulseId !== pulseKey) {
+    const pulseKey = latestPulse.id || ('pulse_' + latestPulse.timestamp) || ('pulse_' + latestPulse.time);
+    const isLiveRecent = latestPulse.timestamp && (Date.now() - latestPulse.timestamp < 120000);
+
+    if (lastAcknowledgedPulseId !== pulseKey && isLiveRecent) {
       triggerIncomingHeartbeatAlert(latestPulse);
     } else {
       updatePulseTabIncomingState(latestPulse);
@@ -2485,6 +2539,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupPulseArena();
   setupMoodIndicator();
   setupModalDismiss();
+  setupIncomingPulseModal();
   setupInAppMusicPlayer();
   setupPWAandUpdates();
   fetchState();

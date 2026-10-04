@@ -21,7 +21,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
 
@@ -518,9 +518,10 @@
   <!-- ============================================================
        INCOMING HEARTBEAT PULSE MODAL
        ============================================================ -->
-  <div class="incoming-heartbeat-modal is-hidden" id="incomingHeartbeatModal">
+  <div class="incoming-heartbeat-modal is-hidden" id="incomingHeartbeatModal" style="display: none;">
     <div class="incoming-pulse-backdrop" id="incomingPulseBackdrop"></div>
     <div class="incoming-pulse-card">
+      <button class="modal-dismiss" id="incomingPulseCloseBtn" title="Close" style="position: absolute; top: 14px; right: 14px; z-index: 30; cursor: pointer;">✕</button>
       <div class="incoming-pulse-wave-ring ring-1"></div>
       <div class="incoming-pulse-wave-ring ring-2"></div>
       <div class="incoming-pulse-wave-ring ring-3"></div>
@@ -617,6 +618,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=10"></script>
+  <script src="script.js?v=11"></script>
 </body>
 </html>
