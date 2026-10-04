@@ -21,7 +21,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
 
@@ -41,6 +42,9 @@
           <p class="brand-subtitle">Himanshu & Gullu • Forever & Always</p>
         </div>
         <div class="header-right-actions">
+          <button class="distance-pill" id="headerDistancePill" title="Distance Between Us">
+            <span class="dist-icon">📍</span> <span id="headerDistanceText">-- km</span>
+          </button>
           <button class="notif-bell-btn" id="notifBellBtn" title="Enable Mobile Heartbeat Notifications">
             <span id="notifBellIcon">🔔</span>
           </button>
@@ -395,6 +399,81 @@
             <span class="pulse-status-text" id="pulseStatusText">Hold for 2 seconds to send warmth to Gullu...</span>
           </div>
 
+          <!-- ============================================================
+               LIVE LOCATION & DISTANCE RADAR (HIMANSHU & GULLU)
+               ============================================================ -->
+          <div class="radar-card" id="radarCard">
+            <div class="radar-header">
+              <div class="radar-title-wrap">
+                <span class="radar-icon-badge">📍</span>
+                <div>
+                  <h4 class="radar-title">Live Distance & Radar</h4>
+                  <p class="radar-subtitle">Exact distance & live GPS between Himanshu & Gullu</p>
+                </div>
+              </div>
+              <button class="radar-refresh-btn" id="radarUpdateMyLocBtn" title="Share / Update My Current Location">
+                <span class="refresh-btn-icon">🎯</span> Update Location
+              </button>
+            </div>
+
+            <!-- Big Glowing Distance Display -->
+            <div class="radar-distance-hero">
+              <div class="radar-pulse-ring ring-a"></div>
+              <div class="radar-pulse-ring ring-b"></div>
+              <div class="radar-distance-content">
+                <span class="radar-distance-label">DISTANCE BETWEEN US</span>
+                <div class="radar-distance-value-wrap">
+                  <span class="radar-distance-number" id="radarDistanceValue">--</span>
+                  <span class="radar-distance-unit" id="radarDistanceUnit">km</span>
+                </div>
+                <p class="radar-romantic-msg" id="radarRomanticMsg">Tap "Update Location" to calculate distance ❤️</p>
+              </div>
+            </div>
+
+            <!-- Interactive Romantic Couple Map -->
+            <div class="radar-map-wrapper">
+              <div id="coupleRadarMap" class="couple-radar-map"></div>
+              <div class="map-overlay-tag" id="mapOverlayTag">Live Couple Radar ✨</div>
+            </div>
+
+            <!-- Partner Locations Strip -->
+            <div class="radar-locations-grid">
+              <div class="radar-loc-box himanshu">
+                <div class="loc-box-header">
+                  <span class="loc-avatar">☕</span>
+                  <strong class="loc-name">Himanshu</strong>
+                </div>
+                <span class="loc-address" id="himanshuLocAddress">Location not shared yet</span>
+                <small class="loc-time" id="himanshuLocTime">Tap Update Location</small>
+              </div>
+              
+              <div class="radar-loc-divider">
+                <span class="divider-heart">💖</span>
+              </div>
+
+              <div class="radar-loc-box gullu">
+                <div class="loc-box-header">
+                  <span class="loc-avatar">🌸</span>
+                  <strong class="loc-name">Gullu</strong>
+                </div>
+                <span class="loc-address" id="gulluLocAddress">Location not shared yet</span>
+                <small class="loc-time" id="gulluLocTime">Tap Update Location</small>
+              </div>
+            </div>
+
+            <!-- Map Action Buttons -->
+            <div class="radar-action-row">
+              <button class="radar-nav-btn" id="radarDirectionsBtn" disabled>
+                🚗 Directions to Partner in Google Maps
+              </button>
+              <label class="radar-auto-sync-toggle" title="Automatically refresh location every 2 minutes while app is open">
+                <input type="checkbox" id="radarAutoSyncToggle">
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Auto-sync (2m)</span>
+              </label>
+            </div>
+          </div>
+
           <!-- Pulse History Log -->
           <div class="pulse-history-card">
             <h4 class="history-title">Recent Heartbeats 💓</h4>
@@ -667,11 +746,12 @@
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" loop></audio>
 
-  <!-- FIREBASE CLOUD DATABASE SDKS -->
+  <!-- LEAFLET MAP & CLOUD DATABASE SDKS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=16"></script>
+  <script src="script.js?v=17"></script>
 </body>
 </html>

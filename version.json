@@ -1,5 +1,5 @@
 {
-  "version": "1.5.8",
-  "buildTime": 1791125000000,
-  "notes": "Instant Realtime Pulse Syncing with latestPulse, REST poller, Hold Progress Bar, and Instant Send Button"
+  "version": "1.5.9",
+  "buildTime": 1791130000000,
+  "notes": "Live couple GPS radar, exact distance calculation, and interactive romantic map"
 }

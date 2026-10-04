@@ -184,12 +184,16 @@ const DEFAULT_APP_STATE = {
     { id: "c6", title: "Hum Tum Ek Kamre Me Pass 🗝️", desc: "Recreate our special daydream: Just you and me, zero distractions.", forUser: "both", redeemed: false }
   ],
   memories: [],
-  pulses: []
+  pulses: [],
+  locations: {
+    himanshu: null,
+    gullu: null
+  }
 };
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.5.8';
+const CURRENT_APP_VERSION = '1.5.9';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -276,6 +280,17 @@ function mergePreservingUserData(local, incoming) {
     };
   }
 
+  // 5. Preserve Locations (Freshest GPS timestamp wins)
+  if (local.locations || incoming.locations) {
+    const locH = ((incoming.locations?.himanshu?.timestamp || 0) >= (local.locations?.himanshu?.timestamp || 0))
+      ? (incoming.locations?.himanshu || local.locations?.himanshu || null)
+      : (local.locations?.himanshu || incoming.locations?.himanshu || null);
+    const locG = ((incoming.locations?.gullu?.timestamp || 0) >= (local.locations?.gullu?.timestamp || 0))
+      ? (incoming.locations?.gullu || local.locations?.gullu || null)
+      : (local.locations?.gullu || incoming.locations?.gullu || null);
+    merged.locations = { himanshu: locH, gullu: locG };
+  }
+
   return merged;
 }
 
@@ -315,6 +330,7 @@ function renderAll() {
   renderCoupons();
   renderPulseHistory();
   renderMoods();
+  updateCoupleLocationsUI();
 }
 
 // ==========================================================================
@@ -480,6 +496,17 @@ function setupFirebaseRealtimeListeners() {
     }
   });
 
+  // 3. Realtime Listener on our_story/locations (Himanshu & Gullu GPS Radar)
+  firebaseDb.ref('our_story/locations').on('value', (snapshot) => {
+    const locs = snapshot.val();
+    if (locs) {
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      appState.locations = locs;
+      saveAppState(appState);
+      updateCoupleLocationsUI();
+    }
+  });
+
   firebaseDb.ref('our_story/currentQA').on('value', (snapshot) => {
     const qa = snapshot.val();
     if (qa) {
@@ -582,6 +609,20 @@ function initFirebaseRestSync(dbUrl) {
       })
       .catch(() => {});
   }, 3500);
+
+  // Background Location Poller (Every 6s for Radar & Distance)
+  setInterval(() => {
+    fetch(`${dbUrl}/our_story/locations.json?t=` + Date.now())
+      .then(r => r.ok ? r.json() : null)
+      .then(locs => {
+        if (!locs) return;
+        if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+        appState.locations = locs;
+        saveAppState(appState);
+        updateCoupleLocationsUI();
+      })
+      .catch(() => {});
+  }, 6000);
 }
 
 function syncToFirebase(type, data) {
@@ -597,6 +638,8 @@ function syncToFirebase(type, data) {
       } else if (type === 'PULSE_SENT') {
         firebaseDb.ref('our_story/latestPulse').set(data);
         firebaseDb.ref('our_story/pulses').push(data);
+      } else if (type === 'LOCATION_UPDATE') {
+        firebaseDb.ref('our_story/locations/' + data.user).set(data);
       } else if (type === 'QA_ANSWER') {
         firebaseDb.ref('our_story/currentQA/answers/' + data.user).set(data.answer);
       } else if (type === 'QA_NEW') {
@@ -631,6 +674,10 @@ function syncToFirebase(type, data) {
       }).catch(() => {});
       endpoint += `/pulses.json`;
       method = 'POST';
+      body = data;
+    } else if (type === 'LOCATION_UPDATE') {
+      endpoint += `/locations/${data.user}.json`;
+      method = 'PUT';
       body = data;
     } else if (type === 'QA_ANSWER') {
       endpoint += `/currentQA/answers/${data.user}.json`;
@@ -882,6 +929,7 @@ function broadcastUpdate(type, data, retain = true) {
       else if (type === 'QA_ANSWER' || type === 'QA_NEW') subTopic = 'qa';
       else if (type.startsWith('COUPON_')) subTopic = 'coupon';
       else if (type === 'MEMORY_ADD') subTopic = 'memory';
+      else if (type === 'LOCATION_UPDATE') subTopic = 'location';
 
       const msg = new Paho.MQTT.Message(JSON.stringify(payload));
       msg.destinationName = SYNC_TOPIC_PREFIX + subTopic;
@@ -918,6 +966,8 @@ function handleIncomingSyncMessage(payload) {
     handleIncomingCoupon(payload);
   } else if (payload.type === 'MEMORY_ADD') {
     handleIncomingMemory(payload.data);
+  } else if (payload.type === 'LOCATION_UPDATE') {
+    handleIncomingLocation(payload.data);
   }
 }
 
@@ -1558,6 +1608,13 @@ function setupTabNavigation() {
       if (p.id === tabId) p.classList.add('active');
       else p.classList.remove('active');
     });
+
+    if (tabId === 'panePulse') {
+      setTimeout(() => {
+        if (!coupleMap) initCoupleRadarMap();
+        else coupleMap.invalidateSize();
+      }, 200);
+    }
   }
 
   dockItems.forEach(item => {
@@ -2602,6 +2659,355 @@ function setupPulseArena() {
   updatePulseIdentityUI();
 }
 
+// ==========================================================================
+// 8. LIVE LOCATION & DISTANCE RADAR (HIMANSHU & GULLU)
+// ==========================================================================
+
+let coupleMap = null;
+let markerH = null;
+let markerG = null;
+let connectionLine = null;
+let autoLocationSyncTimer = null;
+
+// Haversine Great-Circle Distance Calculation Formula
+function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function getRomanticDistanceMessage(distKm) {
+  if (distKm < 0.05) {
+    return "Together right now! In the same room or right beside each other 🥰";
+  } else if (distKm < 0.8) {
+    return "Super close! Just a quick 2-minute walk away 🏃‍♂️💨";
+  } else if (distKm < 5.0) {
+    return "Nearby in the same area! Time for a quick coffee date ☕🛵";
+  } else if (distKm < 25.0) {
+    return "Same city vibes! Heading over to see you soon 🚗💨";
+  } else if (distKm < 150.0) {
+    return "Across town, but connected by heartbeat every second 💓";
+  } else {
+    return "Miles apart, but heart to heart forever & always ❤️✈️";
+  }
+}
+
+function initCoupleRadarMap() {
+  const mapEl = document.getElementById('coupleRadarMap');
+  if (!mapEl || coupleMap || typeof L === 'undefined') return;
+
+  try {
+    coupleMap = L.map('coupleRadarMap', {
+      zoomControl: true,
+      attributionControl: false
+    }).setView([28.6139, 77.2090], 11);
+
+    // CartoDB Voyager tiles (clean, beautiful, high-contrast romantic map)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd'
+    }).addTo(coupleMap);
+
+    updateCoupleLocationsUI();
+  } catch (err) {
+    console.warn('Leaflet map init warning:', err);
+  }
+}
+
+function createCustomMarkerIcon(user, name, emoji) {
+  return L.divIcon({
+    className: 'custom-leaflet-icon-wrap',
+    html: `
+      <div class="map-custom-marker ${user}">
+        <div class="marker-pin">${emoji}</div>
+        <span class="marker-tag">${name}</span>
+      </div>
+    `,
+    iconSize: [40, 56],
+    iconAnchor: [20, 50],
+    popupAnchor: [0, -45]
+  });
+}
+
+function updateCoupleLocationsUI() {
+  const hLoc = appState?.locations?.himanshu;
+  const gLoc = appState?.locations?.gullu;
+
+  const hAddr = document.getElementById('himanshuLocAddress');
+  const hTime = document.getElementById('himanshuLocTime');
+  const gAddr = document.getElementById('gulluLocAddress');
+  const gTime = document.getElementById('gulluLocTime');
+
+  const distVal = document.getElementById('radarDistanceValue');
+  const distUnit = document.getElementById('radarDistanceUnit');
+  const headerDistText = document.getElementById('headerDistanceText');
+  const romanticMsg = document.getElementById('radarRomanticMsg');
+  const directionsBtn = document.getElementById('radarDirectionsBtn');
+
+  if (hAddr) hAddr.textContent = hLoc?.address || 'Location not shared yet';
+  if (hTime) hTime.textContent = hLoc?.time ? `Updated at ${hLoc.time}` : 'Tap Update Location';
+
+  if (gAddr) gAddr.textContent = gLoc?.address || 'Location not shared yet';
+  if (gTime) gTime.textContent = gLoc?.time ? `Updated at ${gLoc.time}` : 'Tap Update Location';
+
+  // If both locations are available, calculate real distance & update map
+  if (hLoc && gLoc && typeof hLoc.lat === 'number' && typeof gLoc.lat === 'number') {
+    const distKm = calculateDistanceKm(hLoc.lat, hLoc.lng, gLoc.lat, gLoc.lng);
+
+    let displayNum, displayUnit, headerText;
+    if (distKm < 1.0) {
+      const meters = Math.max(1, Math.round(distKm * 1000));
+      displayNum = meters;
+      displayUnit = 'meters';
+      headerText = `${meters} m`;
+    } else {
+      displayNum = distKm.toFixed(1);
+      displayUnit = 'km';
+      headerText = `${distKm.toFixed(1)} km`;
+    }
+
+    if (distVal) distVal.textContent = displayNum;
+    if (distUnit) distUnit.textContent = displayUnit;
+    if (headerDistText) headerDistText.textContent = headerText;
+    if (romanticMsg) romanticMsg.textContent = getRomanticDistanceMessage(distKm);
+
+    if (directionsBtn) {
+      directionsBtn.disabled = false;
+      const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+      const partnerName = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
+      const myLoc = currentUser === 'himanshu' ? hLoc : gLoc;
+      const pLoc = currentUser === 'himanshu' ? gLoc : hLoc;
+
+      directionsBtn.textContent = `🚗 Route to ${partnerName} (${headerText})`;
+      directionsBtn.onclick = () => {
+        const url = `https://www.google.com/maps/dir/?api=1&origin=${myLoc.lat},${myLoc.lng}&destination=${pLoc.lat},${pLoc.lng}&travelmode=driving`;
+        window.open(url, '_blank');
+      };
+    }
+
+    // Update Leaflet Map if initialized
+    if (coupleMap && typeof L !== 'undefined') {
+      const posH = [hLoc.lat, hLoc.lng];
+      const posG = [gLoc.lat, gLoc.lng];
+
+      if (!markerH) {
+        markerH = L.marker(posH, { icon: createCustomMarkerIcon('himanshu', 'Himanshu', '☕') }).addTo(coupleMap);
+      } else {
+        markerH.setLatLng(posH);
+      }
+      markerH.bindPopup(`<b>Himanshu ☕</b><br>${hLoc.address || 'Current Location'}<br><small>${hLoc.time || ''}</small>`);
+
+      if (!markerG) {
+        markerG = L.marker(posG, { icon: createCustomMarkerIcon('gullu', 'Gullu', '🌸') }).addTo(coupleMap);
+      } else {
+        markerG.setLatLng(posG);
+      }
+      markerG.bindPopup(`<b>Gullu 🌸</b><br>${gLoc.address || 'Current Location'}<br><small>${gLoc.time || ''}</small>`);
+
+      if (!connectionLine) {
+        connectionLine = L.polyline([posH, posG], {
+          color: '#ff2a6d',
+          weight: 3.5,
+          dashArray: '8, 8',
+          opacity: 0.85
+        }).addTo(coupleMap);
+      } else {
+        connectionLine.setLatLngs([posH, posG]);
+      }
+
+      try {
+        coupleMap.fitBounds(L.latLngBounds([posH, posG]), { padding: [50, 50], maxZoom: 15 });
+      } catch (e) {}
+    }
+  } else if (hLoc || gLoc) {
+    const singleLoc = hLoc || gLoc;
+    const singleUser = hLoc ? 'himanshu' : 'gullu';
+    const singleName = hLoc ? 'Himanshu ☕' : 'Gullu 🌸';
+
+    if (distVal) distVal.textContent = '--';
+    if (distUnit) distUnit.textContent = 'km';
+    if (headerDistText) headerDistText.textContent = '-- km';
+    if (romanticMsg) romanticMsg.textContent = `Waiting for ${singleUser === currentUser ? 'partner' : singleName} to share location... ❤️`;
+
+    if (directionsBtn) directionsBtn.disabled = true;
+
+    if (coupleMap && typeof L !== 'undefined' && singleLoc.lat) {
+      const pos = [singleLoc.lat, singleLoc.lng];
+      if (hLoc) {
+        if (!markerH) markerH = L.marker(pos, { icon: createCustomMarkerIcon('himanshu', 'Himanshu', '☕') }).addTo(coupleMap);
+        else markerH.setLatLng(pos);
+      } else {
+        if (!markerG) markerG = L.marker(pos, { icon: createCustomMarkerIcon('gullu', 'Gullu', '🌸') }).addTo(coupleMap);
+        else markerG.setLatLng(pos);
+      }
+      coupleMap.setView(pos, 13);
+    }
+  }
+}
+
+async function shareMyLocation(silent = false) {
+  if (!navigator.geolocation) {
+    if (!silent) showAppModal('ℹ️ GPS Not Supported', 'Aapka browser geolocation support nahi karta.');
+    return;
+  }
+
+  const btn = document.getElementById('radarUpdateMyLocBtn');
+  if (btn && !silent) {
+    btn.classList.add('loading');
+    btn.innerHTML = `<span class="refresh-btn-icon">⏳</span> Locating...`;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const accuracy = Math.round(position.coords.accuracy);
+
+      let prettyAddress = `${lat.toFixed(3)}° N, ${lng.toFixed(3)}° E`;
+
+      // Reverse geocode via OpenStreetMap Nominatim
+      try {
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`,
+          { headers: { 'Accept': 'application/json' } }
+        );
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          if (geoData && geoData.address) {
+            const a = geoData.address;
+            const primaryArea = a.neighbourhood || a.suburb || a.city_district || a.road || a.commercial || a.residential;
+            const city = a.city || a.town || a.county || a.state_district || a.state;
+            if (primaryArea && city) {
+              prettyAddress = `${primaryArea}, ${city}`;
+            } else if (city) {
+              prettyAddress = city;
+            } else if (geoData.display_name) {
+              prettyAddress = geoData.display_name.split(',').slice(0, 2).join(',').trim();
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Reverse geocode warning:', err);
+      }
+
+      const locPayload = {
+        lat,
+        lng,
+        accuracy,
+        address: prettyAddress,
+        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: Date.now(),
+        user: currentUser
+      };
+
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      if (!appState.locations) appState.locations = {};
+      appState.locations[currentUser] = locPayload;
+      saveAppState(appState);
+      updateCoupleLocationsUI();
+
+      // Realtime Cloud Broadcast across Firebase RTDB & MQTT
+      broadcastUpdate('LOCATION_UPDATE', locPayload, true);
+
+      if (btn && !silent) {
+        btn.classList.remove('loading');
+        btn.innerHTML = `<span class="refresh-btn-icon">🎯</span> Update Location`;
+      }
+
+      if (!silent) {
+        playCelebrationChime();
+        if (navigator.vibrate) navigator.vibrate([100, 50, 150]);
+        showAppModal(
+          '📍 Location Shared!',
+          `Aapki exact location (${prettyAddress}) partner ke saath share ho gayi hai!`
+        );
+      }
+    },
+    (error) => {
+      console.warn('Geolocation error:', error);
+      if (btn && !silent) {
+        btn.classList.remove('loading');
+        btn.innerHTML = `<span class="refresh-btn-icon">🎯</span> Update Location`;
+      }
+      if (!silent) {
+        showAppModal(
+          '⚠️ Location Permission Required',
+          'Phone settings me jaakar location permission allow karein taaki exact distance calculate ho sake.'
+        );
+      }
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 12000,
+      maximumAge: 10000
+    }
+  );
+}
+
+function handleIncomingLocation(data) {
+  if (!data || !data.user) return;
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.locations) appState.locations = {};
+  appState.locations[data.user] = data;
+  saveAppState(appState);
+  updateCoupleLocationsUI();
+
+  if (data.user !== currentUser) {
+    const partnerName = data.user === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸';
+    showAppModal('📍 Partner Location Updated!', `${partnerName} has shared their live location: "${data.address || 'GPS Updated'}"`);
+  }
+}
+
+function setupCoupleRadar() {
+  const updateBtn = document.getElementById('radarUpdateMyLocBtn');
+  const headerPill = document.getElementById('headerDistancePill');
+  const autoSyncToggle = document.getElementById('radarAutoSyncToggle');
+
+  if (updateBtn) {
+    updateBtn.addEventListener('click', () => shareMyLocation(false));
+  }
+
+  if (headerPill) {
+    headerPill.addEventListener('click', () => {
+      // Switch to pulse tab and scroll to radar card
+      const dockPulse = document.getElementById('dockBtnPulse');
+      if (dockPulse) dockPulse.click();
+      setTimeout(() => {
+        const radar = document.getElementById('radarCard');
+        if (radar) radar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 250);
+    });
+  }
+
+  if (autoSyncToggle) {
+    autoSyncToggle.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        shareMyLocation(true);
+        autoLocationSyncTimer = setInterval(() => {
+          if (document.visibilityState === 'visible') {
+            shareMyLocation(true);
+          }
+        }, 120000); // 2 minutes
+        showAppModal('🔄 Auto-Sync Active', 'Location har 2 minute me automatically sync hoti rahegi!');
+      } else {
+        clearInterval(autoLocationSyncTimer);
+        autoLocationSyncTimer = null;
+      }
+    });
+  }
+
+  // Initialize map when container is visible
+  setTimeout(() => {
+    initCoupleRadarMap();
+  }, 500);
+}
+
 function createFloatingHeart(parent) {
   const h = document.createElement('div');
   h.textContent = ['❤️', '💖', '✨', '☕', '🌸'][Math.floor(Math.random() * 5)];
@@ -2912,6 +3318,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Check first-time identity selection
   checkFirstTimeIdentity();
+
+  // Initialize Live Location & Distance Radar
+  setupCoupleRadar();
 
   // Initialize Real-Time Cloud (MQTT WSS) & Cross-Tab Sync
   initCloudSync();

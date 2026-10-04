@@ -142,6 +142,30 @@ body {
   letter-spacing: 0.4px;
 }
 
+.distance-pill {
+  background: linear-gradient(135deg, rgba(233, 30, 99, 0.28), rgba(156, 39, 176, 0.28));
+  border: 1px solid rgba(255, 107, 139, 0.45);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.25s ease;
+}
+
+.distance-pill:hover, .distance-pill:active {
+  background: linear-gradient(135deg, rgba(233, 30, 99, 0.55), rgba(156, 39, 176, 0.55));
+  transform: scale(1.05);
+}
+
+.distance-pill .dist-icon {
+  font-size: 0.8rem;
+}
+
 .notif-bell-btn {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -2364,6 +2388,383 @@ body {
   font-size: 0.72rem;
   color: var(--text-muted);
   margin-top: 2px;
+}
+
+/* ==========================================================================
+   LIVE LOCATION & DISTANCE RADAR STYLES
+   ========================================================================== */
+.radar-card {
+  background: linear-gradient(145deg, rgba(30, 18, 44, 0.85), rgba(18, 10, 28, 0.9));
+  border: 1.5px solid rgba(255, 107, 139, 0.3);
+  border-radius: 24px;
+  padding: 22px 18px;
+  margin-bottom: 24px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 30px rgba(233, 30, 99, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.radar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 10px;
+}
+
+.radar-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.radar-icon-badge {
+  font-size: 1.5rem;
+  background: rgba(255, 75, 110, 0.18);
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radar-title {
+  font-size: 1.05rem;
+  color: #fff;
+  margin: 0;
+  font-weight: 700;
+}
+
+.radar-subtitle {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+
+.radar-refresh-btn {
+  background: linear-gradient(135deg, #ff4b6e, #ff2a6d);
+  color: #fff;
+  border: none;
+  padding: 7px 13px;
+  border-radius: 18px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 4px 15px rgba(255, 42, 109, 0.35);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.radar-refresh-btn:active {
+  transform: scale(0.95);
+}
+
+.radar-refresh-btn.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Radar Distance Hero Card */
+.radar-distance-hero {
+  position: relative;
+  background: radial-gradient(circle, rgba(233, 30, 99, 0.22) 0%, rgba(14, 7, 22, 0.6) 80%);
+  border: 1px solid rgba(255, 107, 139, 0.25);
+  border-radius: 20px;
+  padding: 20px 14px;
+  text-align: center;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.radar-pulse-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 107, 139, 0.4);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.ring-a {
+  width: 130px;
+  height: 130px;
+  animation: radarWave 2.8s infinite ease-out;
+}
+
+.ring-b {
+  width: 130px;
+  height: 130px;
+  animation: radarWave 2.8s infinite ease-out 1.4s;
+}
+
+@keyframes radarWave {
+  0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0.8; }
+  100% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+}
+
+.radar-distance-content {
+  position: relative;
+  z-index: 2;
+}
+
+.radar-distance-label {
+  font-size: 0.68rem;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.65);
+  font-weight: 700;
+}
+
+.radar-distance-value-wrap {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+
+.radar-distance-number {
+  font-size: 2.8rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #ffffff, #ffd700, #ff6b8b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+}
+
+.radar-distance-unit {
+  font-size: 1.2rem;
+  color: #ffd700;
+  font-weight: 700;
+}
+
+.radar-romantic-msg {
+  font-size: 0.82rem;
+  color: #fff;
+  margin: 0;
+  font-family: 'Caveat', cursive;
+  font-size: 1.05rem;
+}
+
+/* Map Wrapper */
+.radar-map-wrapper {
+  position: relative;
+  height: 240px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1.5px solid rgba(255, 107, 139, 0.35);
+  margin-bottom: 16px;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6);
+}
+
+.couple-radar-map {
+  width: 100%;
+  height: 100%;
+  background: #120a1c;
+}
+
+.map-overlay-tag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(14, 7, 22, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 0.68rem;
+  color: #fff;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* Custom Marker Pins */
+.map-custom-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+
+.map-custom-marker .marker-pin {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  border: 2.5px solid #fff;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+
+.map-custom-marker.himanshu .marker-pin {
+  background: linear-gradient(135deg, #d49a45, #795548);
+  box-shadow: 0 0 20px rgba(212, 154, 69, 0.8);
+}
+
+.map-custom-marker.gullu .marker-pin {
+  background: linear-gradient(135deg, #ff2a6d, #e91e63);
+  box-shadow: 0 0 20px rgba(255, 42, 109, 0.8);
+}
+
+.map-custom-marker .marker-tag {
+  background: rgba(14, 7, 22, 0.9);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+/* Partner Locations Strip */
+.radar-locations-grid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  gap: 8px;
+}
+
+.radar-loc-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.loc-box-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.loc-avatar {
+  font-size: 1rem;
+}
+
+.loc-name {
+  font-size: 0.82rem;
+  color: #fff;
+}
+
+.loc-address {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.loc-time {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.radar-loc-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.divider-heart {
+  font-size: 1.1rem;
+  animation: pulse 1.6s infinite ease-in-out;
+}
+
+/* Actions Row */
+.radar-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.radar-nav-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 107, 139, 0.35);
+  color: #fff;
+  padding: 9px 14px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.radar-nav-btn:not(:disabled):hover,
+.radar-nav-btn:not(:disabled):active {
+  background: linear-gradient(135deg, rgba(233, 30, 99, 0.4), rgba(76, 175, 80, 0.4));
+  border-color: #4caf50;
+  transform: translateY(-1px);
+}
+
+.radar-nav-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.radar-auto-sync-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.radar-auto-sync-toggle input {
+  display: none;
+}
+
+.radar-auto-sync-toggle .toggle-slider {
+  width: 32px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  position: relative;
+  transition: all 0.25s ease;
+}
+
+.radar-auto-sync-toggle .toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: all 0.25s ease;
+}
+
+.radar-auto-sync-toggle input:checked + .toggle-slider {
+  background: #4caf50;
+}
+
+.radar-auto-sync-toggle input:checked + .toggle-slider::after {
+  transform: translateX(14px);
 }
 
 /* 5. Fullscreen Romantic Incoming Heartbeat Modal */
