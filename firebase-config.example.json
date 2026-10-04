@@ -1,0 +1,5 @@
+{
+  "databaseURL": "https://YOUR-PROJECT-ID-default-rtdb.firebaseio.com",
+  "apiKey": "YOUR_API_KEY_OPTIONAL",
+  "projectId": "YOUR-PROJECT-ID"
+}

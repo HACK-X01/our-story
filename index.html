@@ -21,7 +21,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 
@@ -41,6 +41,9 @@
           <p class="brand-subtitle">Himanshu & Gullu • Forever & Always</p>
         </div>
         <div class="header-right-actions">
+          <button class="firebase-status-pill" id="firebaseStatusPill" title="Firebase Cloud Database Connection">
+            <span class="fb-pill-icon">🔥</span> <span id="fbPillText">Cloud DB</span>
+          </button>
           <span class="live-sync-pill" id="liveSyncPill" title="Real-Time Partner Sync">
             <span class="sync-dot"></span> <span class="sync-label">Sync</span>
           </span>
@@ -561,10 +564,59 @@
     </div>
   </div>
 
+  <!-- ============================================================
+       FIREBASE CLOUD DATABASE SETUP MODAL
+       ============================================================ -->
+  <div class="modal-overlay is-hidden" id="firebaseSetupModal">
+    <div class="modal-box firebase-modal-box">
+      <button class="modal-dismiss" id="closeFirebaseModalBtn">✕</button>
+      <div class="modal-celebration-emoji">🔥</div>
+      <h3 class="modal-heading">Firebase Cloud Database</h3>
+      <p class="modal-desc">
+        Apni memories, photos, Q&A aur answers ko Google Cloud Firebase par hamesha ke liye permanently save rakho!
+      </p>
+
+      <div class="firebase-status-banner" id="firebaseStatusBanner">
+        <span class="fb-status-icon" id="fbStatusDot">⚪</span>
+        <span class="fb-status-title" id="firebaseBannerText">Status: Not Configured Yet</span>
+      </div>
+
+      <div class="fb-input-group">
+        <label class="fb-input-label" for="fbDbUrlInput">Firebase Realtime Database URL:</label>
+        <input type="text" class="fb-text-input" id="fbDbUrlInput" placeholder="https://your-project-default-rtdb.firebaseio.com">
+        <small class="fb-input-hint">Firebase Console ➡️ Realtime Database URL</small>
+      </div>
+
+      <div class="fb-input-group">
+        <label class="fb-input-label" for="fbApiKeyInput">Web API Key (Optional):</label>
+        <input type="text" class="fb-text-input" id="fbApiKeyInput" placeholder="AIzaSy...">
+      </div>
+
+      <div class="fb-action-row">
+        <button class="fb-btn-primary" id="saveFirebaseConfigBtn">Save & Connect Cloud DB 🔥</button>
+        <button class="fb-btn-secondary" id="testFirebaseBtn">Test Connection ⚡</button>
+      </div>
+
+      <div class="fb-help-guide">
+        <h5 class="fb-guide-title">📖 2-Minute Quick Setup Guide:</h5>
+        <ol class="fb-guide-steps">
+          <li>Google par <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> kholein aur <strong>"Add Project"</strong> karein (Name: <code>our-story</code>).</li>
+          <li>Left menu mein <strong>"Build" ➡️ "Realtime Database"</strong> par click karein aur <strong>"Create Database"</strong> dabayein.</li>
+          <li>Security rules mein <strong>"Start in Test Mode"</strong> choose karein taaki aap dono ka data save ho sake.</li>
+          <li>Top par dikhne wali database URL (jaise: <code>https://our-story-xxx-default-rtdb.firebaseio.com</code>) copy karke yahan paste karein aur <strong>Save</strong> kar dein!</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" loop></audio>
 
+  <!-- FIREBASE CLOUD DATABASE SDKS -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=9"></script>
+  <script src="script.js?v=10"></script>
 </body>
 </html>

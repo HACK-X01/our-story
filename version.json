@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0",
-  "buildTime": 1791111800000,
-  "notes": "Live Real-Time Cloud Sync (MQTT WSS) & Incoming Heartbeat Pulse Experience"
+  "version": "1.5.0",
+  "buildTime": 1791113500000,
+  "notes": "Added Firebase Realtime Cloud Database for permanent cloud persistence across devices"
 }

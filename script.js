@@ -325,6 +325,342 @@ let isMqttConnected = false;
 const crossTabChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('our_story_sync_channel') : null;
 let lastAcknowledgedPulseId = localStorage.getItem('our_story_last_pulse_ack') || null;
 
+// ==========================================================================
+// FIREBASE REALTIME CLOUD DATABASE ENGINE
+// ==========================================================================
+
+let firebaseApp = null;
+let firebaseDb = null;
+let isFirebaseConnected = false;
+
+function getStoredFirebaseConfig() {
+  try {
+    const raw = localStorage.getItem('our_story_firebase_config');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return window.FIREBASE_CONFIG || null;
+}
+
+function initFirebaseDatabase() {
+  const config = getStoredFirebaseConfig();
+  const statusPill = document.getElementById('firebaseStatusPill');
+  const statusText = document.getElementById('fbPillText');
+  const banner = document.getElementById('firebaseStatusBanner');
+  const bannerText = document.getElementById('firebaseBannerText');
+
+  if (!config || !config.databaseURL) {
+    if (statusPill) statusPill.classList.remove('connected');
+    if (statusText) statusText.textContent = 'Cloud DB';
+    if (banner) banner.classList.remove('connected');
+    if (bannerText) bannerText.textContent = 'Status: Not Connected (Tap to Setup)';
+
+    // Auto-probe firebase-config.json if deployed with one
+    fetch('firebase-config.json')
+      .then(r => r.ok ? r.json() : null)
+      .then(extConfig => {
+        if (extConfig && extConfig.databaseURL && !extConfig.databaseURL.includes('YOUR-PROJECT-ID')) {
+          localStorage.setItem('our_story_firebase_config', JSON.stringify(extConfig));
+          initFirebaseDatabase();
+        }
+      })
+      .catch(() => {});
+    return;
+  }
+
+  let dbUrl = config.databaseURL.trim().replace(/\/$/, '');
+  if (!dbUrl.startsWith('http')) dbUrl = 'https://' + dbUrl;
+
+  // 1. If Firebase compat SDK is loaded
+  if (typeof firebase !== 'undefined' && firebase.initializeApp) {
+    try {
+      if (!firebase.apps || firebase.apps.length === 0) {
+        firebaseApp = firebase.initializeApp({
+          databaseURL: dbUrl,
+          apiKey: config.apiKey || undefined,
+          projectId: config.projectId || undefined
+        });
+      } else {
+        firebaseApp = firebase.apps[0];
+      }
+      firebaseDb = firebase.database();
+      isFirebaseConnected = true;
+
+      if (statusPill) {
+        statusPill.classList.add('connected');
+        statusPill.title = 'Firebase Cloud DB: Connected & Synced 🔥';
+      }
+      if (statusText) statusText.textContent = 'Firebase Live 🔥';
+      if (banner) banner.classList.add('connected');
+      if (bannerText) bannerText.textContent = 'Status: Connected to Google Firebase Cloud DB 🔥';
+
+      setupFirebaseRealtimeListeners();
+      syncInitialStateFromFirebase();
+      return;
+    } catch (err) {
+      console.warn('Firebase SDK init warning:', err);
+    }
+  }
+
+  // 2. Fallback to Firebase REST API
+  initFirebaseRestSync(dbUrl);
+}
+
+function setupFirebaseRealtimeListeners() {
+  if (!firebaseDb) return;
+
+  firebaseDb.ref('our_story/currentMoods').on('value', (snapshot) => {
+    const moods = snapshot.val();
+    if (moods) {
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      appState.currentMoods = moods;
+      saveAppState(appState);
+      renderMoods();
+      renderHeader();
+    }
+  });
+
+  firebaseDb.ref('our_story/pulses').limitToLast(1).on('child_added', (snapshot) => {
+    const pulse = snapshot.val();
+    if (pulse && pulse.from !== (currentUser === 'himanshu' ? 'Himanshu' : 'Gullu')) {
+      if (pulse.timestamp && (Date.now() - pulse.timestamp < 60000)) {
+        handleIncomingPulse(pulse);
+      }
+    }
+  });
+
+  firebaseDb.ref('our_story/currentQA').on('value', (snapshot) => {
+    const qa = snapshot.val();
+    if (qa) {
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      appState.currentQA = qa;
+      saveAppState(appState);
+      renderQA();
+    }
+  });
+
+  firebaseDb.ref('our_story/coupons').on('value', (snapshot) => {
+    const coupons = snapshot.val();
+    if (coupons && Array.isArray(coupons)) {
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      appState.coupons = coupons;
+      saveAppState(appState);
+      renderCoupons();
+    }
+  });
+
+  firebaseDb.ref('our_story/memories').on('value', (snapshot) => {
+    const mems = snapshot.val();
+    if (mems) {
+      const arr = Array.isArray(mems) ? mems : Object.values(mems);
+      if (arr.length > 0) {
+        if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+        appState.memories = arr;
+        saveAppState(appState);
+        renderVaultFeed();
+      }
+    }
+  });
+}
+
+function syncInitialStateFromFirebase() {
+  if (!firebaseDb) return;
+  firebaseDb.ref('our_story').once('value').then((snapshot) => {
+    const cloudData = snapshot.val();
+    if (cloudData) {
+      appState = mergePreservingUserData(appState, cloudData);
+      saveAppState(appState);
+      renderAll();
+      console.log('Firebase Cloud State synced successfully! 💖');
+    } else {
+      firebaseDb.ref('our_story').set(appState);
+    }
+  }).catch((e) => console.warn('Firebase initial read failed:', e));
+}
+
+function initFirebaseRestSync(dbUrl) {
+  const statusPill = document.getElementById('firebaseStatusPill');
+  const statusText = document.getElementById('fbPillText');
+  const banner = document.getElementById('firebaseStatusBanner');
+  const bannerText = document.getElementById('firebaseBannerText');
+
+  fetch(`${dbUrl}/our_story.json`)
+    .then(r => r.json())
+    .then(cloudData => {
+      isFirebaseConnected = true;
+      if (statusPill) statusPill.classList.add('connected');
+      if (statusText) statusText.textContent = 'Firebase Live 🔥';
+      if (banner) banner.classList.add('connected');
+      if (bannerText) bannerText.textContent = 'Status: Connected via Firebase REST API 🔥';
+
+      if (cloudData) {
+        appState = mergePreservingUserData(appState, cloudData);
+        saveAppState(appState);
+        renderAll();
+      } else {
+        fetch(`${dbUrl}/our_story.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(appState)
+        });
+      }
+    })
+    .catch(err => {
+      console.warn('Firebase REST sync warning:', err);
+    });
+}
+
+function syncToFirebase(type, data) {
+  const config = getStoredFirebaseConfig();
+  if (!config || !config.databaseURL) return;
+
+  const dbUrl = config.databaseURL.trim().replace(/\/$/, '');
+
+  if (firebaseDb) {
+    try {
+      if (type === 'MOOD_UPDATE') {
+        firebaseDb.ref('our_story/currentMoods/' + data.user).set(data);
+      } else if (type === 'PULSE_SENT') {
+        firebaseDb.ref('our_story/pulses').push(data);
+      } else if (type === 'QA_ANSWER') {
+        firebaseDb.ref('our_story/currentQA/answers/' + data.user).set(data.answer);
+      } else if (type === 'QA_NEW') {
+        firebaseDb.ref('our_story/currentQA').set(data.newQA);
+        if (data.pastQA) firebaseDb.ref('our_story/pastQAs').push(data.pastQA);
+      } else if (type.startsWith('COUPON_')) {
+        firebaseDb.ref('our_story/coupons').set(appState.coupons);
+      } else if (type === 'MEMORY_ADD') {
+        firebaseDb.ref('our_story/memories').set(appState.memories);
+      }
+      return;
+    } catch (e) {
+      console.warn('Firebase SDK write error:', e);
+    }
+  }
+
+  // Fallback REST API
+  try {
+    let endpoint = `${dbUrl}/our_story`;
+    let method = 'PATCH';
+    let body = {};
+
+    if (type === 'MOOD_UPDATE') {
+      endpoint += `/currentMoods/${data.user}.json`;
+      method = 'PUT';
+      body = data;
+    } else if (type === 'PULSE_SENT') {
+      endpoint += `/pulses.json`;
+      method = 'POST';
+      body = data;
+    } else if (type === 'QA_ANSWER') {
+      endpoint += `/currentQA/answers/${data.user}.json`;
+      method = 'PUT';
+      body = JSON.stringify(data.answer);
+    } else if (type === 'QA_NEW') {
+      endpoint += `/currentQA.json`;
+      method = 'PUT';
+      body = data.newQA;
+    } else if (type.startsWith('COUPON_')) {
+      endpoint += `/coupons.json`;
+      method = 'PUT';
+      body = appState.coupons;
+    } else if (type === 'MEMORY_ADD') {
+      endpoint += `/memories.json`;
+      method = 'PUT';
+      body = appState.memories;
+    }
+
+    fetch(endpoint, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: typeof body === 'string' ? body : JSON.stringify(body)
+    }).catch(() => {});
+  } catch (err) {}
+}
+
+function setupFirebaseModal() {
+  const statusPill = document.getElementById('firebaseStatusPill');
+  const modal = document.getElementById('firebaseSetupModal');
+  const closeBtn = document.getElementById('closeFirebaseModalBtn');
+  const saveBtn = document.getElementById('saveFirebaseConfigBtn');
+  const testBtn = document.getElementById('testFirebaseBtn');
+  const dbUrlInput = document.getElementById('fbDbUrlInput');
+  const apiKeyInput = document.getElementById('fbApiKeyInput');
+
+  const config = getStoredFirebaseConfig();
+  if (config) {
+    if (dbUrlInput) dbUrlInput.value = config.databaseURL || '';
+    if (apiKeyInput) apiKeyInput.value = config.apiKey || '';
+  }
+
+  if (statusPill && modal) {
+    statusPill.addEventListener('click', () => {
+      modal.classList.remove('is-hidden');
+      playTone(520, 0.1);
+    });
+  }
+
+  if (closeBtn && modal) {
+    closeBtn.addEventListener('click', () => {
+      modal.classList.add('is-hidden');
+    });
+  }
+
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.add('is-hidden');
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      const url = dbUrlInput.value.trim();
+      const apiKey = apiKeyInput.value.trim();
+
+      if (!url) {
+        showAppModal('⚠️ URL Zaroori Hai', 'Kripya apni Firebase Realtime Database URL dalein (e.g. https://your-app-default-rtdb.firebaseio.com)');
+        return;
+      }
+
+      const newConfig = {
+        databaseURL: url,
+        apiKey: apiKey || undefined,
+        projectId: url.replace('https://', '').split('.')[0]
+      };
+
+      localStorage.setItem('our_story_firebase_config', JSON.stringify(newConfig));
+      playCelebrationChime();
+      modal.classList.add('is-hidden');
+      showAppModal('🔥 Firebase Connected!', 'Firebase Realtime Database successfully connect ho gaya hai! Saari memories, moods aur heartbeats cloud me save rahengi.');
+
+      initFirebaseDatabase();
+    });
+  }
+
+  if (testBtn) {
+    testBtn.addEventListener('click', async () => {
+      const url = dbUrlInput.value.trim().replace(/\/$/, '');
+      if (!url) {
+        showAppModal('⚠️ Database URL missing', 'Pehle Realtime Database URL box me daalo!');
+        return;
+      }
+      testBtn.textContent = 'Testing... ⏳';
+      try {
+        const res = await fetch(`${url}/.json?shallow=true`);
+        testBtn.textContent = 'Test Connection ⚡';
+        if (res.ok) {
+          playCelebrationChime();
+          showAppModal('✅ Connection Successful!', 'Google Firebase Cloud Database se connection verify ho gaya hai!');
+        } else {
+          showAppModal('⚠️ Permission Check', 'Database respond kar raha hai par rules check karein (Start in Test Mode recommended).');
+        }
+      } catch (err) {
+        testBtn.textContent = 'Test Connection ⚡';
+        showAppModal('❌ Connection Failed', `Could not reach ${url}. Kripya URL check karein.`);
+      }
+    });
+  }
+}
+
 function initCloudSync() {
   updateSyncIndicator(false, 'Connecting to Live Cloud Sync...');
 
@@ -473,6 +809,13 @@ function broadcastUpdate(type, data, retain = true) {
     } catch (e) {
       console.warn('MQTT send failed:', e);
     }
+  }
+
+  // 4. Cloud Firebase Realtime Database
+  try {
+    syncToFirebase(type, data);
+  } catch (e) {
+    console.warn('Firebase sync error in broadcastUpdate:', e);
   }
 }
 
@@ -2143,6 +2486,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize Real-Time Cloud (MQTT WSS) & Cross-Tab Sync
   initCloudSync();
+
+  // Initialize Firebase Realtime Cloud Database
+  initFirebaseDatabase();
+  setupFirebaseModal();
 
   // Check if an incoming heartbeat was already waiting for this user on boot
   setTimeout(checkForIncomingPulseOnPortalSwitch, 600);
