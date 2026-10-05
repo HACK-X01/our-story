@@ -1,5 +1,5 @@
 {
-  "version": "1.9.2",
-  "buildTime": 1791195000000,
-  "notes": "Define updateProfileUI and normalize pulses/collections to fix all app functionality"
+  "version": "1.9.3",
+  "buildTime": 1791200000000,
+  "notes": "Fix notification repetition and timing: add deduplication, strict freshness guards, and disable MQTT/ntfy caching loops"
 }

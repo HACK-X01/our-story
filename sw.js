@@ -3,13 +3,13 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-const CACHE_NAME = 'our-story-v24';
+const CACHE_NAME = 'our-story-v25';
 
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './styles.css?v=28',
-  './script.js?v=28',
+  './styles.css?v=29',
+  './script.js?v=29',
   './paho-mqtt.min.js',
   './manifest.json',
   './version.json',
@@ -122,10 +122,15 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 // 6. Push Event Handler (Web Push payloads when app is closed / phone locked)
+// Deduplication cache in SW memory (retains last 100 push IDs)
+const recentPushIds = new Set();
+
 self.addEventListener('push', (event) => {
   let title = '💓 Dil Ki Dhadkan Received!';
   let body = 'Partner ne dil ki dhadkan bheji hai! Jaldi app kholo ❤️';
   let clickUrl = './#pulse';
+  let pushId = null;
+  let pushTag = null;
 
   if (event.data) {
     try {
@@ -134,12 +139,26 @@ self.addEventListener('push', (event) => {
       if (payload.message) body = payload.message;
       else if (payload.body) body = payload.body;
       if (payload.click) clickUrl = payload.click;
+      pushId = payload.id;
+      pushTag = payload.tag;
     } catch (e) {
       try {
         const text = event.data.text();
         if (text) body = text;
       } catch (err) {}
     }
+  }
+
+  // Deduplicate push notifications by ID or content hash
+  const dedupeKey = pushId || (title + '::' + body);
+  if (recentPushIds.has(dedupeKey)) {
+    console.log('SW: Suppressing duplicate push notification:', dedupeKey);
+    return;
+  }
+  recentPushIds.add(dedupeKey);
+  if (recentPushIds.size > 100) {
+    const first = recentPushIds.values().next().value;
+    recentPushIds.delete(first);
   }
 
   const baseScope = (self.registration && self.registration.scope)
@@ -152,11 +171,21 @@ self.addEventListener('push', (event) => {
     icon: './icon-192.png',
     badge: './icon-192.png',
     vibrate: [300, 100, 300, 100, 600],
-    tag: 'heartbeat-pulse',
-    renotify: true,
+    tag: pushTag || ('notif_' + dedupeKey),
+    renotify: false, // Prevents re-alerting if notification is already shown
     requireInteraction: true,
     data: { url: finalClickUrl }
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // If the app is already open and focused in the foreground, don't double-buzz with a push banner
+      const isAppFocused = windowClients.some(c => c.visibilityState === 'visible' && c.focused);
+      if (isAppFocused) {
+        console.log('SW: App is currently active and focused in foreground, skipping background push alert');
+        return;
+      }
+      return self.registration.showNotification(title, options);
+    })
+  );
 });

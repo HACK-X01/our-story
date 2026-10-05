@@ -228,7 +228,32 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.9.2';
+const CURRENT_APP_VERSION = '1.9.3';
+
+const NOTIFICATION_DEDUPE_KEY = 'our_story_shown_notification_ids';
+
+function getShownNotificationIds() {
+  try {
+    const raw = localStorage.getItem(NOTIFICATION_DEDUPE_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch (e) {}
+  return new Set();
+}
+
+function recordNotificationShown(id) {
+  if (!id) return;
+  try {
+    const set = getShownNotificationIds();
+    set.add(String(id));
+    const arr = Array.from(set).slice(-150);
+    localStorage.setItem(NOTIFICATION_DEDUPE_KEY, JSON.stringify(arr));
+  } catch (e) {}
+}
+
+function hasAlreadyShownNotification(id) {
+  if (!id) return false;
+  return getShownNotificationIds().has(String(id));
+}
 
 function normalizeArray(val) {
   if (Array.isArray(val)) return val;
@@ -527,7 +552,7 @@ function setupFirebaseRealtimeListeners() {
     }
   });
 
-  // 1. Dedicated Realtime Listener on our_story/latestPulse (Fires within 50ms)
+  // 1. Dedicated Realtime Listener on our_story/latestPulse (Fires within 50ms for live heartbeats)
   firebaseDb.ref('our_story/latestPulse').on('value', (snapshot) => {
     const pulse = snapshot.val();
     if (!pulse) return;
@@ -536,32 +561,33 @@ function setupFirebaseRealtimeListeners() {
     const isFromPartner = pulse.from && pulse.from.toLowerCase() !== myName.toLowerCase();
 
     if (isFromPartner || isFromOtherDevice) {
+      const pulseId = pulse.id || ('pulse_' + pulse.timestamp);
       const lastAck = localStorage.getItem('our_story_last_pulse_ack');
-      if (pulse.id && pulse.id !== lastAck) {
+      if (pulseId !== lastAck && pulseId !== lastAcknowledgedPulseId && !hasAlreadyShownNotification(pulseId)) {
         const timeDiff = Math.abs(Date.now() - (pulse.timestamp || 0));
-        if (timeDiff < 600000 || !pulse.timestamp) {
+        // Strict freshness guard: only notify if sent in the last 90 seconds
+        if (pulse.timestamp && timeDiff < 90000) {
           handleIncomingPulse(pulse);
         }
       }
     }
   });
 
-  // 2. Also listen for child_added in pulses list
+  // 2. Listen for child_added in pulses list - ONLY silently update history list, never duplicate alerts!
   firebaseDb.ref('our_story/pulses').limitToLast(5).on('child_added', (snapshot) => {
     const pulse = snapshot.val();
     if (!pulse) return;
-    const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
-    const isFromOtherDevice = pulse.deviceId && pulse.deviceId !== myDeviceId;
-    const isFromPartner = pulse.from && pulse.from.toLowerCase() !== myName.toLowerCase();
-
-    if (isFromPartner || isFromOtherDevice) {
-      const lastAck = localStorage.getItem('our_story_last_pulse_ack');
-      if (pulse.id && pulse.id !== lastAck) {
-        const timeDiff = Math.abs(Date.now() - (pulse.timestamp || 0));
-        if (timeDiff < 180000) {
-          handleIncomingPulse(pulse);
-        }
-      }
+    if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+    if (!Array.isArray(appState.pulses)) {
+      appState.pulses = normalizeArray(appState.pulses);
+    }
+    const pulseId = pulse.id || ('pulse_' + (pulse.timestamp || Date.now()));
+    const exists = appState.pulses.some(p => p.id === pulseId || (p.timestamp && p.timestamp === pulse.timestamp));
+    if (!exists) {
+      appState.pulses.unshift(pulse);
+      if (appState.pulses.length > 25) appState.pulses.pop();
+      saveAppState(appState);
+      renderPulseHistory();
     }
   });
 
@@ -709,8 +735,9 @@ function initFirebaseRestSync(dbUrl) {
       console.warn('Firebase REST sync warning:', err);
     });
 
-  // Background Realtime Pulse Poller (Every 2.5s for instant mobile heartbeat sync)
+  // Background Realtime Pulse Poller (Only active as fallback if Firebase WebSocket SDK is not connected)
   setInterval(() => {
+    if (isFirebaseConnected && firebaseDb) return; // SDK WebSocket already provides 50ms live updates
     fetch(`${dbUrl}/our_story/latestPulse.json?t=` + Date.now())
       .then(r => r.ok ? r.json() : null)
       .then(pulse => {
@@ -720,17 +747,18 @@ function initFirebaseRestSync(dbUrl) {
         const isFromPartner = pulse.from && pulse.from.toLowerCase() !== myName.toLowerCase();
 
         if (isFromPartner || isFromOtherDevice) {
+          const pulseId = pulse.id || ('pulse_' + pulse.timestamp);
           const lastAck = localStorage.getItem('our_story_last_pulse_ack');
-          if (pulse.id && pulse.id !== lastAck) {
+          if (pulseId !== lastAck && pulseId !== lastAcknowledgedPulseId && !hasAlreadyShownNotification(pulseId)) {
             const timeDiff = Math.abs(Date.now() - (pulse.timestamp || 0));
-            if (timeDiff < 600000 || !pulse.timestamp) {
+            if (pulse.timestamp && timeDiff < 90000) {
               handleIncomingPulse(pulse);
             }
           }
         }
       })
       .catch(() => {});
-  }, 2500);
+  }, 3500);
 
   // Background Chat messages poller (Every 2.5s - Fix: no limitToLast query error)
   setInterval(() => {
@@ -983,6 +1011,10 @@ function initCloudSync() {
 
     mqttClient.onMessageArrived = (message) => {
       try {
+        if (message.retained) {
+          console.log('Skipping retained historical MQTT message');
+          return;
+        }
         const payload = JSON.parse(message.payloadString);
         handleIncomingSyncMessage(payload);
       } catch (e) {
@@ -1048,7 +1080,7 @@ function updateSyncIndicator(online, text) {
   }
 }
 
-function broadcastUpdate(type, data, retain = true) {
+function broadcastUpdate(type, data, retain = false) {
   const payload = {
     type,
     data,
@@ -1080,7 +1112,7 @@ function broadcastUpdate(type, data, retain = true) {
 
       const msg = new Paho.MQTT.Message(JSON.stringify(payload));
       msg.destinationName = SYNC_TOPIC_PREFIX + subTopic;
-      msg.retained = retain;
+      msg.retained = false; // Never retain live events so devices don't receive duplicate alerts on reconnect
       mqttClient.send(msg);
     } catch (e) {
       console.warn('MQTT send failed:', e);
@@ -1180,6 +1212,16 @@ function sendSystemNotificationForMood(data) {
   if (!data || !('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
 
+  const notifId = 'mood_' + data.user + '_' + (data.timestamp || data.time || Date.now());
+
+  // 1. Deduplication guard - never repeat the same mood notification
+  if (hasAlreadyShownNotification(notifId)) return;
+
+  // 2. Freshness guard - if mood was updated more than 90 seconds ago, skip notification
+  if (data.timestamp && Math.abs(Date.now() - data.timestamp) > 90000) return;
+
+  recordNotificationShown(notifId);
+
   const partnerName = data.user === 'himanshu' ? 'Himanshu' : 'Gullu';
   const moodEmojiMap = {
     romantic: '✨',
@@ -1200,8 +1242,8 @@ function sendSystemNotificationForMood(data) {
     icon: './icon-192.png',
     badge: './icon-192.png',
     vibrate: [200, 80, 200, 80, 300],
-    tag: 'partner-mood-update',
-    renotify: true,
+    tag: notifId,
+    renotify: false,
     data: { url: getAppNavUrl('#paneMood') }
   };
 
@@ -1241,29 +1283,38 @@ function handleIncomingMood(data) {
 
 function sendSystemNotificationForPulse(pulse) {
   if (!pulse || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
 
-  if (Notification.permission === 'granted') {
-    const title = `💓 Dil Ki Dhadkan from ${pulse.from}!`;
-    const options = {
-      body: `${pulse.from}: "${pulse.note || 'Feel my heartbeat... thinking of you right now! ❤️'}"`,
-      icon: './icon-192.png',
-      badge: './icon-192.png',
-      vibrate: [300, 100, 300, 100, 600],
-      tag: 'heartbeat-pulse',
-      renotify: true,
-      requireInteraction: true,
-      data: { url: getAppNavUrl('#pulse') }
-    };
+  const pulseId = pulse.id || ('pulse_' + (pulse.timestamp || Date.now()));
 
-    if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
-      navigator.serviceWorker.ready.then((reg) => {
-        reg.showNotification(title, options);
-      }).catch(() => {
-        try { new Notification(title, options); } catch (e) {}
-      });
-    } else {
+  // 1. Deduplication guard - never show the same pulse notification twice!
+  if (hasAlreadyShownNotification(pulseId)) return;
+
+  // 2. Freshness guard - if pulse is older than 90 seconds, do not buzz phone!
+  if (pulse.timestamp && Math.abs(Date.now() - pulse.timestamp) > 90000) return;
+
+  recordNotificationShown(pulseId);
+
+  const title = `💓 Dil Ki Dhadkan from ${pulse.from}!`;
+  const options = {
+    body: `${pulse.from}: "${pulse.note || 'Feel my heartbeat... thinking of you right now! ❤️'}"`,
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    vibrate: [300, 100, 300, 100, 600],
+    tag: 'pulse_' + pulseId,
+    renotify: false,
+    requireInteraction: true,
+    data: { url: getAppNavUrl('#pulse') }
+  };
+
+  if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+    navigator.serviceWorker.ready.then((reg) => {
+      reg.showNotification(title, options);
+    }).catch(() => {
       try { new Notification(title, options); } catch (e) {}
-    }
+    });
+  } else {
+    try { new Notification(title, options); } catch (e) {}
   }
 }
 
@@ -1273,7 +1324,7 @@ function handleIncomingPulse(pulse) {
   const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
   const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
 
-  // Smart partner resolution (handles case where partner sent from other device without switching username)
+  // Smart partner resolution
   let senderName = pulse.from || partnerName;
   if (pulse.deviceId && pulse.deviceId !== myDeviceId && pulse.from && pulse.from.toLowerCase() === myName.toLowerCase()) {
     senderName = partnerName; // sender is on partner's phone
@@ -1281,10 +1332,9 @@ function handleIncomingPulse(pulse) {
 
   // If self-pulse from THIS device, ignore
   if (pulse.deviceId && pulse.deviceId === myDeviceId) return;
+  if (pulse.senderUser && pulse.senderUser === currentUser) return;
 
   const pulseId = pulse.id || ('pulse_' + (pulse.timestamp || Date.now()));
-  const lastAck = localStorage.getItem('our_story_last_pulse_ack');
-
   const normalizedPulse = {
     ...pulse,
     id: pulseId,
@@ -1304,11 +1354,19 @@ function handleIncomingPulse(pulse) {
     renderPulseHistory();
   }
 
-  // Trigger mobile system notification (status bar & system vibration)
+  // Freshness check: only alert if sent within the last 90 seconds
+  const isFresh = pulse.timestamp && (Math.abs(Date.now() - pulse.timestamp) < 90000);
+  if (!isFresh) {
+    updatePulseTabIncomingState(null);
+    return;
+  }
+
+  // Trigger mobile system notification (with strict deduplication)
   sendSystemNotificationForPulse(normalizedPulse);
 
   // Trigger sensory alert if pulse hasn't been acknowledged yet!
-  if (lastAcknowledgedPulseId !== pulseId) {
+  const lastAck = localStorage.getItem('our_story_last_pulse_ack');
+  if (lastAcknowledgedPulseId !== pulseId && lastAck !== pulseId) {
     triggerIncomingHeartbeatAlert(normalizedPulse);
   } else {
     updatePulseTabIncomingState(normalizedPulse);
@@ -1320,6 +1378,7 @@ function triggerIncomingHeartbeatAlert(pulse) {
   const pulseId = pulse.id || ('pulse_' + pulse.timestamp);
   lastAcknowledgedPulseId = pulseId;
   localStorage.setItem('our_story_last_pulse_ack', pulseId);
+  recordNotificationShown(pulseId);
 
   // 1. Double heartbeat sound (lub-dub... lub-dub)
   playHeartbeatSound();
@@ -1474,6 +1533,13 @@ function updatePulseTabIncomingState(pulse) {
 }
 
 function feelIncomingHeartbeat(pulse) {
+  if (pulse) {
+    const pulseId = pulse.id || ('pulse_' + pulse.timestamp);
+    lastAcknowledgedPulseId = pulseId;
+    localStorage.setItem('our_story_last_pulse_ack', pulseId);
+    recordNotificationShown(pulseId);
+  }
+
   playHeartbeatSound();
   setTimeout(playHeartbeatSound, 300);
   setTimeout(playHeartbeatSound, 700);
@@ -1606,18 +1672,26 @@ async function sendClosedAppPushNotification(targetUser, payload) {
   const targetTopic = getMyNotificationTopic(targetUser);
 
   try {
+    const notifId = payload.id || ('push_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6));
     const bodyPayload = {
       topic: targetTopic,
       title: payload.title || '💓 Our Story Notification',
       message: payload.message || payload.body || 'New message from partner!',
       priority: payload.priority || 5,
       tags: payload.tags || ['heart', 'sparkles'],
-      click: payload.click || getAppNavUrl('#pulse')
+      click: payload.click || getAppNavUrl('#pulse'),
+      id: notifId,
+      tag: payload.tag || ('notif_' + notifId),
+      cache: 'no'
     };
 
     fetch('https://ntfy.sh/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Cache': 'no',
+        'Cache': 'no'
+      },
       body: JSON.stringify(bodyPayload)
     }).catch(e => console.warn('ntfy push fetch error:', e));
   } catch (e) {
@@ -1734,29 +1808,33 @@ function setupNotificationPermissions() {
           actionBtn.disabled = false;
           actionBtn.textContent = `🚀 Test Notification (5s Timer)`;
 
-          // Trigger test push to CURRENT user's topic
-          sendClosedAppPushNotification(currentUser, {
-            title: '💓 Test Heartbeat Received!',
-            message: 'Closed-app notification is working perfectly! Dil ki dhadkan phone par aa gayi! 🎉',
-            click: getAppNavUrl('#pulse'),
-            tags: ['tada', 'sparkles', 'heart'],
-            priority: 5
-          });
-
-          // Also trigger local service worker notification
-          if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
-            navigator.serviceWorker.ready.then(reg => {
-              reg.showNotification('💓 Test Heartbeat Received!', {
-                body: 'Closed-app notification is working perfectly! Dil ki dhadkan phone par aa gayi! 🎉',
-                icon: './icon-192.png',
-                badge: './icon-192.png',
-                vibrate: [300, 100, 300, 100, 600],
-                tag: 'heartbeat-test',
-                renotify: true,
-                requireInteraction: true,
-                data: { url: getAppNavUrl('#pulse') }
-              });
-            }).catch(() => {});
+          const testId = 'test_' + Date.now();
+          if (document.hidden) {
+            // Screen locked or app minimized: send closed-app web push
+            sendClosedAppPushNotification(currentUser, {
+              id: testId,
+              title: '💓 Test Heartbeat Received!',
+              message: 'Closed-app notification is working perfectly! Dil ki dhadkan phone par aa gayi! 🎉',
+              click: getAppNavUrl('#pulse'),
+              tags: ['tada', 'sparkles', 'heart'],
+              priority: 5
+            });
+          } else {
+            // App is currently open on screen: trigger single local notification
+            if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+              navigator.serviceWorker.ready.then(reg => {
+                reg.showNotification('💓 Test Heartbeat Received!', {
+                  body: 'Notifications are working! Dil ki dhadkan phone par aa gayi! 🎉',
+                  icon: './icon-192.png',
+                  badge: './icon-192.png',
+                  vibrate: [300, 100, 300, 100, 600],
+                  tag: 'heartbeat-test',
+                  renotify: false,
+                  requireInteraction: true,
+                  data: { url: getAppNavUrl('#pulse') }
+                });
+              }).catch(() => {});
+            }
           }
         }
       }, 1000);
@@ -4406,6 +4484,16 @@ function sendSystemNotificationForChat(msg) {
   if (!msg || !('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
 
+  const notifId = 'chat_' + (msg.id || msg.timestamp);
+
+  // 1. Deduplication guard
+  if (hasAlreadyShownNotification(notifId)) return;
+
+  // 2. Freshness guard: only notify if message is under 90s old
+  if (msg.timestamp && Math.abs(Date.now() - msg.timestamp) > 90000) return;
+
+  recordNotificationShown(notifId);
+
   const senderName = msg.sender === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸';
   const title = `💬 New Message from ${senderName}`;
   const options = {
@@ -4413,8 +4501,8 @@ function sendSystemNotificationForChat(msg) {
     icon: './icon-192.png',
     badge: './icon-192.png',
     vibrate: [250, 100, 250],
-    tag: 'chat-message-' + msg.id,
-    renotify: true,
+    tag: notifId,
+    renotify: false,
     data: { url: getAppNavUrl('#chat') }
   };
 
