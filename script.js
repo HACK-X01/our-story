@@ -193,7 +193,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.6.0';
+const CURRENT_APP_VERSION = '1.6.1';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -1444,15 +1444,34 @@ async function sendClosedAppPushNotification(targetUser, payload) {
   }
 }
 
+function askNotificationPermission() {
+  return new Promise((resolve) => {
+    if (!('Notification' in window)) {
+      resolve('unsupported');
+      return;
+    }
+    try {
+      const result = Notification.requestPermission((status) => {
+        resolve(status);
+      });
+      if (result && typeof result.then === 'function') {
+        result.then(resolve).catch(() => resolve(Notification.permission));
+      }
+    } catch (err) {
+      resolve(Notification.permission || 'denied');
+    }
+  });
+}
+
 function setupNotificationPermissions() {
   const bellBtn = document.getElementById('notifBellBtn');
   const promptBox = document.getElementById('notifPromptBox');
   const enableBtn = document.getElementById('enableNotifBtn');
 
   const settingsModal = document.getElementById('notifSettingsModal');
-  const modalBackdrop = document.getElementById('notifModalBackdrop');
   const closeBtn = document.getElementById('closeNotifModalBtn');
-  const testBtn = document.getElementById('testClosedAppNotifBtn');
+  const actionBtn = document.getElementById('enableOrTestNotifBtn');
+  const btnHint = document.getElementById('notifBtnHint');
   const backupLink = document.getElementById('openNtfyBackupBtn');
   const badge = document.getElementById('notifModalPushBadge');
   const topicCode = document.getElementById('notifModalTopicName');
@@ -1463,51 +1482,76 @@ function setupNotificationPermissions() {
     if (topicCode) topicCode.textContent = myTopic;
     if (backupLink) backupLink.href = `https://ntfy.sh/${myTopic}`;
 
-    if (Notification.permission === 'granted') {
+    const isGranted = ('Notification' in window) && Notification.permission === 'granted';
+
+    if (isGranted) {
       if (badge) {
         badge.textContent = 'Active (Web Push Enabled) ✅';
         badge.className = 'notif-badge-pill active';
       }
+      if (actionBtn) {
+        actionBtn.textContent = '🚀 Test Notification (5s Timer)';
+      }
+      if (btnHint) {
+        btnHint.textContent = 'Tap karke app band karein ya screen lock karein — 5 second me phone par notification aayegi!';
+      }
       registerClosedAppPushSubscription();
     } else {
       if (badge) {
-        badge.textContent = 'Permission Needed ⚠️';
+        badge.textContent = ('Notification' in window) && Notification.permission === 'denied'
+          ? 'Blocked in Browser 🔕'
+          : 'Permission Needed ⚠️';
         badge.className = 'notif-badge-pill pending';
+      }
+      if (actionBtn) {
+        actionBtn.textContent = '🔔 Turn On Notifications Now';
+      }
+      if (btnHint) {
+        btnHint.textContent = 'Pehle notification allow karein taaki phone vibrate aur sound play kar sake.';
       }
     }
 
-    settingsModal.style.setProperty('display', 'flex', 'important');
     settingsModal.classList.remove('is-hidden');
+    settingsModal.classList.add('open');
+    playTone(550, 0.1);
   }
 
   function closeSettingsModal() {
     if (!settingsModal) return;
+    settingsModal.classList.remove('open');
     settingsModal.classList.add('is-hidden');
-    settingsModal.style.setProperty('display', 'none', 'important');
   }
 
   if (closeBtn) closeBtn.addEventListener('click', closeSettingsModal);
-  if (modalBackdrop) modalBackdrop.addEventListener('click', closeSettingsModal);
+  if (settingsModal) {
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) closeSettingsModal();
+    });
+  }
 
-  if (testBtn) {
-    testBtn.addEventListener('click', () => {
-      if (Notification.permission !== 'granted') {
-        requestNotifPermission();
+  if (actionBtn) {
+    actionBtn.addEventListener('click', async () => {
+      const isGranted = ('Notification' in window) && Notification.permission === 'granted';
+
+      if (!isGranted) {
+        await requestNotifPermission();
+        openSettingsModal();
         return;
       }
 
+      // If granted, run 5s test countdown
       let count = 5;
-      testBtn.disabled = true;
-      testBtn.textContent = `⏳ Screen Lock / App Band Karein (${count}s)...`;
+      actionBtn.disabled = true;
+      actionBtn.textContent = `⏳ Screen Lock / App Band Karein (${count}s)...`;
 
       const countdownTimer = setInterval(() => {
         count--;
         if (count > 0) {
-          testBtn.textContent = `⏳ Screen Lock / App Band Karein (${count}s)...`;
+          actionBtn.textContent = `⏳ Screen Lock / App Band Karein (${count}s)...`;
         } else {
           clearInterval(countdownTimer);
-          testBtn.disabled = false;
-          testBtn.textContent = `🚀 Test Notification (5s Timer)`;
+          actionBtn.disabled = false;
+          actionBtn.textContent = `🚀 Test Notification (5s Timer)`;
 
           // Trigger test push to CURRENT user's topic
           sendClosedAppPushNotification(currentUser, {
@@ -1517,6 +1561,22 @@ function setupNotificationPermissions() {
             tags: ['tada', 'sparkles', 'heart'],
             priority: 5
           });
+
+          // Also trigger local service worker notification
+          if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready.then(reg => {
+              reg.showNotification('💓 Test Heartbeat Received!', {
+                body: 'Closed-app notification is working perfectly! Dil ki dhadkan phone par aa gayi! 🎉',
+                icon: './icon-192.png',
+                badge: './icon-192.png',
+                vibrate: [300, 100, 300, 100, 600],
+                tag: 'heartbeat-test',
+                renotify: true,
+                requireInteraction: true,
+                data: { url: './#pulse' }
+              });
+            }).catch(() => {});
+          }
         }
       }, 1000);
     });
@@ -1524,8 +1584,7 @@ function setupNotificationPermissions() {
 
   function updateNotifUI() {
     if (!('Notification' in window)) {
-      if (bellBtn) bellBtn.style.display = 'none';
-      if (promptBox) promptBox.classList.add('is-hidden');
+      if (bellBtn) bellBtn.style.display = 'flex';
       return;
     }
 
@@ -1556,36 +1615,39 @@ function setupNotificationPermissions() {
 
   async function requestNotifPermission() {
     if (!('Notification' in window)) {
-      showAppModal('ℹ️ Notifications Not Supported', 'Aapka browser system notifications support nahi karta.');
+      showAppModal('ℹ️ Notifications Not Supported', 'Aapka browser system notifications support nahi karta. Direct Backup Channel use karein.');
       return;
     }
 
     try {
-      const perm = await Notification.requestPermission();
+      const perm = await askNotificationPermission();
       updateNotifUI();
       if (perm === 'granted') {
         playCelebrationChime();
         await registerClosedAppPushSubscription();
-        openSettingsModal();
       } else if (perm === 'denied') {
-        showAppModal('⚠️ Notifications Blocked', 'Phone ya browser settings mein notifications blocked hain. Site settings me jaakar allow karein.');
+        showAppModal('⚠️ Notifications Blocked', 'Phone ya browser settings mein notifications blocked hain. Site settings me jaakar allow karein ya Direct Backup link use karein.');
       }
     } catch (e) {
       console.warn('Notification permission error:', e);
     }
   }
 
+  // Bell button ALWAYS opens the modal directly!
   if (bellBtn) {
-    bellBtn.addEventListener('click', () => {
-      if (Notification.permission === 'granted') {
-        openSettingsModal();
-      } else {
-        requestNotifPermission();
-      }
+    bellBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openSettingsModal();
     });
   }
 
-  if (enableBtn) enableBtn.addEventListener('click', requestNotifPermission);
+  if (enableBtn) {
+    enableBtn.addEventListener('click', async () => {
+      await requestNotifPermission();
+      openSettingsModal();
+    });
+  }
 
   updateNotifUI();
 }

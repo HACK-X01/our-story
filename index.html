@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
 
@@ -744,35 +744,40 @@
   </div>
 
   <!-- CLOSED-APP NOTIFICATION SETUP & TEST MODAL -->
-  <div class="identity-modal is-hidden" id="notifSettingsModal" style="display: none !important;">
-    <div class="identity-modal-backdrop" id="notifModalBackdrop"></div>
-    <div class="identity-modal-card notif-settings-card">
-      <button class="modal-close-btn" id="closeNotifModalBtn">&times;</button>
-      <div class="identity-modal-icon">🔔</div>
-      <h3 class="identity-modal-title">Closed-App Notifications 🚀</h3>
-      <p class="identity-modal-subtitle">Phone screen lock ya app band hone par bhi partner ki heartbeat aur notifications aati rahengi:</p>
+  <div class="modal-overlay is-hidden" id="notifSettingsModal">
+    <div class="modal-box notif-settings-card">
+      <button class="modal-dismiss" id="closeNotifModalBtn">✕</button>
+      <div class="modal-celebration-emoji">🔔</div>
+      <h3 class="modal-heading">Closed-App Notifications</h3>
+      <p class="modal-desc" style="font-size: 0.82rem; margin-bottom: 16px;">
+        Phone screen lock ya app band hone par bhi partner ki heartbeat aur alerts milenge:
+      </p>
 
       <div class="notif-status-box">
         <div class="notif-status-row">
-          <span>Push Status:</span>
+          <span>Push Notification:</span>
           <span class="notif-badge-pill" id="notifModalPushBadge">Checking...</span>
         </div>
         <div class="notif-status-row">
-          <span>Private Channel:</span>
+          <span>Personal Channel:</span>
           <code id="notifModalTopicName">ourstory_...</code>
         </div>
       </div>
 
       <div class="notif-actions-stack">
-        <button class="notif-action-btn primary" id="testClosedAppNotifBtn">
+        <button class="notif-action-btn primary" id="enableOrTestNotifBtn">
           🚀 Test Notification (5s Timer)
         </button>
-        <p class="notif-hint">Tap karne ke baad turant app band karein ya screen lock karein — 5 second me phone par notification aayegi!</p>
+        <p class="notif-hint" id="notifBtnHint">
+          Tap karke app band karein ya screen lock karein — 5 second me phone par notification aayegi!
+        </p>
 
         <a class="notif-action-btn secondary" id="openNtfyBackupBtn" href="#" target="_blank" rel="noopener">
-          📲 Open Direct Channel (100% Guaranteed Backup)
+          📲 Open Direct Backup Channel
         </a>
-        <p class="notif-hint">Agar phone ka battery saver background alerts block kare, toh is direct link se "Subscribe" karein ya free ntfy Android app install karein.</p>
+        <p class="notif-hint">
+          Agar phone battery saver alerts rok raha ho, toh is direct link se "Subscribe" karein ya free ntfy Android app install karein.
+        </p>
       </div>
     </div>
   </div>
@@ -786,6 +791,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=18"></script>
+  <script src="script.js?v=19"></script>
 </body>
 </html>

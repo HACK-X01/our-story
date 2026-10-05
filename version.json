@@ -1,5 +1,5 @@
 {
-  "version": "1.6.0",
-  "buildTime": 1791135000000,
-  "notes": "Closed-app background Web Push notifications via ntfy gateway with 5s test timer and 100% backup channel"
+  "version": "1.6.1",
+  "buildTime": 1791140000000,
+  "notes": "Guaranteed instant Bell modal opening, modal-overlay refactor, and dual callback/promise permission handler"
 }
