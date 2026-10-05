@@ -203,7 +203,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.8.0';
+const CURRENT_APP_VERSION = '1.8.1';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -441,13 +441,12 @@ function initFirebaseDatabase() {
 
       setupFirebaseRealtimeListeners();
       syncInitialStateFromFirebase();
-      return;
     } catch (err) {
       console.warn('Firebase SDK init warning:', err);
     }
   }
 
-  // 2. Fallback to Firebase REST API
+  // 2. Active Parallel REST Sync Engine (Fail-safe polling for mobile browsers & background states)
   initFirebaseRestSync(dbUrl);
 }
 
@@ -590,6 +589,44 @@ function syncInitialStateFromFirebase() {
   }).catch((e) => console.warn('Firebase initial read failed:', e));
 }
 
+function fetchLatestCloudSync() {
+  const config = getStoredFirebaseConfig();
+  if (!config || !config.databaseURL) return;
+  const dbUrl = config.databaseURL.trim().replace(/\/$/, '');
+
+  // 1. Fetch Latest Heartbeat Pulse
+  fetch(`${dbUrl}/our_story/latestPulse.json?t=` + Date.now())
+    .then(r => r.ok ? r.json() : null)
+    .then(pulse => {
+      if (!pulse) return;
+      const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+      const isFromOtherDevice = pulse.deviceId && pulse.deviceId !== myDeviceId;
+      const isFromPartner = pulse.from && pulse.from.toLowerCase() !== myName.toLowerCase();
+
+      if (isFromPartner || isFromOtherDevice) {
+        const lastAck = localStorage.getItem('our_story_last_pulse_ack');
+        if (pulse.id && pulse.id !== lastAck) {
+          const timeDiff = Math.abs(Date.now() - (pulse.timestamp || 0));
+          if (timeDiff < 600000 || !pulse.timestamp) {
+            handleIncomingPulse(pulse);
+          }
+        }
+      }
+    })
+    .catch(() => {});
+
+  // 2. Fetch Latest Chat Messages (Clean JSON fetch without buggy limitToLast)
+  fetch(`${dbUrl}/our_story/chat_messages.json?t=` + Date.now())
+    .then(r => r.ok ? r.json() : null)
+    .then(msgs => {
+      if (!msgs) return;
+      const msgList = Object.values(msgs);
+      msgList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      msgList.forEach(m => handleIncomingChatMessage(m, false));
+    })
+    .catch(() => {});
+}
+
 function initFirebaseRestSync(dbUrl) {
   const statusPill = document.getElementById('firebaseStatusPill');
   const statusText = document.getElementById('fbPillText');
@@ -603,7 +640,7 @@ function initFirebaseRestSync(dbUrl) {
       if (statusPill) statusPill.classList.add('connected');
       if (statusText) statusText.textContent = 'Firebase Live 🔥';
       if (banner) banner.classList.add('connected');
-      if (bannerText) bannerText.textContent = 'Status: Connected via Firebase REST API 🔥';
+      if (bannerText) bannerText.textContent = 'Status: Connected to Google Firebase Cloud DB 🔥';
 
       if (cloudData) {
         appState = mergePreservingUserData(appState, cloudData);
@@ -621,7 +658,7 @@ function initFirebaseRestSync(dbUrl) {
       console.warn('Firebase REST sync warning:', err);
     });
 
-  // Background Realtime Pulse Poller (Every 3.5s for instant mobile sync & REST clients)
+  // Background Realtime Pulse Poller (Every 2.5s for instant mobile heartbeat sync)
   setInterval(() => {
     fetch(`${dbUrl}/our_story/latestPulse.json?t=` + Date.now())
       .then(r => r.ok ? r.json() : null)
@@ -642,7 +679,20 @@ function initFirebaseRestSync(dbUrl) {
         }
       })
       .catch(() => {});
-  }, 3500);
+  }, 2500);
+
+  // Background Chat messages poller (Every 2.5s - Fix: no limitToLast query error)
+  setInterval(() => {
+    fetch(`${dbUrl}/our_story/chat_messages.json?t=` + Date.now())
+      .then(r => r.ok ? r.json() : null)
+      .then(msgs => {
+        if (!msgs) return;
+        const msgList = Object.values(msgs);
+        msgList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        msgList.forEach(m => handleIncomingChatMessage(m, false));
+      })
+      .catch(() => {});
+  }, 2500);
 
   // Background Location Poller (Every 6s for Radar & Distance)
   setInterval(() => {
@@ -656,17 +706,7 @@ function initFirebaseRestSync(dbUrl) {
         updateCoupleLocationsUI();
       })
       .catch(() => {});
-
-    // Chat messages poller (every 4s)
-    fetch(`${dbUrl}/our_story/chat_messages.json?limitToLast=20&t=` + Date.now())
-      .then(r => r.ok ? r.json() : null)
-      .then(msgs => {
-        if (!msgs) return;
-        const msgList = Object.values(msgs);
-        msgList.forEach(m => handleIncomingChatMessage(m, false));
-      })
-      .catch(() => {});
-  }, 4000);
+  }, 6000);
 }
 
 function syncToFirebase(type, data) {
@@ -698,13 +738,12 @@ function syncToFirebase(type, data) {
       } else if (type === 'VC_SIGNAL' || type === 'VC_CALL') {
         firebaseDb.ref('our_story/webrtc_call/callMeta').set(data);
       }
-      return;
     } catch (e) {
       console.warn('Firebase SDK write error:', e);
     }
   }
 
-  // Fallback REST API
+  // 2. Parallel Direct HTTPS REST API write (Guarantees delivery over port 443 even if WebSocket drops)
   try {
     let endpoint = `${dbUrl}/our_story`;
     let method = 'PATCH';
@@ -1285,6 +1324,7 @@ function triggerIncomingHeartbeatAlert(pulse) {
 
   if (modal) {
     modal.classList.remove('is-hidden');
+    modal.style.removeProperty('display');
     modal.style.display = 'flex';
   }
 }
@@ -1981,6 +2021,7 @@ function setupTabNavigation() {
     });
 
     if (tabId === 'panePulse') {
+      fetchLatestCloudSync();
       setTimeout(() => {
         if (!coupleMap) initCoupleRadarMap();
         else coupleMap.invalidateSize();
@@ -1988,6 +2029,8 @@ function setupTabNavigation() {
     } else if (tabId === 'paneChat') {
       const badge = document.getElementById('dockChatBadge');
       if (badge) badge.classList.add('is-hidden');
+      renderChatUI();
+      fetchLatestCloudSync();
       setTimeout(() => {
         const listEl = document.getElementById('chatMessagesList');
         if (listEl) listEl.scrollTop = listEl.scrollHeight;
@@ -3603,7 +3646,18 @@ function setupPWAandUpdates() {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
           registration.update().catch(() => {});
+          if (typeof firebaseDb !== 'undefined' && firebaseDb) {
+            try { firebaseDb.goOnline(); } catch (e) {}
+          }
+          fetchLatestCloudSync();
         }
+      });
+
+      window.addEventListener('focus', () => {
+        if (typeof firebaseDb !== 'undefined' && firebaseDb) {
+          try { firebaseDb.goOnline(); } catch (e) {}
+        }
+        fetchLatestCloudSync();
       });
     }).catch((err) => {
       console.warn('PWA Service Worker registration skipped:', err);
@@ -3950,13 +4004,15 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
     saveAppState(appState);
   }
 
+  // ALWAYS append to DOM immediately (appendChatMessageDOM safely ignores if already rendered)
+  appendChatMessageDOM(msg, true);
+
   // If chat pane is active
   const chatPane = document.getElementById('paneChat');
   const isChatActive = chatPane && chatPane.classList.contains('active');
 
   if (isChatActive) {
-    appendChatMessageDOM(msg, true);
-    if (msg.sender !== currentUser) {
+    if (msg.sender !== currentUser && !isLocalBroadcast) {
       playTone(523.25, 0.08);
       setTimeout(() => playTone(659.25, 0.1), 90);
       if (navigator.vibrate) {
@@ -3965,7 +4021,7 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
     }
   } else {
     // Other tab is active: show unread badge on bottom dock
-    if (msg.sender !== currentUser) {
+    if (msg.sender !== currentUser && !isLocalBroadcast) {
       const badge = document.getElementById('dockChatBadge');
       if (badge) badge.classList.remove('is-hidden');
 
@@ -3979,7 +4035,7 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
     }
   }
 
-  if (msg.type === 'burst' && msg.sender !== currentUser) {
+  if (msg.type === 'burst' && msg.sender !== currentUser && !isLocalBroadcast) {
     triggerLoveBurstAnimation(25);
   }
 }

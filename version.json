@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
-  "buildTime": 1791160000000,
-  "notes": "Add private couple WebRTC video call (VC) with romantic P2P stream, audio ringers, camera flip, and fallback room"
+  "version": "1.8.1",
+  "buildTime": 1791170000000,
+  "notes": "Fix real-time chat messages display and heartbeat delivery with dual REST/WebSocket sync and remove modal blockage"
 }
