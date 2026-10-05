@@ -3,16 +3,41 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-// Persistent user detection (supports query param ?user=..., hash #user, and localStorage)
-const urlParams = new URLSearchParams(window.location.search);
-const hashUser = (window.location.hash || '').replace('#', '').toLowerCase();
-const queryUser = (urlParams.get('user') || '').toLowerCase();
-const storedUser = localStorage.getItem('our_story_current_user');
-let currentUser = (['himanshu', 'gullu'].includes(queryUser) ? queryUser : null)
-  || (['himanshu', 'gullu'].includes(hashUser) ? hashUser : null)
-  || (['himanshu', 'gullu'].includes(storedUser) ? storedUser : null)
-  || 'himanshu';
-localStorage.setItem('our_story_current_user', currentUser);
+// --- PRIVATE COUPLE AUTHENTICATION & PORTAL CREDENTIALS ---
+const AUTH_STORAGE_KEY = 'our_story_auth_user_v1';
+const AUTH_CREDENTIALS = {
+  himanshu: {
+    id: 'Himanshu',
+    pass: 'Hima2005@',
+    name: 'Himanshu',
+    avatar: '☕',
+    partnerKey: 'gullu',
+    partnerName: 'Gullu',
+    partnerAvatar: '🌸'
+  },
+  gullu: {
+    id: 'Gullu',
+    pass: 'Sam2005@',
+    name: 'Gullu',
+    avatar: '🌸',
+    partnerKey: 'himanshu',
+    partnerName: 'Himanshu',
+    partnerAvatar: '☕'
+  }
+};
+
+function getAuthenticatedUser() {
+  const local = localStorage.getItem(AUTH_STORAGE_KEY);
+  if (local === 'himanshu' || local === 'gullu') return local;
+  const session = sessionStorage.getItem(AUTH_STORAGE_KEY);
+  if (session === 'himanshu' || session === 'gullu') return session;
+  return null;
+}
+
+let currentUser = getAuthenticatedUser();
+if (currentUser) {
+  localStorage.setItem('our_story_current_user', currentUser);
+}
 
 let myDeviceId = localStorage.getItem('our_story_device_id');
 if (!myDeviceId) {
@@ -203,7 +228,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.8.1';
+const CURRENT_APP_VERSION = '1.9.0';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -1217,7 +1242,7 @@ function sendSystemNotificationForPulse(pulse) {
 }
 
 function handleIncomingPulse(pulse) {
-  if (!pulse) return;
+  if (!pulse || !currentUser) return;
 
   const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
   const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
@@ -1781,6 +1806,7 @@ function setupNotificationPermissions() {
 }
 
 function showPartnerMoodToast(data) {
+  if (!data || !currentUser) return;
   let toast = document.getElementById('partnerMoodToast');
   if (!toast) {
     toast = document.createElement('div');
@@ -1926,6 +1952,12 @@ function renderHeader() {
     pillG.classList.toggle('active', currentUser === 'gullu');
   }
 
+  // Update Portal Status Badge in header
+  const portalBadge = document.getElementById('headerPortalBadgeText');
+  if (portalBadge) {
+    portalBadge.textContent = currentUser === 'himanshu' ? 'Himanshu ☕' : (currentUser === 'gullu' ? 'Gullu 🌸' : 'Locked 🔒');
+  }
+
   // Update Mood Card Tag
   const moodTag = document.getElementById('currentMoodUserTag');
   if (moodTag) {
@@ -1959,27 +1991,309 @@ function updatePulseIdentityUI() {
   }
 }
 
-// Switch Active Profile (Himanshu vs Gullu)
-function setupProfileSwitcher() {
-  const pillH = document.getElementById('pillHimanshu');
-  const pillG = document.getElementById('pillGullu');
+// ==========================================================================
+// COUPLE PRIVATE AUTHENTICATION & LOGIN GATE FUNCTIONS
+// ==========================================================================
 
-  function switchUser(newUser) {
-    currentUser = newUser;
-    localStorage.setItem('our_story_current_user', currentUser);
-    localStorage.setItem('our_story_profile_selected', 'true');
-    window.location.hash = currentUser;
-    playTone(currentUser === 'himanshu' ? 440 : 554.37, 0.15);
+function checkAuthGate() {
+  const loginScreen = document.getElementById('coupleLoginScreen');
+  const appLayout = document.querySelector('.app-layout');
+  const authUser = getAuthenticatedUser();
+
+  if (!authUser) {
+    currentUser = null;
+    if (appLayout) appLayout.classList.add('is-auth-locked');
+    if (loginScreen) {
+      loginScreen.classList.remove('is-hidden', 'login-success-fade');
+      const prevUser = localStorage.getItem('our_story_current_user') || 'himanshu';
+      selectLoginProfile(prevUser === 'gullu' ? 'Gullu' : 'Himanshu', false);
+    }
+  } else {
+    currentUser = authUser;
+    if (loginScreen) {
+      loginScreen.classList.add('is-hidden');
+      loginScreen.classList.remove('login-success-fade');
+    }
+    if (appLayout) {
+      appLayout.classList.remove('is-auth-locked');
+    }
+    updateProfileUI();
+  }
+}
+
+function selectLoginProfile(userName, focusPass = true) {
+  const isGullu = (userName || '').trim().toLowerCase() === 'gullu';
+  const idInput = document.getElementById('loginUserId');
+  const chipH = document.getElementById('chipHimanshu');
+  const chipG = document.getElementById('chipGullu');
+  const passInput = document.getElementById('loginPassword');
+
+  if (idInput) idInput.value = isGullu ? 'Gullu' : 'Himanshu';
+
+  if (chipH && chipG) {
+    chipH.classList.toggle('active', !isGullu);
+    chipG.classList.toggle('active', isGullu);
+  }
+
+  if (focusPass && passInput) {
+    passInput.focus();
+  }
+}
+
+function setupCoupleLogin() {
+  const form = document.getElementById('coupleLoginForm');
+  const chipH = document.getElementById('chipHimanshu');
+  const chipG = document.getElementById('chipGullu');
+  const idInput = document.getElementById('loginUserId');
+  const passInput = document.getElementById('loginPassword');
+  const togglePassBtn = document.getElementById('togglePasswordBtn');
+  const togglePassIcon = document.getElementById('togglePasswordIcon');
+  const submitBtn = document.getElementById('loginSubmitBtn');
+  const logoutBtn = document.getElementById('headerLogoutBtn');
+
+  if (chipH) {
+    chipH.addEventListener('click', () => {
+      selectLoginProfile('Himanshu', true);
+      playTone(440, 0.1, 'sine', 0.08);
+    });
+  }
+
+  if (chipG) {
+    chipG.addEventListener('click', () => {
+      selectLoginProfile('Gullu', true);
+      playTone(554.37, 0.1, 'sine', 0.08);
+    });
+  }
+
+  if (idInput) {
+    idInput.addEventListener('input', () => {
+      const val = idInput.value.trim().toLowerCase();
+      if (chipH && chipG) {
+        chipH.classList.toggle('active', val === 'himanshu');
+        chipG.classList.toggle('active', val === 'gullu');
+      }
+    });
+  }
+
+  if (togglePassBtn && passInput) {
+    togglePassBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const isPassword = passInput.type === 'password';
+      passInput.type = isPassword ? 'text' : 'password';
+      if (togglePassIcon) {
+        togglePassIcon.textContent = isPassword ? '🙈' : '👁️';
+      }
+    });
+  }
+
+  if (form) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      handleLoginSubmit();
+    });
+  }
+
+  if (submitBtn) {
+    submitBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      handleLoginSubmit();
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      handlePortalLogout();
+    });
+  }
+}
+
+function handleLoginSubmit() {
+  const idInput = document.getElementById('loginUserId');
+  const passInput = document.getElementById('loginPassword');
+  const rememberCheckbox = document.getElementById('rememberMeCheckbox');
+  const errorMsg = document.getElementById('loginErrorMsg');
+  const errorText = document.getElementById('loginErrorText');
+  const loginCard = document.getElementById('loginCard');
+  const submitBtn = document.getElementById('loginSubmitBtn');
+  const submitText = document.getElementById('loginSubmitText');
+
+  const rawId = (idInput ? idInput.value : '').trim().toLowerCase();
+  const rawPass = (passInput ? passInput.value : '').trim();
+
+  function triggerLoginError(msg) {
+    if (errorText) errorText.textContent = msg;
+    if (errorMsg) errorMsg.classList.remove('is-hidden');
+    if (loginCard) {
+      loginCard.classList.remove('shake');
+      void loginCard.offsetWidth; // re-flow
+      loginCard.classList.add('shake');
+      setTimeout(() => loginCard.classList.remove('shake'), 600);
+    }
+    if (navigator.vibrate) {
+      try { navigator.vibrate([80, 50, 80]); } catch (err) {}
+    }
+    playTone(220, 0.25, 'sawtooth', 0.15);
+  }
+
+  if (!rawId) {
+    triggerLoginError('Kripya apna ID enter karein (Himanshu ya Gullu) ✍️');
+    if (idInput) idInput.focus();
+    return;
+  }
+
+  if (!rawPass) {
+    triggerLoginError('Kripya apna secret password enter karein 🔑');
+    if (passInput) passInput.focus();
+    return;
+  }
+
+  let matchedUser = null;
+  if (rawId === 'himanshu') {
+    if (rawPass === AUTH_CREDENTIALS.himanshu.pass) {
+      matchedUser = 'himanshu';
+    }
+  } else if (rawId === 'gullu') {
+    if (rawPass === AUTH_CREDENTIALS.gullu.pass) {
+      matchedUser = 'gullu';
+    }
+  } else {
+    triggerLoginError('Ye ID valid nahi hai! Sirf Himanshu ya Gullu login kar sakte hain 🔐');
+    if (idInput) idInput.focus();
+    return;
+  }
+
+  if (!matchedUser) {
+    triggerLoginError('❌ Galat Password! Please check karke fir se try karein 🥺');
+    if (passInput) {
+      passInput.value = '';
+      passInput.focus();
+    }
+    return;
+  }
+
+  // --- CREDENTIALS VALIDATED SUCCESSFULLY ---
+  if (errorMsg) errorMsg.classList.add('is-hidden');
+  if (submitText) submitText.textContent = '✨ Portal Unlocking...';
+  if (submitBtn) submitBtn.disabled = true;
+
+  playCelebrationChime();
+
+  const isRemember = rememberCheckbox ? rememberCheckbox.checked : true;
+  if (isRemember) {
+    localStorage.setItem(AUTH_STORAGE_KEY, matchedUser);
+    sessionStorage.setItem(AUTH_STORAGE_KEY, matchedUser);
+  } else {
+    sessionStorage.setItem(AUTH_STORAGE_KEY, matchedUser);
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  }
+
+  currentUser = matchedUser;
+  localStorage.setItem('our_story_current_user', currentUser);
+  localStorage.setItem('our_story_profile_selected', 'true');
+  window.location.hash = currentUser;
+
+  const loginScreen = document.getElementById('coupleLoginScreen');
+  const appLayout = document.querySelector('.app-layout');
+
+  if (loginScreen) {
+    loginScreen.classList.add('login-success-fade');
+  }
+
+  setTimeout(() => {
+    if (loginScreen) {
+      loginScreen.classList.add('is-hidden');
+      loginScreen.classList.remove('login-success-fade');
+    }
+    if (appLayout) {
+      appLayout.classList.remove('is-auth-locked');
+    }
+    if (submitBtn) submitBtn.disabled = false;
+    if (submitText) submitText.textContent = '✨ Unlock My Portal';
+    if (passInput) passInput.value = '';
+
+    // Initialize & update all components for the authenticated user
+    updateProfileUI();
     renderAll();
     updatePulseIdentityUI();
     checkForIncomingPulseOnPortalSwitch();
     if (Notification.permission === 'granted') {
       registerClosedAppPushSubscription();
     }
+
+    showAppModal(
+      '💖 Welcome to Your Portal!',
+      `Aapka portal unlock ho gaya hai, ${currentUser === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸'}! Saari memories, chats aur heartbeats ready hain ✨`
+    );
+  }, 400);
+}
+
+function handlePortalLogout() {
+  if (!confirm('Kya aap portal lock karke logout karna chahte hain? 🔒')) {
+    return;
   }
 
-  if (pillH) pillH.addEventListener('click', () => switchUser('himanshu'));
-  if (pillG) pillG.addEventListener('click', () => switchUser('gullu'));
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  sessionStorage.removeItem(AUTH_STORAGE_KEY);
+  currentUser = null;
+
+  const loginScreen = document.getElementById('coupleLoginScreen');
+  const appLayout = document.querySelector('.app-layout');
+  const passInput = document.getElementById('loginPassword');
+  const errorMsg = document.getElementById('loginErrorMsg');
+
+  if (errorMsg) errorMsg.classList.add('is-hidden');
+  if (passInput) passInput.value = '';
+  if (appLayout) appLayout.classList.add('is-auth-locked');
+  if (loginScreen) {
+    loginScreen.classList.remove('is-hidden', 'login-success-fade');
+    const prevUser = localStorage.getItem('our_story_current_user') || 'himanshu';
+    selectLoginProfile(prevUser === 'gullu' ? 'Gullu' : 'Himanshu', false);
+  }
+
+  playTone(330, 0.2, 'sine', 0.1);
+}
+
+function promptSwitchUser(targetUser) {
+  if (targetUser === currentUser) {
+    showAppModal(
+      '✨ Active Portal',
+      `Aap already ${currentUser === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸'} ke portal me hain!`
+    );
+    return;
+  }
+
+  const targetName = targetUser === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸';
+  const loginScreen = document.getElementById('coupleLoginScreen');
+  const appLayout = document.querySelector('.app-layout');
+  const passInput = document.getElementById('loginPassword');
+  const errorMsg = document.getElementById('loginErrorMsg');
+
+  selectLoginProfile(targetUser === 'himanshu' ? 'Himanshu' : 'Gullu', false);
+
+  if (passInput) passInput.value = '';
+  if (errorMsg) errorMsg.classList.add('is-hidden');
+
+  if (appLayout) appLayout.classList.add('is-auth-locked');
+  if (loginScreen) {
+    loginScreen.classList.remove('is-hidden', 'login-success-fade');
+  }
+
+  if (passInput) passInput.focus();
+
+  showAppModal(
+    '🔐 Password Zaroori Hai',
+    `${targetName} ka portal private hai. Access karne ke liye kripya password daal kar unlock karein.`
+  );
+}
+
+// Switch Active Profile (Himanshu vs Gullu)
+function setupProfileSwitcher() {
+  const pillH = document.getElementById('pillHimanshu');
+  const pillG = document.getElementById('pillGullu');
+
+  if (pillH) pillH.addEventListener('click', () => promptSwitchUser('himanshu'));
+  if (pillG) pillG.addEventListener('click', () => promptSwitchUser('gullu'));
 }
 
 function checkForIncomingPulseOnPortalSwitch() {
@@ -2959,14 +3273,8 @@ function setupPulseArena() {
   if (switchBtn) {
     switchBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      const newUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
-      currentUser = newUser;
-      localStorage.setItem('our_story_current_user', currentUser);
-      localStorage.setItem('our_story_profile_selected', 'true');
-      window.location.hash = currentUser;
-      renderAll();
-      updatePulseIdentityUI();
-      playTone(currentUser === 'himanshu' ? 440 : 554.37, 0.15);
+      const targetUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+      promptSwitchUser(targetUser);
     });
   }
 
@@ -3708,34 +4016,13 @@ function setupPWAandUpdates() {
   });
 }
 
-// First-Time User Identity Setup Modal Check
+// First-Time User Identity Setup Check (Superseded by Private Couple Login Gate)
 function checkFirstTimeIdentity() {
-  const isSelected = localStorage.getItem('our_story_profile_selected');
   const modal = document.getElementById('identitySetupModal');
-  const btnH = document.getElementById('identityChooseHimanshuBtn');
-  const btnG = document.getElementById('identityChooseGulluBtn');
-
-  if (!isSelected && modal) {
-    modal.classList.remove('is-hidden');
-    modal.style.display = 'flex';
+  if (modal) {
+    modal.classList.add('is-hidden');
+    modal.style.display = 'none';
   }
-
-  function chooseUser(user) {
-    currentUser = user;
-    localStorage.setItem('our_story_current_user', currentUser);
-    localStorage.setItem('our_story_profile_selected', 'true');
-    window.location.hash = currentUser;
-    if (modal) {
-      modal.classList.add('is-hidden');
-      modal.style.display = 'none';
-    }
-    renderAll();
-    updatePulseIdentityUI();
-    playTone(currentUser === 'himanshu' ? 440 : 554.37, 0.15);
-  }
-
-  if (btnH) btnH.onclick = () => chooseUser('himanshu');
-  if (btnG) btnG.onclick = () => chooseUser('gullu');
 }
 
 // ==========================================================================
@@ -4827,6 +5114,8 @@ function setupVideoCallEngine() {
 
 // --- INITIALIZE EVERYTHING ON LOAD ---
 document.addEventListener('DOMContentLoaded', () => {
+  setupCoupleLogin();
+  checkAuthGate();
   setupProfileSwitcher();
   setupTabNavigation();
   setupMemoryVault();
@@ -4857,5 +5146,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupFirebaseModal();
 
   // Check if an incoming heartbeat was already waiting for this user on boot
-  setTimeout(checkForIncomingPulseOnPortalSwitch, 600);
+  if (currentUser) {
+    setTimeout(checkForIncomingPulseOnPortalSwitch, 600);
+  }
 });

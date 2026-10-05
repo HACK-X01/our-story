@@ -1,5 +1,5 @@
 {
-  "version": "1.8.1",
-  "buildTime": 1791170000000,
-  "notes": "Fix real-time chat messages display and heartbeat delivery with dual REST/WebSocket sync and remove modal blockage"
+  "version": "1.9.0",
+  "buildTime": 1791180000000,
+  "notes": "Add private couple login gate with separate credentials for Himanshu and Gullu portals"
 }

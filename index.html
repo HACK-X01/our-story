@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
 </head>
 <body>
 
@@ -30,6 +30,97 @@
   <canvas id="ambientCanvas"></canvas>
   <div class="ambient-orb orb-1"></div>
   <div class="ambient-orb orb-2"></div>
+
+  <!-- COUPLE PRIVATE LOGIN GATE (Opens first before portal access) -->
+  <div class="couple-login-screen is-hidden" id="coupleLoginScreen">
+    <div class="login-backdrop-glow"></div>
+    <div class="login-card-container">
+      <div class="login-card" id="loginCard">
+        
+        <!-- Romantic Header & Avatar Ring -->
+        <div class="login-header">
+          <div class="login-avatar-ring">
+            <span class="login-avatar-pill boy" id="loginAvatarBoy" title="Himanshu">☕</span>
+            <div class="login-heart-pulse">
+              <span class="heart-pulse-icon">💖</span>
+            </div>
+            <span class="login-avatar-pill girl" id="loginAvatarGirl" title="Gullu">🌸</span>
+          </div>
+          <h2 class="login-title">Our Story <span class="sparkle">✨</span></h2>
+          <p class="login-subtitle">Private Sanctuary for Himanshu &amp; Gullu</p>
+          <div class="login-badge-pill">
+            <span class="badge-lock">🔐</span> Couple Portals • Private Access
+          </div>
+        </div>
+
+        <!-- Quick Profile Chip Selector -->
+        <div class="login-quick-select">
+          <span class="quick-select-label">Choose who is logging in:</span>
+          <div class="quick-chips">
+            <button type="button" class="quick-chip active" id="chipHimanshu" data-user="Himanshu">
+              <span class="chip-avatar">☕</span>
+              <span class="chip-label">Himanshu</span>
+            </button>
+            <button type="button" class="quick-chip" id="chipGullu" data-user="Gullu">
+              <span class="chip-avatar">🌸</span>
+              <span class="chip-label">Gullu</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Login Form -->
+        <form id="coupleLoginForm" class="login-form" autocomplete="off" onsubmit="return false;">
+          <!-- User ID Input -->
+          <div class="login-field-group">
+            <label for="loginUserId" class="login-field-label">Portal ID / Username</label>
+            <div class="login-input-wrap">
+              <span class="input-icon">👤</span>
+              <input type="text" id="loginUserId" class="login-input" placeholder="Enter ID (Himanshu or Gullu)" autocomplete="username" autocapitalize="words" required value="Himanshu">
+            </div>
+          </div>
+
+          <!-- Password Input -->
+          <div class="login-field-group">
+            <label for="loginPassword" class="login-field-label">Secret Password</label>
+            <div class="login-input-wrap">
+              <span class="input-icon">🔑</span>
+              <input type="password" id="loginPassword" class="login-input" placeholder="Enter your portal password" autocomplete="current-password" required>
+              <button type="button" id="togglePasswordBtn" class="toggle-password-btn" aria-label="Toggle Password Visibility" title="Show/Hide Password">
+                <span id="togglePasswordIcon">👁️</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Remember Me Checkbox -->
+          <div class="login-options-row">
+            <label class="remember-label" for="rememberMeCheckbox">
+              <input type="checkbox" id="rememberMeCheckbox" checked>
+              <span class="remember-custom-check"></span>
+              <span class="remember-text">Remember me on this phone</span>
+            </label>
+          </div>
+
+          <!-- Error Alert Banner -->
+          <div class="login-error-msg is-hidden" id="loginErrorMsg">
+            <span class="error-icon">⚠️</span>
+            <span class="error-text" id="loginErrorText">Galat ID ya Password! Please check karke fir se try karein.</span>
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" id="loginSubmitBtn" class="login-submit-btn">
+            <span class="btn-text" id="loginSubmitText">✨ Unlock My Portal</span>
+            <span class="btn-arrow">→</span>
+          </button>
+        </form>
+
+        <!-- Footer -->
+        <div class="login-footer">
+          <p class="login-hint">🔒 End-to-End Encrypted Couple Portal</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
 
   <!-- MAIN APP CONTAINER -->
   <div class="app-layout">
@@ -66,15 +157,24 @@
         </div>
       </div>
 
-      <!-- Profile View Switcher (Himanshu vs Gullu) -->
+      <!-- Profile View & Portal Status Bar -->
       <div class="profile-switch-bar">
-        <span class="switch-label">Viewing As:</span>
-        <div class="profile-toggle-pills">
-          <button class="profile-pill active" id="pillHimanshu" data-user="himanshu">
-            <span class="user-emoji">☕</span> Himanshu
-          </button>
-          <button class="profile-pill" id="pillGullu" data-user="gullu">
-            <span class="user-emoji">🌸</span> Gullu
+        <div class="profile-portal-info">
+          <span class="portal-badge-icon">🔐</span>
+          <span class="switch-label">Portal:</span>
+          <strong class="portal-badge-text" id="headerPortalBadgeText">Himanshu ☕</strong>
+        </div>
+        <div class="profile-switch-actions">
+          <div class="profile-toggle-pills">
+            <button class="profile-pill active" id="pillHimanshu" data-user="himanshu" title="Himanshu's Portal">
+              <span class="user-emoji">☕</span> Himanshu
+            </button>
+            <button class="profile-pill" id="pillGullu" data-user="gullu" title="Gullu's Portal">
+              <span class="user-emoji">🌸</span> Gullu
+            </button>
+          </div>
+          <button class="header-logout-btn" id="headerLogoutBtn" title="Lock Portal & Switch Account">
+            <span class="logout-icon">🔒</span> <span class="logout-text">Logout</span>
           </button>
         </div>
       </div>
@@ -982,6 +1082,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=25"></script>
+  <script src="script.js?v=26"></script>
 </body>
 </html>
