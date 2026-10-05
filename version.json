@@ -1,5 +1,5 @@
 {
-  "version": "1.9.8",
-  "buildTime": 1791219600000,
-  "notes": "Fix photo upload song playback with direct HTML5 audio stream, live progress bar, play/pause controls, direct YouTube/Spotify app launch buttons, and resolve YouTube embed unavailable error"
+  "version": "1.9.9",
+  "buildTime": 1791222000000,
+  "notes": "Authentic Instagram-style Video & Audio Call interface with story gradient ring, floating minimizable widget, AR effects & filters carousel, camera flip dock button, view swap, and live reaction heart stream"
 }

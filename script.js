@@ -6226,8 +6226,10 @@ function startCallDurationTimer() {
   vcState.callDurationSeconds = 0;
   const timerText = document.getElementById('vcCallTimerText');
   const audioTimerText = document.getElementById('vcAudioCallTimerText');
+  const miniTimer = document.getElementById('vcMiniTimer');
   if (timerText) timerText.textContent = '00:00';
   if (audioTimerText) audioTimerText.textContent = '00:00';
+  if (miniTimer) miniTimer.textContent = '00:00';
 
   vcState.timerInterval = setInterval(() => {
     vcState.callDurationSeconds++;
@@ -6236,6 +6238,7 @@ function startCallDurationTimer() {
     const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     if (timerText) timerText.textContent = formatted;
     if (audioTimerText) audioTimerText.textContent = formatted;
+    if (miniTimer) miniTimer.textContent = formatted;
   }, 1000);
 }
 
@@ -6342,9 +6345,17 @@ function cleanupCallState() {
   const modal = document.getElementById('videoCallModal');
   const activeScreen = document.getElementById('vcActiveScreen');
   const audioActiveScreen = document.getElementById('vcAudioActiveScreen');
+  const miniWidget = document.getElementById('vcMiniWidget');
+  const filtersTray = document.getElementById('igFiltersTray');
+
   if (modal) modal.classList.add('is-hidden');
   if (activeScreen) activeScreen.classList.add('is-hidden');
   if (audioActiveScreen) audioActiveScreen.classList.add('is-hidden');
+  if (miniWidget) miniWidget.classList.add('is-hidden');
+  if (filtersTray) filtersTray.classList.add('is-hidden');
+
+  applyVcFilter('normal');
+  isVcSwapped = false;
 
   vcState.callId = null;
   vcState.role = null;
@@ -6360,7 +6371,7 @@ function cleanupCallState() {
   if (micBtn) micBtn.classList.remove('active-off');
   if (camBtn) camBtn.classList.remove('active-off');
   if (micIcon) micIcon.textContent = '🎙️';
-  if (camIcon) camIcon.textContent = '📷';
+  if (camIcon) camIcon.textContent = '📹';
 
   const audioMicBtn = document.getElementById('vcAudioToggleMicBtn');
   const audioMicIcon = document.getElementById('vcAudioMicIcon');
@@ -6480,27 +6491,102 @@ function sendLoveHeartTapInCall() {
   playTone(880, 0.25, 'sine', 0.2);
 }
 
+// --- INSTAGRAM VIDEO CALL CONTROLS & EFFECTS ---
+let isVcSwapped = false;
+let currentVcFilter = 'normal';
+
+function minimizeVideoCall() {
+  const modal = document.getElementById('videoCallModal');
+  const miniWidget = document.getElementById('vcMiniWidget');
+  const miniAvatar = document.getElementById('vcMiniAvatar');
+  const miniName = document.getElementById('vcMiniName');
+  const miniTimer = document.getElementById('vcMiniTimer');
+  const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+  const partnerName = partnerUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+  const partnerAvatar = partnerUser === 'himanshu' ? '☕' : '🌸';
+
+  if (miniAvatar) miniAvatar.textContent = partnerAvatar;
+  if (miniName) miniName.textContent = partnerName;
+  if (miniTimer) {
+    const mins = Math.floor(vcState.callDurationSeconds / 60);
+    const secs = vcState.callDurationSeconds % 60;
+    miniTimer.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  if (modal) modal.classList.add('is-hidden');
+  if (miniWidget) miniWidget.classList.remove('is-hidden');
+  showVcToast('Call minimized. You can continue chatting! 📱');
+}
+
+function maximizeVideoCall() {
+  const modal = document.getElementById('videoCallModal');
+  const miniWidget = document.getElementById('vcMiniWidget');
+  if (miniWidget) miniWidget.classList.add('is-hidden');
+  if (modal) modal.classList.remove('is-hidden');
+}
+
+function swapVcCameraViews() {
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
+  const pipBadge = document.querySelector('.ig-pip-overlay-badge');
+  if (!localVideo || !remoteVideo) return;
+
+  isVcSwapped = !isVcSwapped;
+  if (isVcSwapped) {
+    localVideo.srcObject = vcState.remoteStream;
+    remoteVideo.srcObject = vcState.localStream;
+    localVideo.style.transform = 'none';
+    remoteVideo.style.transform = vcState.facingMode === 'user' ? 'scaleX(-1)' : 'none';
+    if (pipBadge) pipBadge.textContent = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
+  } else {
+    localVideo.srcObject = vcState.localStream;
+    remoteVideo.srcObject = vcState.remoteStream;
+    localVideo.style.transform = vcState.facingMode === 'user' ? 'scaleX(-1)' : 'none';
+    remoteVideo.style.transform = 'none';
+    if (pipBadge) pipBadge.textContent = 'You';
+  }
+  playTone(700, 0.1);
+}
+
+function applyVcFilter(filterName) {
+  currentVcFilter = filterName || 'normal';
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
+  const allFilterItems = document.querySelectorAll('.ig-filter-item');
+
+  allFilterItems.forEach(item => {
+    item.classList.toggle('active', item.dataset.filter === currentVcFilter);
+  });
+
+  const filterClass = `ig-filter-${currentVcFilter}`;
+  const FILTER_CLASSES = ['ig-filter-normal', 'ig-filter-golden-hour', 'ig-filter-paris-blush', 'ig-filter-love-romance', 'ig-filter-vintage-90s', 'ig-filter-moody-bnw'];
+
+  [localVideo, remoteVideo].forEach(el => {
+    if (el) {
+      FILTER_CLASSES.forEach(c => el.classList.remove(c));
+      el.classList.add(filterClass);
+    }
+  });
+
+  playTone(800, 0.08);
+}
+
 function triggerFloatingHeartAnimation() {
   const overlay = document.getElementById('vcHeartsOverlay');
   if (!overlay) return;
 
-  const heartEmojis = ['💖', '💕', '🥰', '✨', '🌸', '❤️', '💋'];
-  for (let i = 0; i < 7; i++) {
+  const heartEmojis = ['❤️', '💖', '🔥', '😍', '🥰', '✨', '🌸', '💋', '💕'];
+  for (let i = 0; i < 8; i++) {
     setTimeout(() => {
       const el = document.createElement('div');
-      el.className = 'vc-floating-heart';
+      el.className = 'ig-floating-heart';
       el.textContent = heartEmojis[Math.floor(Math.random() * heartEmojis.length)];
-      el.style.left = (15 + Math.random() * 70) + '%';
-      el.style.bottom = '20px';
-      el.style.position = 'absolute';
-      el.style.fontSize = (1.6 + Math.random() * 1.4) + 'rem';
-      el.style.pointerEvents = 'none';
-      el.style.zIndex = '30';
-      el.style.animation = `heartFloatUp ${1.8 + Math.random() * 0.8}s cubic-bezier(0.2, 0.8, 0.2, 1) forwards`;
+      el.style.right = (16 + Math.random() * 55) + 'px';
+      el.style.fontSize = (1.6 + Math.random() * 1.2) + 'rem';
       overlay.appendChild(el);
 
-      setTimeout(() => el.remove(), 2600);
-    }, i * 110);
+      setTimeout(() => el.remove(), 2300);
+    }, i * 90);
   }
 }
 
@@ -6670,6 +6756,46 @@ function setupVideoCallEngine() {
   if (closeFallbackBtn) {
     closeFallbackBtn.addEventListener('click', () => cleanupCallState());
   }
+
+  // Instagram VC specific listeners
+  const minimizeBtn = document.getElementById('vcMinimizeBtn');
+  if (minimizeBtn) {
+    minimizeBtn.addEventListener('click', minimizeVideoCall);
+  }
+
+  const miniExpandBtn = document.getElementById('vcMiniExpandBtn');
+  if (miniExpandBtn) {
+    miniExpandBtn.addEventListener('click', maximizeVideoCall);
+  }
+
+  const miniEndBtn = document.getElementById('vcMiniEndBtn');
+  if (miniEndBtn) {
+    miniEndBtn.addEventListener('click', () => endVideoCall('Call ended with love ❤️'));
+  }
+
+  const localPip = document.getElementById('vcLocalPip');
+  if (localPip) {
+    localPip.addEventListener('click', swapVcCameraViews);
+  }
+
+  const filterToggleBtn = document.getElementById('vcFilterToggleBtn');
+  if (filterToggleBtn) {
+    filterToggleBtn.addEventListener('click', () => {
+      const tray = document.getElementById('igFiltersTray');
+      if (tray) tray.classList.toggle('is-hidden');
+    });
+  }
+
+  const flipDockBtn = document.getElementById('vcFlipCamDockBtn');
+  if (flipDockBtn) {
+    flipDockBtn.addEventListener('click', flipCameraFacing);
+  }
+
+  document.querySelectorAll('.ig-filter-item').forEach(item => {
+    item.addEventListener('click', () => {
+      applyVcFilter(item.dataset.filter);
+    });
+  });
 }
 
 // --- INITIALIZE EVERYTHING ON LOAD ---

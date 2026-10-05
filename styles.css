@@ -4704,33 +4704,43 @@ body {
   transform: scale(0.92);
 }
 
-/* Video Call Modal Outer */
+/* ==========================================================================
+   INSTAGRAM-STYLE VIDEO & AUDIO CALL (VC) THEME
+   Himanshu & Gullu Couple Video Experience
+   ========================================================================== */
+
 #videoCallModal {
   padding: 0;
-  background: rgba(8, 4, 14, 0.96);
-  backdrop-filter: blur(25px);
+  background: rgba(0, 0, 0, 0.96);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
   z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.vc-modal-card {
+.vc-modal-card.instagram-vc-theme {
   width: 100vw;
   height: 100dvh;
-  max-width: 520px;
+  max-width: 480px;
   margin: 0 auto;
-  background: #0d0617;
+  background: #000000;
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-@media (min-width: 540px) {
-  .vc-modal-card {
-    border-radius: 24px;
-    height: 90vh;
-    max-height: 800px;
-    border: 1.5px solid rgba(245, 195, 102, 0.4);
-    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
+@media (min-width: 520px) {
+  .vc-modal-card.instagram-vc-theme {
+    border-radius: 32px;
+    height: 88vh;
+    max-height: 840px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.9), 0 0 50px rgba(225, 48, 108, 0.15);
   }
 }
 
@@ -4740,161 +4750,257 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   position: relative;
   text-align: center;
+  padding: 24px 20px 36px;
+  background: radial-gradient(circle at 50% 20%, #1e102a 0%, #0c0812 60%, #000000 100%);
 }
 
-/* Outgoing & Incoming Call Screens */
-.vc-pulse-avatar-wrap {
+/* Instagram Header Pill */
+.ig-vc-header-pill {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+  padding-top: 8px;
+}
+
+.ig-direct-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  padding: 5px 14px;
+  border-radius: 20px;
+}
+
+.ig-logo-icon {
+  color: #e1306c;
+}
+
+/* Instagram Calling Center */
+.ig-calling-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+}
+
+.ig-avatar-story-ring {
   position: relative;
-  width: 130px;
-  height: 130px;
-  margin-bottom: 24px;
+  width: 124px;
+  height: 124px;
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-bottom: 24px;
 }
 
-.vc-calling-avatar {
-  font-size: 4rem;
+.ig-story-gradient-border {
+  position: relative;
+  width: 116px;
+  height: 116px;
+  border-radius: 50%;
+  padding: 3.5px;
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 5;
-  filter: drop-shadow(0 0 16px rgba(244, 114, 182, 0.6));
+  box-shadow: 0 0 25px rgba(225, 48, 108, 0.4);
 }
 
-.vc-avatar-ring {
+.ig-story-gradient-border.lg {
+  width: 130px;
+  height: 130px;
+  padding: 4px;
+}
+
+.ig-avatar-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #18181b;
+  border: 2.5px solid #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3.8rem;
+  user-select: none;
+}
+
+.ig-avatar-inner.lg {
+  font-size: 4.2rem;
+}
+
+/* Pulsating Rings around Avatar */
+.ig-pulse-wave {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  border: 2px solid rgba(236, 72, 153, 0.6);
+  border: 1.5px solid rgba(225, 48, 108, 0.5);
   pointer-events: none;
-  animation: vcRingPulse 2.4s infinite cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: igWavePulse 2.4s infinite cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.vc-avatar-ring.ring-1 { width: 130px; height: 130px; animation-delay: 0s; }
-.vc-avatar-ring.ring-2 { width: 170px; height: 170px; animation-delay: 0.6s; border-color: rgba(168, 85, 247, 0.5); }
-.vc-avatar-ring.ring-3 { width: 220px; height: 220px; animation-delay: 1.2s; border-color: rgba(245, 195, 102, 0.4); }
+.ig-wave-1 { width: 124px; height: 124px; animation-delay: 0s; }
+.ig-wave-2 { width: 160px; height: 160px; animation-delay: 0.7s; border-color: rgba(240, 148, 51, 0.4); }
+.ig-wave-3 { width: 200px; height: 200px; animation-delay: 1.4s; border-color: rgba(188, 24, 136, 0.3); }
 
-@keyframes vcRingPulse {
-  0% { transform: translate(-50%, -50%) scale(0.85); opacity: 0.9; }
+@keyframes igWavePulse {
+  0% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.9; }
   100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
 }
 
-.vc-calling-name {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #fff;
-  margin: 0 0 8px;
+.ig-caller-username {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 6px;
+  letter-spacing: -0.3px;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
-.vc-calling-status {
-  font-size: 0.95rem;
-  color: #fce7f3;
-  opacity: 0.9;
+.ig-call-tag {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #a1a1aa;
+  margin-bottom: 8px;
+}
+
+.ig-call-tag.incoming-pill {
+  color: #38ef7d;
+  background: rgba(56, 239, 125, 0.12);
+  border: 1px solid rgba(56, 239, 125, 0.3);
+  padding: 3px 12px;
+  border-radius: 12px;
+}
+
+.ig-calling-status {
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.85);
   margin: 0 0 16px;
 }
 
-.vc-incoming-tag {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: #fff;
-  padding: 4px 14px;
-  border-radius: 20px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  margin-bottom: 12px;
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
-}
-
-.vc-encrypted-pill {
-  font-size: 0.72rem;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #d8b4fe;
-  padding: 4px 12px;
-  border-radius: 20px;
-  margin-bottom: 36px;
-}
-
-.vc-call-actions-row {
+.ig-encryption-badge {
+  font-size: 0.7rem;
+  color: #71717a;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 24px;
+  gap: 4px;
 }
 
-.vc-round-btn {
+/* Instagram Calling Action Buttons */
+.ig-bottom-hangup-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 10;
+}
+
+.ig-hangup-btn {
   width: 64px;
   height: 64px;
   border-radius: 50%;
   border: none;
-  font-size: 1.5rem;
-  font-weight: bold;
+  background: #ed4956;
+  color: #ffffff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 8px 24px rgba(237, 73, 86, 0.5);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s;
 }
 
-.vc-round-btn.end-call {
-  background: linear-gradient(135deg, #ef4444, #dc2626);
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
-}
-
-.vc-round-btn:active {
+.ig-hangup-btn:active {
   transform: scale(0.9);
 }
 
-.vc-incoming-actions-row {
+.ig-hangup-label {
+  font-size: 0.82rem;
+  color: #a1a1aa;
+}
+
+/* Incoming Call Action Buttons */
+.ig-incoming-buttons-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  margin-top: 20px;
+  gap: 48px;
+  z-index: 10;
+  width: 100%;
 }
 
-.vc-answer-btn {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: #fff;
-  border: none;
-  padding: 14px 28px;
-  border-radius: 40px;
-  font-size: 1.05rem;
-  font-weight: 700;
+.ig-btn-col {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
+}
+
+.ig-round-action-btn {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: none;
   cursor: pointer;
-  box-shadow: 0 6px 22px rgba(16, 185, 129, 0.5);
-  animation: answerPulse 1.4s infinite ease-in-out;
-}
-
-@keyframes answerPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-}
-
-.vc-decline-btn {
-  background: rgba(239, 68, 68, 0.2);
-  border: 1.5px solid rgba(239, 68, 68, 0.6);
-  color: #fca5a5;
-  padding: 14px 24px;
-  border-radius: 40px;
-  font-size: 1rem;
-  font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
+  justify-content: center;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
 }
 
-/* Active Video Viewport */
-.vc-video-viewport {
+.ig-round-action-btn:active {
+  transform: scale(0.9);
+}
+
+.ig-round-action-btn.decline {
+  background: #ed4956;
+  box-shadow: 0 8px 25px rgba(237, 73, 86, 0.5);
+}
+
+.ig-round-action-btn.accept {
+  background: #25d366;
+  box-shadow: 0 8px 25px rgba(37, 211, 102, 0.55);
+  animation: igAcceptPulse 1.6s infinite ease-in-out;
+}
+
+@keyframes igAcceptPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+.ig-action-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #d4d4d8;
+}
+
+/* ==========================================================================
+   ACTIVE LIVE INSTAGRAM VIDEO CALL VIEWPORT
+   ========================================================================== */
+
+#vcActiveScreen {
+  padding: 0;
+  background: #000;
+}
+
+.ig-vc-viewport {
   position: relative;
   width: 100%;
   height: 100%;
@@ -4905,7 +5011,7 @@ body {
   justify-content: center;
 }
 
-.vc-remote-video {
+.ig-remote-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -4913,9 +5019,11 @@ body {
   top: 0;
   left: 0;
   z-index: 1;
+  background: #000;
 }
 
-.vc-remote-placeholder {
+/* Remote Placeholder */
+.ig-remote-placeholder {
   position: absolute;
   top: 0;
   left: 0;
@@ -4925,56 +5033,72 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle, #25123d 0%, #0d0617 100%);
+  background: radial-gradient(circle at 50% 30%, #20102e 0%, #0d0617 70%, #000000 100%);
   z-index: 2;
-  color: #fce7f3;
-  padding: 20px;
+  color: #ffffff;
+  padding: 24px;
 }
 
-.vc-placeholder-avatar {
-  font-size: 5rem;
-  margin-bottom: 16px;
-  animation: heartFloat 2s infinite ease-in-out;
+.ig-remote-placeholder p {
+  margin-top: 18px;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 500;
 }
 
-/* Floating Local Camera PiP */
-.vc-local-pip {
+/* Floating Local Camera PiP (Instagram Style) */
+.ig-local-pip {
   position: absolute;
-  top: 60px;
+  top: 72px;
   right: 14px;
-  width: 100px;
-  height: 140px;
-  border-radius: 16px;
+  width: 105px;
+  height: 155px;
+  border-radius: 18px;
   overflow: hidden;
-  border: 2px solid var(--accent-gold);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.7);
-  background: #180929;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.75);
+  background: #18181b;
   z-index: 20;
-  cursor: grab;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s;
+  user-select: none;
 }
 
-.vc-local-video {
+.ig-local-pip:hover {
+  transform: scale(1.03);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
+}
+
+.ig-local-pip:active {
+  transform: scale(0.96);
+}
+
+.ig-local-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1); /* Selfie mirror */
+  transform: scaleX(-1); /* Front camera selfie mirror */
 }
 
-.vc-pip-label {
+.ig-pip-overlay-badge {
   position: absolute;
-  bottom: 4px;
+  bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-size: 0.62rem;
-  padding: 1px 6px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 8px;
   border-radius: 10px;
   pointer-events: none;
+  letter-spacing: 0.3px;
 }
 
-/* Video Top Overlay Bar */
-.vc-top-bar {
+/* Top Instagram Navigation & Partner Bar */
+.ig-vc-top-bar {
   position: absolute;
   top: 14px;
   left: 14px;
@@ -4985,142 +5109,583 @@ body {
   z-index: 25;
 }
 
-.vc-partner-chip {
-  background: rgba(14, 6, 22, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-  padding: 4px 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.vc-duration-badge {
-  background: rgba(14, 6, 22, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(245, 195, 102, 0.3);
-  border-radius: 20px;
-  padding: 4px 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #fef08a;
-  font-size: 0.8rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.rec-dot {
-  width: 8px;
-  height: 8px;
+.ig-icon-btn {
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  background: #ef4444;
-  animation: recBlink 1.2s infinite ease-in-out;
-}
-
-@keyframes recBlink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.2; }
-}
-
-.vc-mini-btn {
-  background: rgba(14, 6, 22, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #fff;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
   cursor: pointer;
+  font-size: 1rem;
+  transition: transform 0.2s, background 0.2s;
 }
 
-/* Floating Hearts Area */
-.vc-hearts-overlay {
+.ig-icon-btn:active {
+  transform: scale(0.92);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.ig-partner-header-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 4px 12px 4px 5px;
+  border-radius: 24px;
+}
+
+.ig-mini-story-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(45deg, #f09433, #dc2743, #bc1888);
+  padding: 1.8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+
+.ig-header-text-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.ig-header-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ig-header-username {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+}
+
+.ig-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  background: #0095f6;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.55rem;
+  font-weight: 800;
+}
+
+.ig-header-timer-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: #e4e4e7;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.ig-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: igLiveDotBlink 1.4s infinite ease-in-out;
+}
+
+@keyframes igLiveDotBlink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.85); }
+}
+
+.ig-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ==========================================================================
+   INSTAGRAM AR EFFECTS / FILTERS TRAY
+   ========================================================================== */
+
+.ig-filters-tray {
   position: absolute;
-  top: 0;
+  bottom: 88px;
   left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 15;
+  right: 0;
+  z-index: 24;
+  padding: 8px 12px;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s;
 }
 
-/* Bottom Controls Dock */
-.vc-controls-dock {
+.ig-filters-tray.is-hidden {
+  display: none !important;
+}
+
+.ig-filters-scroll {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 6px 14px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  justify-content: center;
+}
+
+.ig-filters-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.ig-filter-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ig-filter-item .filter-preview-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ig-filter-item .filter-name {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #d4d4d8;
+  letter-spacing: 0.2px;
+}
+
+.ig-filter-item.active .filter-preview-icon {
+  border-color: #e1306c;
+  box-shadow: 0 0 16px rgba(225, 48, 108, 0.7);
+  transform: scale(1.1);
+}
+
+.ig-filter-item.active .filter-name {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Realtime Video Filter Classes */
+.ig-filter-normal { filter: none !important; }
+.ig-filter-golden-hour { filter: brightness(1.08) contrast(1.05) sepia(0.25) saturate(1.4) !important; }
+.ig-filter-paris-blush { filter: brightness(1.12) contrast(0.95) saturate(1.15) !important; }
+.ig-filter-love-romance { filter: hue-rotate(-15deg) saturate(1.35) brightness(1.05) !important; }
+.ig-filter-vintage-90s { filter: sepia(0.4) contrast(1.15) brightness(0.95) !important; }
+.ig-filter-moody-bnw { filter: grayscale(1) contrast(1.25) brightness(1.05) !important; }
+
+/* ==========================================================================
+   INSTAGRAM BOTTOM GLASS CONTROLS DOCK
+   ========================================================================== */
+
+.ig-controls-dock {
   position: absolute;
-  bottom: 24px;
+  bottom: 22px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: rgba(16, 7, 26, 0.88);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(245, 195, 102, 0.3);
-  border-radius: 40px;
-  padding: 8px 14px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  gap: 10px;
+  background: rgba(18, 18, 20, 0.76);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 44px;
+  padding: 7px 14px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
   z-index: 25;
 }
 
-.vc-ctrl-btn {
-  width: 46px;
-  height: 46px;
+.ig-dock-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 4px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  min-width: 44px;
+}
+
+.ig-dock-btn .dock-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1.15rem;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.ig-dock-btn:active .dock-icon {
+  transform: scale(0.9);
+}
+
+.ig-dock-btn .dock-label {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: #a1a1aa;
+  margin-top: 3px;
+}
+
+.ig-dock-btn.active-off .dock-icon {
+  background: #ed4956;
+  color: #fff;
+}
+
+.ig-dock-btn.ig-heart-btn .dock-icon {
+  background: linear-gradient(135deg, rgba(225, 48, 108, 0.35), rgba(240, 148, 51, 0.35));
+  border: 1px solid rgba(225, 48, 108, 0.5);
+  animation: igHeartBtnPulse 2s infinite ease-in-out;
+}
+
+@keyframes igHeartBtnPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+.ig-dock-btn.ig-end-call-btn .dock-icon {
+  background: #ed4956;
+  box-shadow: 0 4px 18px rgba(237, 73, 86, 0.6);
+}
+
+/* Floating Hearts Stream (Instagram Live / VC Heart Bursts) */
+.ig-floating-hearts-stream {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 120px;
+  height: 100%;
+  pointer-events: none;
+  z-index: 22;
+  overflow: hidden;
+}
+
+.ig-floating-heart {
+  position: absolute;
+  bottom: 80px;
+  right: 28px;
+  pointer-events: none;
+  font-size: 1.8rem;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 2px 10px rgba(225, 48, 108, 0.7));
+  animation: igHeartStreamFloat 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes igHeartStreamFloat {
+  0% {
+    transform: translateY(0) scale(0.5) rotate(0deg);
+    opacity: 0.95;
+  }
+  20% {
+    transform: translateY(-80px) scale(1.2) rotate(-12deg);
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(-240px) scale(1) rotate(14deg);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-440px) scale(0.7) rotate(-8deg);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   INSTAGRAM AUDIO CALL STAGE
+   ========================================================================== */
+
+.ig-audio-stage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px 28px;
+  background: radial-gradient(circle at 50% 25%, #25123d 0%, #0d0617 65%, #000000 100%);
+}
+
+.ig-audio-top-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ig-duration-badge {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ig-audio-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.ig-audio-avatar-ring {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.ig-audio-soundwave {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1.5px solid rgba(225, 48, 108, 0.5);
+  pointer-events: none;
+  animation: igSoundwavePulse 2.6s infinite cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ig-audio-soundwave.wave-1 { width: 140px; height: 140px; animation-delay: 0s; }
+.ig-audio-soundwave.wave-2 { width: 185px; height: 185px; animation-delay: 0.8s; border-color: rgba(240, 148, 51, 0.4); }
+.ig-audio-soundwave.wave-3 { width: 235px; height: 235px; animation-delay: 1.6s; border-color: rgba(188, 24, 136, 0.3); }
+
+@keyframes igSoundwavePulse {
+  0% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
+}
+
+.ig-audio-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ig-audio-controls-dock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(18, 18, 20, 0.78);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 44px;
+  padding: 8px 16px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+}
+
+.ig-audio-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 4px;
+  min-width: 44px;
+}
+
+.ig-audio-btn .dock-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.ig-audio-btn:active .dock-icon {
+  transform: scale(0.9);
+}
+
+.ig-audio-btn .dock-label {
+  font-size: 0.64rem;
+  font-weight: 500;
+  color: #a1a1aa;
+  margin-top: 3px;
+}
+
+.ig-audio-btn.active-off .dock-icon {
+  background: #ed4956;
+}
+
+.ig-audio-btn.ig-end-call-btn .dock-icon {
+  background: #ed4956;
+  box-shadow: 0 4px 18px rgba(237, 73, 86, 0.6);
+}
+
+/* ==========================================================================
+   INSTAGRAM FLOATING MINI CALL WIDGET (When minimized)
+   ========================================================================== */
+
+.vc-mini-widget {
+  position: fixed;
+  bottom: 84px;
+  right: 16px;
+  z-index: 99999;
+  background: rgba(18, 18, 22, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 36px;
+  padding: 6px 14px 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.75), 0 0 20px rgba(225, 48, 108, 0.3);
+  animation: igMiniWidgetSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.vc-mini-widget.is-hidden {
+  display: none !important;
+}
+
+@keyframes igMiniWidgetSlide {
+  from { transform: translateY(20px) scale(0.9); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.vc-mini-story-ring {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(45deg, #f09433, #dc2743, #bc1888);
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vc-mini-avatar {
+  font-size: 1.15rem;
+}
+
+.vc-mini-live-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 1.5px solid #000;
+  animation: igLiveDotBlink 1.4s infinite ease-in-out;
+}
+
+.vc-mini-details {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.vc-mini-username {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.vc-mini-timer {
+  font-size: 0.68rem;
+  color: #a1a1aa;
+  font-variant-numeric: tabular-nums;
+}
+
+.vc-mini-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+.vc-mini-ctrl {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  font-size: 0.85rem;
+  transition: transform 0.2s;
 }
 
-.vc-ctrl-btn:active {
+.vc-mini-ctrl:active {
   transform: scale(0.9);
 }
 
-.vc-ctrl-btn.active-off {
-  background: rgba(239, 68, 68, 0.35);
-  border-color: #ef4444;
+.vc-mini-ctrl.expand {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
 }
 
-.vc-ctrl-btn.heart {
-  background: linear-gradient(135deg, rgba(236, 72, 153, 0.4), rgba(168, 85, 247, 0.4));
-  border-color: rgba(236, 72, 153, 0.6);
-}
-
-.vc-ctrl-btn.end-call {
-  background: linear-gradient(135deg, #ef4444, #dc2626);
-  border: none;
-  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.5);
+.vc-mini-ctrl.hangup {
+  background: #ed4956;
+  color: #ffffff;
 }
 
 /* Fallback Jitsi Screen */
-.vc-fallback-header {
+.ig-fallback-header {
   width: 100%;
   padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(20, 9, 32, 0.95);
-  border-bottom: 1px solid rgba(245, 195, 102, 0.2);
+  background: rgba(18, 18, 20, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   color: #fff;
-}
-
-.vc-fallback-header h4 {
-  margin: 0;
-  font-size: 0.95rem;
 }
 
 .vc-iframe-container {
@@ -5134,30 +5699,6 @@ body {
   width: 100%;
   height: 100%;
   border: none;
-}
-
-/* Floating Love Hearts inside Active Video */
-.vc-floating-heart {
-  position: absolute;
-  pointer-events: none;
-  z-index: 30;
-  will-change: transform, opacity;
-  filter: drop-shadow(0 2px 8px rgba(236, 72, 153, 0.7));
-}
-
-@keyframes heartFloatUp {
-  0% {
-    transform: translateY(0) scale(0.6) rotate(0deg);
-    opacity: 0.95;
-  }
-  50% {
-    transform: translateY(-160px) scale(1.2) rotate(15deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(-380px) scale(0.9) rotate(-20deg);
-    opacity: 0;
-  }
 }
 
 /* ==========================================================================
