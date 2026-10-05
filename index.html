@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
 
@@ -561,6 +561,67 @@
 
       </section>
 
+      <!-- ============================================================
+           TAB 6: 💬 DIL KI BAATEIN • PRIVATE REAL-TIME CHAT
+           ============================================================ -->
+      <section class="tab-pane" id="paneChat">
+        <div class="chat-container">
+          
+          <!-- Chat Partner Status Banner -->
+          <div class="chat-header-bar">
+            <div class="chat-partner-avatar-box">
+              <span class="chat-partner-avatar" id="chatPartnerAvatar">🌸</span>
+              <span class="chat-status-dot pulse" title="Connected"></span>
+            </div>
+            <div class="chat-partner-meta">
+              <div class="chat-partner-title-row">
+                <h3 class="chat-partner-heading" id="chatPartnerName">Gullu 🌸</h3>
+                <span class="chat-private-tag">🔒 Private</span>
+              </div>
+              <p class="chat-partner-sub" id="chatPartnerSub">Live Cloud Synced • Himanshu & Gullu Only</p>
+            </div>
+            <div class="chat-header-actions">
+              <button class="chat-love-burst-btn" id="chatLoveBurstBtn" title="Send Love Burst">
+                💖 Burst
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Romantic Reaction Chips -->
+          <div class="chat-quick-chips" id="chatQuickChips">
+            <button class="quick-chip-btn" data-text="Miss you so much ❤️">Miss you ❤️</button>
+            <button class="quick-chip-btn" data-text="I love you baby 💖">Love you 💖</button>
+            <button class="quick-chip-btn" data-text="Coffee date pe chalte hain? ☕">Coffee date? ☕</button>
+            <button class="quick-chip-btn" data-text="Pout band karo ab 🐷">Pout band karo 🐷</button>
+            <button class="quick-chip-btn" data-text="Ek pyaari si jhappi! 🫂">Jhappi! 🫂</button>
+            <button class="quick-chip-btn" data-text="Kahan ho aap abhi? 📍">Kahan ho? 📍</button>
+            <button class="quick-chip-btn" data-text="Gussa ho kya mere se? 🥺">Gussa ho? 🥺</button>
+            <button class="quick-chip-btn" data-text="Call karo na jaldi! 📞">Call me 📞</button>
+          </div>
+
+          <!-- Message History List -->
+          <div class="chat-messages-wrap" id="chatMessagesList">
+            <div class="chat-empty-state" id="chatEmptyState">
+              <span class="chat-empty-icon">💌</span>
+              <h4>Dil Ki Baatein Shuru Karein!</h4>
+              <p>Aapka aur partner ka 100% private couple chat space. Jo bhi likhenge, instant sync hoga! ❤️</p>
+            </div>
+          </div>
+
+          <!-- Chat Input Controls -->
+          <div class="chat-input-bar">
+            <button class="chat-quick-heart-btn" id="chatQuickHeartBtn" title="Send Heart">❤️</button>
+            <div class="chat-input-field-wrap">
+              <textarea class="chat-input-field" id="chatTextInput" rows="1" placeholder="Write something sweet..."></textarea>
+            </div>
+            <button class="chat-send-btn" id="chatSendBtn" title="Send Message">
+              <span class="send-icon">➤</span>
+            </button>
+          </div>
+
+        </div>
+      </section>
+
     </main>
 
     <!-- STICKY BOTTOM NAVIGATION DOCK -->
@@ -585,6 +646,11 @@
       <button class="dock-item" data-tab="paneMood">
         <span class="dock-icon">🎭</span>
         <span class="dock-label">Mood</span>
+      </button>
+      <button class="dock-item" data-tab="paneChat" id="dockBtnChat">
+        <span class="dock-icon">💬</span>
+        <span class="dock-label">Chat</span>
+        <span class="dock-pulse-badge is-hidden" id="dockChatBadge">●</span>
       </button>
     </nav>
 
@@ -791,6 +857,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=20"></script>
+  <script src="script.js?v=21"></script>
 </body>
 </html>

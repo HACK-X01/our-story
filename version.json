@@ -1,5 +1,5 @@
 {
-  "version": "1.6.2",
-  "buildTime": 1791145000000,
-  "notes": "Fix notification click 404 error using self.registration.scope and getAppNavUrl"
+  "version": "1.7.0",
+  "buildTime": 1791147000000,
+  "notes": "Add private couple real-time chat (Dil Ki Baatein) with closed-app notifications and love bursts"
 }

@@ -188,12 +188,22 @@ const DEFAULT_APP_STATE = {
   locations: {
     himanshu: null,
     gullu: null
-  }
+  },
+  chatMessages: [
+    {
+      id: "msg_init_welcome",
+      sender: "system",
+      senderName: "Our Story ✨",
+      text: "Aapka aur Gullu ka private couple chat space! Kuch meetha likh kar shuru karein... 💌",
+      timestamp: Date.now() - 3600000,
+      type: "text"
+    }
+  ]
 };
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.6.2';
+const CURRENT_APP_VERSION = '1.7.0';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -291,6 +301,14 @@ function mergePreservingUserData(local, incoming) {
     merged.locations = { himanshu: locH, gullu: locG };
   }
 
+  // 6. Preserve Chat Messages (Union by id, sorted by timestamp)
+  const localMsgs = local.chatMessages || [];
+  const incMsgs = incoming.chatMessages || (incoming.chat_messages ? Object.values(incoming.chat_messages) : []);
+  const msgMap = new Map();
+  incMsgs.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
+  localMsgs.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
+  merged.chatMessages = Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).slice(-200);
+
   return merged;
 }
 
@@ -331,6 +349,7 @@ function renderAll() {
   renderPulseHistory();
   renderMoods();
   updateCoupleLocationsUI();
+  renderChatUI();
 }
 
 // ==========================================================================
@@ -539,6 +558,13 @@ function setupFirebaseRealtimeListeners() {
       }
     }
   });
+
+  firebaseDb.ref('our_story/chat_messages').limitToLast(50).on('child_added', (snapshot) => {
+    const msg = snapshot.val();
+    if (msg && msg.id) {
+      handleIncomingChatMessage(msg, false);
+    }
+  });
 }
 
 function syncInitialStateFromFirebase() {
@@ -622,7 +648,17 @@ function initFirebaseRestSync(dbUrl) {
         updateCoupleLocationsUI();
       })
       .catch(() => {});
-  }, 6000);
+
+    // Chat messages poller (every 4s)
+    fetch(`${dbUrl}/our_story/chat_messages.json?limitToLast=20&t=` + Date.now())
+      .then(r => r.ok ? r.json() : null)
+      .then(msgs => {
+        if (!msgs) return;
+        const msgList = Object.values(msgs);
+        msgList.forEach(m => handleIncomingChatMessage(m, false));
+      })
+      .catch(() => {});
+  }, 4000);
 }
 
 function syncToFirebase(type, data) {
@@ -649,6 +685,8 @@ function syncToFirebase(type, data) {
         firebaseDb.ref('our_story/coupons').set(appState.coupons);
       } else if (type === 'MEMORY_ADD') {
         firebaseDb.ref('our_story/memories').set(appState.memories);
+      } else if (type === 'CHAT_MESSAGE') {
+        firebaseDb.ref('our_story/chat_messages/' + data.id).set(data);
       }
       return;
     } catch (e) {
@@ -695,6 +733,10 @@ function syncToFirebase(type, data) {
       endpoint += `/memories.json`;
       method = 'PUT';
       body = appState.memories;
+    } else if (type === 'CHAT_MESSAGE') {
+      endpoint += `/chat_messages/${data.id}.json`;
+      method = 'PUT';
+      body = data;
     }
 
     fetch(endpoint, {
@@ -930,6 +972,7 @@ function broadcastUpdate(type, data, retain = true) {
       else if (type.startsWith('COUPON_')) subTopic = 'coupon';
       else if (type === 'MEMORY_ADD') subTopic = 'memory';
       else if (type === 'LOCATION_UPDATE') subTopic = 'location';
+      else if (type === 'CHAT_MESSAGE') subTopic = 'chat';
 
       const msg = new Paho.MQTT.Message(JSON.stringify(payload));
       msg.destinationName = SYNC_TOPIC_PREFIX + subTopic;
@@ -976,6 +1019,14 @@ function broadcastUpdate(type, data, retain = true) {
         tags: ['round_pushpin'],
         priority: 4
       });
+    } else if (type === 'CHAT_MESSAGE') {
+      sendClosedAppPushNotification(partnerUser, {
+        title: `💬 New Message from ${myName}!`,
+        message: `${myName}: "${data.text.slice(0, 80)}"`,
+        click: getAppNavUrl('#chat'),
+        tags: ['speech_balloon', 'love_letter'],
+        priority: 5
+      });
     }
   } catch (err) {
     console.warn('Closed-app push notification trigger failed:', err);
@@ -1002,6 +1053,8 @@ function handleIncomingSyncMessage(payload) {
     handleIncomingMemory(payload.data);
   } else if (payload.type === 'LOCATION_UPDATE') {
     handleIncomingLocation(payload.data);
+  } else if (payload.type === 'CHAT_MESSAGE') {
+    handleIncomingChatMessage(payload.data, true);
   }
 }
 
@@ -1904,6 +1957,13 @@ function setupTabNavigation() {
         if (!coupleMap) initCoupleRadarMap();
         else coupleMap.invalidateSize();
       }, 200);
+    } else if (tabId === 'paneChat') {
+      const badge = document.getElementById('dockChatBadge');
+      if (badge) badge.classList.add('is-hidden');
+      setTimeout(() => {
+        const listEl = document.getElementById('chatMessagesList');
+        if (listEl) listEl.scrollTop = listEl.scrollHeight;
+      }, 100);
     }
   }
 
@@ -1924,6 +1984,7 @@ function setupTabNavigation() {
     else if (rawHash === 'panevault' || rawHash === 'vault') switchTab('paneVault');
     else if (rawHash === 'paneqa' || rawHash === 'qa') switchTab('paneQA');
     else if (rawHash === 'panecoupons' || rawHash === 'coupons') switchTab('paneCoupons');
+    else if (rawHash === 'panechat' || rawHash === 'chat') switchTab('paneChat');
   }
 
   window.addEventListener('hashchange', handleHashNavigation);
@@ -3590,6 +3651,325 @@ function checkFirstTimeIdentity() {
   if (btnG) btnG.onclick = () => chooseUser('gullu');
 }
 
+// ==========================================================================
+// TAB 6: 💬 DIL KI BAATEIN • PRIVATE COUPLE CHAT ENGINE
+// ==========================================================================
+
+function escapeChatHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatChatTime(timestamp) {
+  try {
+    const d = new Date(timestamp);
+    let hours = d.getHours();
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${hours}:${minutes} ${ampm}`;
+  } catch (e) {
+    return 'Just now';
+  }
+}
+
+function triggerLoveBurstAnimation(count = 25) {
+  const emojis = ['💖', '💕', '💗', '💓', '✨', '🌸', '❤️', '🥰'];
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => {
+      const heart = document.createElement('div');
+      heart.className = 'floating-love-heart';
+      heart.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+      heart.style.left = (8 + Math.random() * 84) + 'vw';
+      heart.style.animationDuration = (1.6 + Math.random() * 1.2) + 's';
+      heart.style.fontSize = (1.4 + Math.random() * 1.4) + 'rem';
+      document.body.appendChild(heart);
+      setTimeout(() => heart.remove(), 2600);
+    }, i * 50);
+  }
+}
+
+function setupChatUI() {
+  const sendBtn = document.getElementById('chatSendBtn');
+  const inputField = document.getElementById('chatTextInput');
+  const heartBtn = document.getElementById('chatQuickHeartBtn');
+  const burstBtn = document.getElementById('chatLoveBurstBtn');
+  const chipsContainer = document.getElementById('chatQuickChips');
+
+  if (sendBtn && inputField) {
+    sendBtn.addEventListener('click', () => {
+      const text = inputField.value.trim();
+      if (text) {
+        sendChatMessage(text, 'text');
+        inputField.value = '';
+        inputField.style.height = 'auto';
+        inputField.focus();
+      }
+    });
+
+    inputField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const text = inputField.value.trim();
+        if (text) {
+          sendChatMessage(text, 'text');
+          inputField.value = '';
+          inputField.style.height = 'auto';
+        }
+      }
+    });
+
+    inputField.addEventListener('input', () => {
+      inputField.style.height = 'auto';
+      inputField.style.height = Math.min(inputField.scrollHeight, 80) + 'px';
+    });
+  }
+
+  if (heartBtn) {
+    heartBtn.addEventListener('click', () => {
+      sendChatMessage('❤️', 'text');
+      triggerLoveBurstAnimation(10);
+    });
+  }
+
+  if (burstBtn) {
+    burstBtn.addEventListener('click', () => {
+      const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+      sendChatMessage(`💖 ${myName} ne ek 10x Love Burst bheja hai! 💖`, 'burst');
+      triggerLoveBurstAnimation(30);
+    });
+  }
+
+  if (chipsContainer) {
+    chipsContainer.querySelectorAll('.quick-chip-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const text = btn.getAttribute('data-text');
+        if (text) {
+          sendChatMessage(text, 'text');
+          playTone(600, 0.08);
+        }
+      });
+    });
+  }
+
+  renderChatUI();
+}
+
+function renderChatUI() {
+  const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+  const partnerName = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
+  const partnerAvatar = currentUser === 'himanshu' ? '🌸' : '☕';
+
+  const headingEl = document.getElementById('chatPartnerName');
+  const avatarEl = document.getElementById('chatPartnerAvatar');
+  const inputField = document.getElementById('chatTextInput');
+
+  if (headingEl) headingEl.textContent = partnerName;
+  if (avatarEl) avatarEl.textContent = partnerAvatar;
+  if (inputField) {
+    inputField.placeholder = `Write something sweet for ${currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'}...`;
+  }
+
+  const listEl = document.getElementById('chatMessagesList');
+  if (!listEl) return;
+
+  const msgs = (appState && appState.chatMessages) ? appState.chatMessages : [];
+
+  // Remove existing message rows (preserve empty state if zero messages)
+  const existingRows = listEl.querySelectorAll('.chat-msg-row');
+  existingRows.forEach(r => r.remove());
+
+  const emptyState = document.getElementById('chatEmptyState');
+  if (msgs.length === 0) {
+    if (emptyState) emptyState.style.display = 'flex';
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = 'none';
+
+  msgs.forEach(msg => {
+    appendChatMessageDOM(msg, false);
+  });
+
+  listEl.scrollTop = listEl.scrollHeight;
+}
+
+function appendChatMessageDOM(msg, shouldScroll = true) {
+  const listEl = document.getElementById('chatMessagesList');
+  if (!listEl) return;
+
+  const emptyState = document.getElementById('chatEmptyState');
+  if (emptyState) emptyState.style.display = 'none';
+
+  // Check if message is already rendered
+  if (msg.id && listEl.querySelector(`[data-msg-id="${msg.id}"]`)) return;
+
+  const isMe = msg.sender === currentUser;
+  const partnerAvatar = currentUser === 'himanshu' ? '🌸' : '☕';
+
+  const row = document.createElement('div');
+  row.setAttribute('data-msg-id', msg.id || ('msg_' + Date.now()));
+
+  const timeStr = msg.timestamp ? formatChatTime(msg.timestamp) : 'Just now';
+
+  if (msg.type === 'burst') {
+    row.className = 'chat-msg-row burst-row';
+    row.innerHTML = `
+      <div class="chat-burst-card">
+        <span class="burst-icon">✨</span>
+        <span class="burst-text">${escapeChatHtml(msg.text)}</span>
+        <span class="burst-icon">💖</span>
+      </div>
+    `;
+  } else {
+    row.className = `chat-msg-row ${isMe ? 'me' : 'partner'}`;
+
+    if (!isMe) {
+      row.innerHTML = `
+        <div class="chat-msg-avatar" title="${escapeChatHtml(msg.senderName || 'Partner')}">${partnerAvatar}</div>
+        <div class="chat-msg-bubble">
+          <span class="chat-msg-sender-name">${escapeChatHtml(msg.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'))}</span>
+          <p class="chat-msg-text">${escapeChatHtml(msg.text)}</p>
+          <div class="chat-msg-footer">
+            <span class="chat-msg-time">${timeStr}</span>
+          </div>
+        </div>
+      `;
+    } else {
+      row.innerHTML = `
+        <div class="chat-msg-bubble">
+          <p class="chat-msg-text">${escapeChatHtml(msg.text)}</p>
+          <div class="chat-msg-footer">
+            <span class="chat-msg-time">${timeStr}</span>
+            <span class="chat-msg-ticks">✓✓</span>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  listEl.appendChild(row);
+
+  if (shouldScroll) {
+    listEl.scrollTo({ top: listEl.scrollHeight, behavior: 'smooth' });
+  }
+}
+
+function sendChatMessage(text, type = 'text') {
+  if (!text || !text.trim()) return;
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.chatMessages) appState.chatMessages = [];
+
+  const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+  const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+
+  const msg = {
+    id: msgId,
+    sender: currentUser,
+    senderName: myName,
+    text: text.trim(),
+    timestamp: Date.now(),
+    type: type
+  };
+
+  appState.chatMessages.push(msg);
+  if (appState.chatMessages.length > 200) {
+    appState.chatMessages = appState.chatMessages.slice(-200);
+  }
+
+  saveAppState(appState);
+  appendChatMessageDOM(msg, true);
+
+  // Sweet sent tone
+  playTone(587.33, 0.08);
+  setTimeout(() => playTone(880, 0.1), 80);
+
+  // Real-time broadcast (MQTT, BroadcastChannel, Firebase RTDB, and Closed-App Web Push!)
+  broadcastUpdate('CHAT_MESSAGE', msg);
+}
+
+function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
+  if (!msg || !msg.id || !msg.text) return;
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.chatMessages) appState.chatMessages = [];
+
+  const exists = appState.chatMessages.some(m => m.id === msg.id);
+  if (!exists) {
+    appState.chatMessages.push(msg);
+    appState.chatMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    if (appState.chatMessages.length > 200) {
+      appState.chatMessages = appState.chatMessages.slice(-200);
+    }
+    saveAppState(appState);
+  }
+
+  // If chat pane is active
+  const chatPane = document.getElementById('paneChat');
+  const isChatActive = chatPane && chatPane.classList.contains('active');
+
+  if (isChatActive) {
+    appendChatMessageDOM(msg, true);
+    if (msg.sender !== currentUser) {
+      playTone(523.25, 0.08);
+      setTimeout(() => playTone(659.25, 0.1), 90);
+      if (navigator.vibrate) {
+        try { navigator.vibrate([60, 40, 60]); } catch (e) {}
+      }
+    }
+  } else {
+    // Other tab is active: show unread badge on bottom dock
+    if (msg.sender !== currentUser) {
+      const badge = document.getElementById('dockChatBadge');
+      if (badge) badge.classList.remove('is-hidden');
+
+      playTone(523.25, 0.08);
+      setTimeout(() => playTone(659.25, 0.12), 100);
+
+      // Trigger system notification if browser is in background
+      if (document.hidden) {
+        sendSystemNotificationForChat(msg);
+      }
+    }
+  }
+
+  if (msg.type === 'burst' && msg.sender !== currentUser) {
+    triggerLoveBurstAnimation(25);
+  }
+}
+
+function sendSystemNotificationForChat(msg) {
+  if (!msg || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+
+  const senderName = msg.sender === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸';
+  const title = `💬 New Message from ${senderName}`;
+  const options = {
+    body: `${senderName}: "${msg.text.slice(0, 80)}"`,
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    vibrate: [250, 100, 250],
+    tag: 'chat-message-' + msg.id,
+    renotify: true,
+    data: { url: getAppNavUrl('#chat') }
+  };
+
+  if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+    navigator.serviceWorker.ready.then((reg) => {
+      reg.showNotification(title, options);
+    }).catch(() => {
+      try { new Notification(title, options); } catch (e) {}
+    });
+  } else {
+    try { new Notification(title, options); } catch (e) {}
+  }
+}
+
 // --- INITIALIZE EVERYTHING ON LOAD ---
 document.addEventListener('DOMContentLoaded', () => {
   setupProfileSwitcher();
@@ -3604,6 +3984,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupNotificationPermissions();
   setupInAppMusicPlayer();
   setupPWAandUpdates();
+  setupChatUI();
   fetchState();
 
   // Check first-time identity selection
