@@ -3,13 +3,13 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-const CACHE_NAME = 'our-story-v13';
+const CACHE_NAME = 'our-story-v14';
 
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './styles.css?v=17',
-  './script.js?v=17',
+  './styles.css?v=18',
+  './script.js?v=18',
   './paho-mqtt.min.js',
   './manifest.json',
   './version.json',
@@ -98,12 +98,16 @@ self.addEventListener('message', (event) => {
 // 5. Notification Click Handler - Focus app or open heartbeat tab
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const urlToOpen = new URL('./#pulse', self.location.origin).href;
+  const rawUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : './#pulse';
+  const urlToOpen = new URL(rawUrl, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {
         if (client.url && 'focus' in client) {
+          if ('navigate' in client) {
+            try { client.navigate(urlToOpen); } catch (e) {}
+          }
           return client.focus();
         }
       }
@@ -114,26 +118,37 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// 6. Push Event Handler (for Web Push payloads)
+// 6. Push Event Handler (Web Push payloads when app is closed / phone locked)
 self.addEventListener('push', (event) => {
-  let data = { title: '💓 Dil Ki Dhadkan Received!', body: 'Partner ne dil ki dhadkan bheji hai! ❤️' };
-  try {
-    if (event.data) {
-      data = event.data.json();
+  let title = '💓 Dil Ki Dhadkan Received!';
+  let body = 'Partner ne dil ki dhadkan bheji hai! Jaldi app kholo ❤️';
+  let clickUrl = './#pulse';
+
+  if (event.data) {
+    try {
+      const payload = event.data.json();
+      if (payload.title) title = payload.title;
+      if (payload.message) body = payload.message;
+      else if (payload.body) body = payload.body;
+      if (payload.click) clickUrl = payload.click;
+    } catch (e) {
+      try {
+        const text = event.data.text();
+        if (text) body = text;
+      } catch (err) {}
     }
-  } catch (e) {
-    if (event.data) data.body = event.data.text();
   }
 
   const options = {
-    body: data.body,
+    body: body,
     icon: './icon-192.png',
     badge: './icon-192.png',
     vibrate: [300, 100, 300, 100, 600],
     tag: 'heartbeat-pulse',
     renotify: true,
-    data: { url: './#pulse' }
+    requireInteraction: true,
+    data: { url: clickUrl }
   };
 
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  event.waitUntil(self.registration.showNotification(title, options));
 });
