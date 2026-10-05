@@ -2507,6 +2507,25 @@ body {
   margin: 2px 0 0;
 }
 
+.radar-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(76, 175, 80, 0.16);
+  border: 1px solid rgba(76, 175, 80, 0.45);
+  color: #81c784;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  animation: livePillGlow 2.4s infinite ease-in-out;
+}
+
+@keyframes livePillGlow {
+  0%, 100% { box-shadow: 0 0 4px rgba(76, 175, 80, 0.2); }
+  50% { box-shadow: 0 0 12px rgba(76, 175, 80, 0.55); }
+}
+
 .radar-refresh-btn {
   background: linear-gradient(135deg, #ff4b6e, #ff2a6d);
   color: #fff;

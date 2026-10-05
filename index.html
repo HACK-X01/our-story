@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=31">
+  <link rel="stylesheet" href="styles.css?v=32">
 </head>
 <body>
 
@@ -510,7 +510,10 @@
               <div class="radar-title-wrap">
                 <span class="radar-icon-badge">📍</span>
                 <div>
-                  <h4 class="radar-title">Live Distance & Radar</h4>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <h4 class="radar-title">Live Distance & Radar</h4>
+                    <span class="radar-live-badge" id="radarLivePill" title="Live 5s GPS tracking active">🟢 Live 5s</span>
+                  </div>
                   <p class="radar-subtitle">Exact distance & live GPS between Himanshu & Gullu</p>
                 </div>
               </div>
@@ -583,10 +586,10 @@
               <button class="radar-nav-btn" id="radarDirectionsBtn" disabled>
                 🚗 Directions to Partner in Google Maps
               </button>
-              <label class="radar-auto-sync-toggle" title="Automatically refresh location every 2 minutes while app is open">
-                <input type="checkbox" id="radarAutoSyncToggle">
+              <label class="radar-auto-sync-toggle" title="Har 5 second me automatic live GPS update">
+                <input type="checkbox" id="radarAutoSyncToggle" checked>
                 <span class="toggle-slider"></span>
-                <span class="toggle-label">Auto-sync (2m)</span>
+                <span class="toggle-label" id="radarAutoSyncLabel">🟢 Live (5s)</span>
               </label>
             </div>
           </div>
@@ -1140,6 +1143,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=31"></script>
+  <script src="script.js?v=32"></script>
 </body>
 </html>

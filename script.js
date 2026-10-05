@@ -228,7 +228,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.9.4';
+const CURRENT_APP_VERSION = '1.9.5';
 
 const NOTIFICATION_DEDUPE_KEY = 'our_story_shown_notification_ids';
 
@@ -810,7 +810,7 @@ function initFirebaseRestSync(dbUrl) {
         updateCoupleLocationsUI();
       })
       .catch(() => {});
-  }, 6000);
+  }, 4000);
 }
 
 function syncToFirebase(type, data) {
@@ -2366,6 +2366,7 @@ function handleLoginSubmit() {
     if (Notification.permission === 'granted') {
       registerClosedAppPushSubscription();
     }
+    try { startAutoLocationSync(); } catch (e) {}
 
     // Sweet non-blocking welcome toast
     showPartnerMoodToast({
@@ -3565,6 +3566,15 @@ let markerH = null;
 let markerG = null;
 let connectionLine = null;
 let autoLocationSyncTimer = null;
+let autoLocationWatchId = null;
+let lastGeocodedLat = null;
+let lastGeocodedLng = null;
+let lastGeocodedAddress = null;
+let lastGeocodedTimestamp = 0;
+let isLocationSyncInProgress = false;
+let lastBoundPosH = null;
+let lastBoundPosG = null;
+let lastLiveWatchTimestamp = 0;
 
 // Haversine Great-Circle Distance Calculation Formula
 function calculateDistanceKm(lat1, lon1, lat2, lon2) {
@@ -3746,9 +3756,18 @@ function updateCoupleLocationsUI() {
         connectionLine.setLatLngs([posH, posG]);
       }
 
-      try {
-        coupleMap.fitBounds(L.latLngBounds([posH, posG]), { padding: [50, 50], maxZoom: 15 });
-      } catch (e) {}
+      if (!window.__mapBoundsInitialized ||
+          !lastBoundPosH ||
+          calculateDistanceKm(lastBoundPosH[0], lastBoundPosH[1], posH[0], posH[1]) > 0.08 ||
+          !lastBoundPosG ||
+          calculateDistanceKm(lastBoundPosG[0], lastBoundPosG[1], posG[0], posG[1]) > 0.08) {
+        try {
+          coupleMap.fitBounds(L.latLngBounds([posH, posG]), { padding: [50, 50], maxZoom: 15 });
+          window.__mapBoundsInitialized = true;
+          lastBoundPosH = posH;
+          lastBoundPosG = posG;
+        } catch (e) {}
+      }
     }
   } else if (hLoc || gLoc) {
     if (deviceNotice) deviceNotice.classList.add('is-hidden');
@@ -3802,6 +3821,86 @@ function updateCoupleLocationsUI() {
   }
 }
 
+async function processAndBroadcastLocation(position, activeUser, silent) {
+  if (!position || !position.coords) return;
+  const lat = position.coords.latitude;
+  const lng = position.coords.longitude;
+  const accuracy = Math.round(position.coords.accuracy || 10);
+
+  let prettyAddress = `${lat.toFixed(3)}° N, ${lng.toFixed(3)}° E`;
+
+  // Smart Reverse Geocode Cache (Avoids Nominatim 429 rate limit when updating every 5s)
+  const now = Date.now();
+  const movedKm = (lastGeocodedLat && lastGeocodedLng)
+    ? calculateDistanceKm(lastGeocodedLat, lastGeocodedLng, lat, lng)
+    : 999;
+
+  const shouldGeocode = !lastGeocodedAddress || movedKm > 0.05 || (now - lastGeocodedTimestamp > 300000);
+
+  if (!shouldGeocode && lastGeocodedAddress) {
+    prettyAddress = lastGeocodedAddress;
+  } else {
+    try {
+      const geoRes = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`,
+        { headers: { 'Accept': 'application/json' } }
+      );
+      if (geoRes.ok) {
+        const geoData = await geoRes.json();
+        if (geoData && geoData.address) {
+          const a = geoData.address;
+          const primaryArea = a.neighbourhood || a.suburb || a.city_district || a.road || a.commercial || a.residential;
+          const city = a.city || a.town || a.county || a.state_district || a.state;
+          if (primaryArea && city) {
+            prettyAddress = `${primaryArea}, ${city}`;
+          } else if (city) {
+            prettyAddress = city;
+          } else if (geoData.display_name) {
+            prettyAddress = geoData.display_name.split(',').slice(0, 2).join(',').trim();
+          }
+          lastGeocodedAddress = prettyAddress;
+          lastGeocodedLat = lat;
+          lastGeocodedLng = lng;
+          lastGeocodedTimestamp = now;
+        }
+      }
+    } catch (err) {
+      if (lastGeocodedAddress) prettyAddress = lastGeocodedAddress;
+    }
+  }
+
+  const locPayload = {
+    lat,
+    lng,
+    accuracy,
+    address: prettyAddress,
+    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    timestamp: Date.now(),
+    user: activeUser,
+    deviceId: myDeviceId,
+    deviceType: /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'phone' : 'pc',
+    silent: !!silent
+  };
+
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.locations) appState.locations = {};
+  appState.locations[activeUser] = locPayload;
+  saveAppState(appState);
+  updateCoupleLocationsUI();
+
+  // Realtime Cloud Broadcast across Firebase RTDB & MQTT
+  broadcastUpdate('LOCATION_UPDATE', locPayload, true);
+
+  if (!silent) {
+    playCelebrationChime();
+    if (navigator.vibrate) navigator.vibrate([100, 50, 150]);
+    showAppModal(
+      '📍 Location Shared!',
+      `Aapki exact location (${prettyAddress}) partner ke saath share ho gayi hai!`
+    );
+  }
+}
+
 async function shareMyLocation(silent = false) {
   if (!navigator.geolocation) {
     if (!silent) showAppModal('ℹ️ GPS Not Supported', 'Aapka browser geolocation support nahi karta.');
@@ -3814,82 +3913,27 @@ async function shareMyLocation(silent = false) {
     return;
   }
 
+  if (isLocationSyncInProgress) return;
+
   const btn = document.getElementById('radarUpdateMyLocBtn');
   if (btn && !silent) {
     btn.classList.add('loading');
     btn.innerHTML = `<span class="refresh-btn-icon">⏳</span> Locating...`;
   }
 
+  isLocationSyncInProgress = true;
+
   navigator.geolocation.getCurrentPosition(
     async (position) => {
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-      const accuracy = Math.round(position.coords.accuracy);
-
-      let prettyAddress = `${lat.toFixed(3)}° N, ${lng.toFixed(3)}° E`;
-
-      // Reverse geocode via OpenStreetMap Nominatim
-      try {
-        const geoRes = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`,
-          { headers: { 'Accept': 'application/json' } }
-        );
-        if (geoRes.ok) {
-          const geoData = await geoRes.json();
-          if (geoData && geoData.address) {
-            const a = geoData.address;
-            const primaryArea = a.neighbourhood || a.suburb || a.city_district || a.road || a.commercial || a.residential;
-            const city = a.city || a.town || a.county || a.state_district || a.state;
-            if (primaryArea && city) {
-              prettyAddress = `${primaryArea}, ${city}`;
-            } else if (city) {
-              prettyAddress = city;
-            } else if (geoData.display_name) {
-              prettyAddress = geoData.display_name.split(',').slice(0, 2).join(',').trim();
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Reverse geocode warning:', err);
-      }
-
-      const locPayload = {
-        lat,
-        lng,
-        accuracy,
-        address: prettyAddress,
-        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-        timestamp: Date.now(),
-        user: activeUser,
-        deviceId: myDeviceId,
-        deviceType: /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'phone' : 'pc',
-        silent: !!silent
-      };
-
-      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-      if (!appState.locations) appState.locations = {};
-      appState.locations[activeUser] = locPayload;
-      saveAppState(appState);
-      updateCoupleLocationsUI();
-
-      // Realtime Cloud Broadcast across Firebase RTDB & MQTT
-      broadcastUpdate('LOCATION_UPDATE', locPayload, true);
-
+      isLocationSyncInProgress = false;
+      await processAndBroadcastLocation(position, activeUser, silent);
       if (btn && !silent) {
         btn.classList.remove('loading');
         btn.innerHTML = `<span class="refresh-btn-icon">🎯</span> Update Location`;
       }
-
-      if (!silent) {
-        playCelebrationChime();
-        if (navigator.vibrate) navigator.vibrate([100, 50, 150]);
-        showAppModal(
-          '📍 Location Shared!',
-          `Aapki exact location (${prettyAddress}) partner ke saath share ho gayi hai!`
-        );
-      }
     },
     (error) => {
+      isLocationSyncInProgress = false;
       console.warn('Geolocation error:', error);
       if (btn && !silent) {
         btn.classList.remove('loading');
@@ -3904,10 +3948,74 @@ async function shareMyLocation(silent = false) {
     },
     {
       enableHighAccuracy: true,
-      timeout: 12000,
-      maximumAge: 10000
+      timeout: 6000,
+      maximumAge: 4000
     }
   );
+}
+
+function handleLiveGpsPosition(position) {
+  const activeUser = currentUser || getAuthenticatedUser();
+  if (!activeUser) return;
+  const now = Date.now();
+  if (now - lastLiveWatchTimestamp < 4000) return;
+  lastLiveWatchTimestamp = now;
+  processAndBroadcastLocation(position, activeUser, true);
+}
+
+function startAutoLocationSync() {
+  const activeUser = currentUser || getAuthenticatedUser();
+  if (!activeUser) return;
+
+  const toggle = document.getElementById('radarAutoSyncToggle');
+  if (toggle) toggle.checked = true;
+
+  const label = document.getElementById('radarAutoSyncLabel');
+  if (label) label.innerHTML = '🟢 Live (5s)';
+
+  // Run immediate update
+  shareMyLocation(true);
+
+  if (autoLocationSyncTimer) {
+    clearInterval(autoLocationSyncTimer);
+    autoLocationSyncTimer = null;
+  }
+
+  // 5-second interval timer
+  autoLocationSyncTimer = setInterval(() => {
+    if (currentUser && document.visibilityState === 'visible') {
+      shareMyLocation(true);
+    }
+  }, 5000);
+
+  // OS-level continuous watchPosition
+  if (navigator.geolocation && navigator.geolocation.watchPosition && autoLocationWatchId === null) {
+    try {
+      autoLocationWatchId = navigator.geolocation.watchPosition(
+        handleLiveGpsPosition,
+        (err) => console.warn('watchPosition warning:', err),
+        { enableHighAccuracy: true, maximumAge: 4000, timeout: 6000 }
+      );
+    } catch (e) {
+      console.warn('watchPosition setup failed:', e);
+    }
+  }
+}
+
+function stopAutoLocationSync() {
+  if (autoLocationSyncTimer) {
+    clearInterval(autoLocationSyncTimer);
+    autoLocationSyncTimer = null;
+  }
+  if (autoLocationWatchId !== null && navigator.geolocation) {
+    try { navigator.geolocation.clearWatch(autoLocationWatchId); } catch (e) {}
+    autoLocationWatchId = null;
+  }
+  const toggle = document.getElementById('radarAutoSyncToggle');
+  if (toggle) toggle.checked = false;
+
+  const label = document.getElementById('radarAutoSyncLabel');
+  if (label) label.innerHTML = '⏸️ Paused';
 }
 
 async function clearUserLocation(userToClear, notify = true) {
@@ -4129,17 +4237,18 @@ function setupCoupleRadar() {
   if (autoSyncToggle) {
     autoSyncToggle.addEventListener('change', (e) => {
       if (e.target.checked) {
-        shareMyLocation(true);
-        autoLocationSyncTimer = setInterval(() => {
-          if (document.visibilityState === 'visible') {
-            shareMyLocation(true);
-          }
-        }, 120000); // 2 minutes
+        startAutoLocationSync();
       } else {
-        clearInterval(autoLocationSyncTimer);
-        autoLocationSyncTimer = null;
+        stopAutoLocationSync();
       }
     });
+  }
+
+  // Auto-start live 5s GPS sync if user is authenticated
+  if (currentUser) {
+    setTimeout(() => {
+      startAutoLocationSync();
+    }, 1000);
   }
 
   // Initialize map when container is visible
