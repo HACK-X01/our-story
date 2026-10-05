@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=23">
+  <link rel="stylesheet" href="styles.css?v=24">
 </head>
 <body>
 
@@ -47,6 +47,9 @@
           </button>
           <button class="notif-bell-btn" id="notifBellBtn" title="Enable Mobile Heartbeat Notifications">
             <span id="notifBellIcon">🔔</span>
+          </button>
+          <button class="header-vc-btn" id="headerVcBtn" title="Private Video Call with Partner">
+            <span class="vc-icon">📹</span>
           </button>
           <button class="firebase-status-pill" id="firebaseStatusPill" title="Firebase Cloud Database Connection">
             <span class="fb-pill-icon">🔥</span> <span id="fbPillText">Cloud DB</span>
@@ -581,6 +584,9 @@
               <p class="chat-partner-sub" id="chatPartnerSub">Live Cloud Synced • Himanshu & Gullu Only</p>
             </div>
             <div class="chat-header-actions">
+              <button class="chat-vc-btn" id="chatStartVcBtn" title="Start Private Video Call">
+                📹 Call
+              </button>
               <button class="chat-love-burst-btn" id="chatLoveBurstBtn" title="Send Love Burst">
                 💖 Burst
               </button>
@@ -848,6 +854,125 @@
     </div>
   </div>
 
+  <!-- ============================================================
+       PRIVATE COUPLE VIDEO CALL (VC) MODAL
+       ============================================================ -->
+  <div class="modal-overlay is-hidden" id="videoCallModal">
+    <div class="vc-modal-card">
+
+      <!-- 1. OUTGOING CALL SCREEN (Calling partner...) -->
+      <div class="vc-sub-screen is-hidden" id="vcOutgoingScreen">
+        <div class="vc-pulse-avatar-wrap">
+          <div class="vc-avatar-ring ring-1"></div>
+          <div class="vc-avatar-ring ring-2"></div>
+          <div class="vc-avatar-ring ring-3"></div>
+          <span class="vc-calling-avatar" id="vcOutgoingPartnerAvatar">🌸</span>
+        </div>
+        <h3 class="vc-calling-name" id="vcOutgoingPartnerName">Calling Gullu...</h3>
+        <p class="vc-calling-status" id="vcOutgoingStatusText">Ringing partner's phone... 🔔</p>
+        <span class="vc-encrypted-pill">🔒 Private P2P End-to-End Encrypted</span>
+
+        <div class="vc-call-actions-row">
+          <button class="vc-round-btn end-call" id="vcCancelCallBtn" title="Cancel Call">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. INCOMING CALL SCREEN (Partner is calling!) -->
+      <div class="vc-sub-screen is-hidden" id="vcIncomingScreen">
+        <div class="vc-pulse-avatar-wrap incoming">
+          <div class="vc-avatar-ring ring-1"></div>
+          <div class="vc-avatar-ring ring-2"></div>
+          <div class="vc-avatar-ring ring-3"></div>
+          <span class="vc-calling-avatar" id="vcIncomingPartnerAvatar">☕</span>
+        </div>
+        <span class="vc-incoming-tag">INCOMING VIDEO CALL 📹</span>
+        <h3 class="vc-calling-name" id="vcIncomingPartnerName">Himanshu is calling!</h3>
+        <p class="vc-calling-status">Feel the warmth... Video call with your love ❤️</p>
+
+        <div class="vc-incoming-actions-row">
+          <button class="vc-answer-btn" id="vcAcceptCallBtn">
+            <span class="btn-icon">📞</span>
+            <span class="btn-text">Accept</span>
+          </button>
+          <button class="vc-decline-btn" id="vcDeclineCallBtn">
+            <span class="btn-icon">✕</span>
+            <span class="btn-text">Decline</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 3. ACTIVE LIVE VIDEO CALL SCREEN -->
+      <div class="vc-sub-screen is-hidden" id="vcActiveScreen">
+        <div class="vc-video-viewport">
+          <!-- Remote Partner Video (Main View) -->
+          <video class="vc-remote-video" id="remoteVideo" autoplay playsinline></video>
+
+          <!-- Remote Video Loading / Waiting placeholder -->
+          <div class="vc-remote-placeholder" id="remoteVideoPlaceholder">
+            <span class="vc-placeholder-avatar" id="vcActivePartnerAvatar">🌸</span>
+            <p id="vcConnectionStatus">Connecting crystal clear video stream... ⚡</p>
+          </div>
+
+          <!-- Local Own Camera (Floating PiP) -->
+          <div class="vc-local-pip" id="vcLocalPip">
+            <video class="vc-local-video" id="localVideo" autoplay playsinline muted></video>
+            <span class="vc-pip-label">You</span>
+          </div>
+
+          <!-- Top Overlay Bar -->
+          <div class="vc-top-bar">
+            <div class="vc-partner-chip">
+              <span class="vc-chip-avatar" id="vcTopBarAvatar">🌸</span>
+              <span class="vc-chip-name" id="vcTopBarName">Gullu</span>
+            </div>
+            <div class="vc-duration-badge" id="vcDurationBadge">
+              <span class="rec-dot"></span> <span id="vcCallTimerText">00:00</span>
+            </div>
+            <button class="vc-mini-btn" id="vcSwitchFacingBtn" title="Flip Camera">
+              🔄
+            </button>
+          </div>
+
+          <!-- Floating Love Burst Hearts Canvas/Area inside video -->
+          <div class="vc-hearts-overlay" id="vcHeartsOverlay"></div>
+
+          <!-- Bottom Floating Controls Bar -->
+          <div class="vc-controls-dock">
+            <button class="vc-ctrl-btn" id="vcToggleMicBtn" title="Mute/Unmute Mic">
+              <span class="ctrl-icon" id="vcMicIcon">🎙️</span>
+            </button>
+            <button class="vc-ctrl-btn" id="vcToggleCamBtn" title="Camera On/Off">
+              <span class="ctrl-icon" id="vcCamIcon">📷</span>
+            </button>
+            <button class="vc-ctrl-btn heart" id="vcSendHeartBtn" title="Send Love Tap">
+              <span class="ctrl-icon">💖</span>
+            </button>
+            <button class="vc-ctrl-btn fallback" id="vcJitsiFallbackBtn" title="Direct Network Backup Room">
+              <span class="ctrl-icon">🌐</span>
+            </button>
+            <button class="vc-ctrl-btn end-call" id="vcEndActiveCallBtn" title="End Call">
+              <span class="ctrl-icon">🔴</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. PRIVATE BACKUP JITSI ROOM (100% Reliable Fallback) -->
+      <div class="vc-sub-screen is-hidden" id="vcFallbackScreen">
+        <div class="vc-fallback-header">
+          <h4>🌐 Backup Private Couple Room</h4>
+          <button class="modal-dismiss" id="vcCloseFallbackBtn">✕</button>
+        </div>
+        <div class="vc-iframe-container" id="vcIframeContainer">
+          <!-- Embedded on demand -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" loop></audio>
 
@@ -857,6 +982,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=23"></script>
+  <script src="script.js?v=24"></script>
 </body>
 </html>

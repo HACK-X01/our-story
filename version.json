@@ -1,5 +1,5 @@
 {
-  "version": "1.7.2",
-  "buildTime": 1791150000000,
-  "notes": "Remove intrusive partner location update modal pop-ups and make location syncing completely silent"
+  "version": "1.8.0",
+  "buildTime": 1791160000000,
+  "notes": "Add private couple WebRTC video call (VC) with romantic P2P stream, audio ringers, camera flip, and fallback room"
 }

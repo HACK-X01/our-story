@@ -203,7 +203,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.7.2';
+const CURRENT_APP_VERSION = '1.8.0';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -565,6 +565,14 @@ function setupFirebaseRealtimeListeners() {
       handleIncomingChatMessage(msg, false);
     }
   });
+
+  // 6. Realtime WebRTC Private Video Call Signaling
+  firebaseDb.ref('our_story/webrtc_call/callMeta').on('value', (snapshot) => {
+    const callMeta = snapshot.val();
+    if (callMeta) {
+      handleIncomingVCSignal(callMeta);
+    }
+  });
 }
 
 function syncInitialStateFromFirebase() {
@@ -687,6 +695,8 @@ function syncToFirebase(type, data) {
         firebaseDb.ref('our_story/memories').set(appState.memories);
       } else if (type === 'CHAT_MESSAGE') {
         firebaseDb.ref('our_story/chat_messages/' + data.id).set(data);
+      } else if (type === 'VC_SIGNAL' || type === 'VC_CALL') {
+        firebaseDb.ref('our_story/webrtc_call/callMeta').set(data);
       }
       return;
     } catch (e) {
@@ -735,6 +745,10 @@ function syncToFirebase(type, data) {
       body = appState.memories;
     } else if (type === 'CHAT_MESSAGE') {
       endpoint += `/chat_messages/${data.id}.json`;
+      method = 'PUT';
+      body = data;
+    } else if (type === 'VC_SIGNAL' || type === 'VC_CALL') {
+      endpoint += `/webrtc_call/callMeta.json`;
       method = 'PUT';
       body = data;
     }
@@ -1029,6 +1043,14 @@ function broadcastUpdate(type, data, retain = true) {
         tags: ['speech_balloon', 'love_letter'],
         priority: 5
       });
+    } else if (type === 'VC_CALL') {
+      sendClosedAppPushNotification(partnerUser, {
+        title: `📹 Video Call from ${myName}!`,
+        message: `${myName} is calling you for a private video call... Tap to answer! ❤️`,
+        click: getAppNavUrl('#vc'),
+        tags: ['video_camera', 'phone'],
+        priority: 5
+      });
     }
   } catch (err) {
     console.warn('Closed-app push notification trigger failed:', err);
@@ -1057,6 +1079,10 @@ function handleIncomingSyncMessage(payload) {
     handleIncomingLocation(payload.data);
   } else if (payload.type === 'CHAT_MESSAGE') {
     handleIncomingChatMessage(payload.data, true);
+  } else if (payload.type === 'VC_SIGNAL' || payload.type === 'VC_CALL') {
+    handleIncomingVCSignal(payload.data);
+  } else if (payload.type === 'VC_HEART') {
+    handleIncomingVCHeart(payload.data);
   }
 }
 
@@ -1991,6 +2017,12 @@ function setupTabNavigation() {
     else if (rawHash === 'paneqa' || rawHash === 'qa') switchTab('paneQA');
     else if (rawHash === 'panecoupons' || rawHash === 'coupons') switchTab('paneCoupons');
     else if (rawHash === 'panechat' || rawHash === 'chat') switchTab('paneChat');
+    else if (rawHash === 'vc' || rawHash === 'call') {
+      const modal = document.getElementById('videoCallModal');
+      if (modal && vcState && (vcState.status === 'incoming' || vcState.status === 'active')) {
+        modal.classList.remove('is-hidden');
+      }
+    }
   }
 
   window.addEventListener('hashchange', handleHashNavigation);
@@ -3979,6 +4011,764 @@ function sendSystemNotificationForChat(msg) {
   }
 }
 
+// ==========================================================================
+// PRIVATE COUPLE VIDEO CALL (VC) ENGINE - WebRTC P2P + Dual Cloud Signaling
+// ==========================================================================
+
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' }
+  ]
+};
+
+let vcState = {
+  callId: null,
+  role: null, // 'caller' | 'callee'
+  status: 'idle', // 'idle' | 'outgoing' | 'incoming' | 'active'
+  localStream: null,
+  remoteStream: null,
+  peerConnection: null,
+  facingMode: 'user', // 'user' (front) or 'environment' (back)
+  isMicMuted: false,
+  isCamMuted: false,
+  timerInterval: null,
+  callDurationSeconds: 0,
+  outgoingRingtoneInterval: null,
+  incomingRingtoneInterval: null,
+  pendingOffer: null
+};
+
+function showVcToast(msg) {
+  let toast = document.getElementById('vcStatusToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'vcStatusToast';
+    toast.style.cssText = `
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(16, 7, 26, 0.94);
+      border: 1px solid rgba(245, 195, 102, 0.5);
+      color: #fff;
+      padding: 10px 22px;
+      border-radius: 30px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(16px);
+      z-index: 10000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      white-space: nowrap;
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  toast.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(-10px)';
+  }, 3200);
+}
+
+function startOutgoingRingtone() {
+  stopOutgoingRingtone();
+  const playOutgoingChime = () => {
+    playTone(440, 0.8, 'sine', 0.12);
+    setTimeout(() => playTone(480, 0.8, 'sine', 0.12), 40);
+  };
+  playOutgoingChime();
+  vcState.outgoingRingtoneInterval = setInterval(playOutgoingChime, 2800);
+}
+
+function stopOutgoingRingtone() {
+  if (vcState.outgoingRingtoneInterval) {
+    clearInterval(vcState.outgoingRingtoneInterval);
+    vcState.outgoingRingtoneInterval = null;
+  }
+}
+
+function startIncomingRingtone() {
+  stopIncomingRingtone();
+  const playRomanticChime = () => {
+    playTone(523.25, 0.35, 'sine', 0.2);
+    setTimeout(() => playTone(659.25, 0.35, 'sine', 0.2), 220);
+    setTimeout(() => playTone(783.99, 0.35, 'sine', 0.2), 440);
+    setTimeout(() => playTone(1046.50, 0.55, 'sine', 0.25), 660);
+    if (navigator.vibrate) {
+      try { navigator.vibrate([250, 150, 250, 150, 400]); } catch (e) {}
+    }
+  };
+  playRomanticChime();
+  vcState.incomingRingtoneInterval = setInterval(playRomanticChime, 2500);
+}
+
+function stopIncomingRingtone() {
+  if (vcState.incomingRingtoneInterval) {
+    clearInterval(vcState.incomingRingtoneInterval);
+    vcState.incomingRingtoneInterval = null;
+  }
+}
+
+async function startVideoCall() {
+  const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+  const partnerName = partnerUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+  const partnerAvatar = partnerUser === 'himanshu' ? '☕' : '🌸';
+
+  // Request Camera & Microphone
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: vcState.facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: true
+    });
+  } catch (err) {
+    console.warn('getUserMedia failed with video+audio, trying audio only:', err);
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e2) {
+      showVcToast('⚠️ Camera permission blocked. Opening Backup Couple Room!');
+      openJitsiFallbackRoom();
+      return;
+    }
+  }
+
+  vcState.localStream = stream;
+  vcState.role = 'caller';
+  vcState.callId = 'call_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+  vcState.status = 'outgoing';
+
+  // Attach local stream to PiP
+  const localVideo = document.getElementById('localVideo');
+  if (localVideo) {
+    localVideo.srcObject = stream;
+    localVideo.play().catch(() => {});
+  }
+
+  // Set screens
+  const modal = document.getElementById('videoCallModal');
+  const outgoingScreen = document.getElementById('vcOutgoingScreen');
+  const incomingScreen = document.getElementById('vcIncomingScreen');
+  const activeScreen = document.getElementById('vcActiveScreen');
+  const fallbackScreen = document.getElementById('vcFallbackScreen');
+
+  const outAvatar = document.getElementById('vcOutgoingPartnerAvatar');
+  const outName = document.getElementById('vcOutgoingPartnerName');
+  const outStatus = document.getElementById('vcOutgoingStatusText');
+
+  if (outAvatar) outAvatar.textContent = partnerAvatar;
+  if (outName) outName.textContent = `Calling ${partnerName}...`;
+  if (outStatus) outStatus.textContent = `Ringing partner's phone... 🔔`;
+
+  const topAvatar = document.getElementById('vcTopBarAvatar');
+  const topName = document.getElementById('vcTopBarName');
+  const placeholderAvatar = document.getElementById('vcActivePartnerAvatar');
+  if (topAvatar) topAvatar.textContent = partnerAvatar;
+  if (topName) topName.textContent = partnerName;
+  if (placeholderAvatar) placeholderAvatar.textContent = partnerAvatar;
+
+  if (outgoingScreen) outgoingScreen.classList.remove('is-hidden');
+  if (incomingScreen) incomingScreen.classList.add('is-hidden');
+  if (activeScreen) activeScreen.classList.add('is-hidden');
+  if (fallbackScreen) fallbackScreen.classList.add('is-hidden');
+  if (modal) modal.classList.remove('is-hidden');
+
+  startOutgoingRingtone();
+
+  // Create WebRTC Peer Connection
+  const pc = new RTCPeerConnection(RTC_CONFIG);
+  vcState.peerConnection = pc;
+
+  stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+  pc.ontrack = (event) => {
+    const remoteVideo = document.getElementById('remoteVideo');
+    const placeholder = document.getElementById('remoteVideoPlaceholder');
+    if (remoteVideo && event.streams && event.streams[0]) {
+      vcState.remoteStream = event.streams[0];
+      remoteVideo.srcObject = event.streams[0];
+      remoteVideo.play().catch(() => {});
+      if (placeholder) placeholder.style.display = 'none';
+    }
+  };
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate && firebaseDb) {
+      firebaseDb.ref('our_story/webrtc_call/callerCandidates').push(event.candidate.toJSON());
+    }
+  };
+
+  try {
+    const offer = await pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true
+    });
+    await pc.setLocalDescription(offer);
+
+    // Clear candidates and write offer
+    if (firebaseDb) {
+      firebaseDb.ref('our_story/webrtc_call/callerCandidates').set(null);
+      firebaseDb.ref('our_story/webrtc_call/calleeCandidates').set(null);
+      firebaseDb.ref('our_story/webrtc_call/callMeta').set({
+        callId: vcState.callId,
+        from: currentUser,
+        to: partnerUser,
+        status: 'calling',
+        sdpOffer: JSON.stringify(offer),
+        timestamp: Date.now()
+      });
+    }
+
+    // Broadcast for MQTT & push notification
+    broadcastUpdate('VC_CALL', {
+      callId: vcState.callId,
+      from: currentUser,
+      to: partnerUser,
+      status: 'calling',
+      sdpOffer: JSON.stringify(offer),
+      timestamp: Date.now()
+    }, false);
+
+    // Listen for Callee candidates
+    if (firebaseDb) {
+      firebaseDb.ref('our_story/webrtc_call/calleeCandidates').on('child_added', (snapshot) => {
+        const candidateData = snapshot.val();
+        if (candidateData && vcState.peerConnection && vcState.peerConnection.remoteDescription) {
+          try {
+            vcState.peerConnection.addIceCandidate(new RTCIceCandidate(candidateData)).catch(() => {});
+          } catch (e) {}
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error starting video call:', err);
+    showVcToast('⚠️ Failed to initialize call. Opening Backup Room.');
+    openJitsiFallbackRoom();
+  }
+}
+
+function showIncomingCallScreen(callData) {
+  if (vcState.status === 'active' || vcState.status === 'outgoing') return;
+
+  const callerUser = callData.from;
+  const callerName = callerUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+  const callerAvatar = callerUser === 'himanshu' ? '☕' : '🌸';
+
+  vcState.callId = callData.callId;
+  vcState.role = 'callee';
+  vcState.status = 'incoming';
+  vcState.pendingOffer = callData.sdpOffer;
+
+  const modal = document.getElementById('videoCallModal');
+  const outgoingScreen = document.getElementById('vcOutgoingScreen');
+  const incomingScreen = document.getElementById('vcIncomingScreen');
+  const activeScreen = document.getElementById('vcActiveScreen');
+  const fallbackScreen = document.getElementById('vcFallbackScreen');
+
+  const inAvatar = document.getElementById('vcIncomingPartnerAvatar');
+  const inName = document.getElementById('vcIncomingPartnerName');
+
+  if (inAvatar) inAvatar.textContent = callerAvatar;
+  if (inName) inName.textContent = `${callerName} is calling!`;
+
+  const topAvatar = document.getElementById('vcTopBarAvatar');
+  const topName = document.getElementById('vcTopBarName');
+  const placeholderAvatar = document.getElementById('vcActivePartnerAvatar');
+  if (topAvatar) topAvatar.textContent = callerAvatar;
+  if (topName) topName.textContent = callerName;
+  if (placeholderAvatar) placeholderAvatar.textContent = callerAvatar;
+
+  if (outgoingScreen) outgoingScreen.classList.add('is-hidden');
+  if (incomingScreen) incomingScreen.classList.remove('is-hidden');
+  if (activeScreen) activeScreen.classList.add('is-hidden');
+  if (fallbackScreen) fallbackScreen.classList.add('is-hidden');
+  if (modal) modal.classList.remove('is-hidden');
+
+  startIncomingRingtone();
+  showVcToast(`📹 Incoming Call from ${callerName}! Tap Accept to connect ❤️`);
+}
+
+async function acceptIncomingCall() {
+  stopIncomingRingtone();
+
+  const callerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: vcState.facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: true
+    });
+  } catch (err) {
+    console.warn('getUserMedia failed with video+audio, trying audio only:', err);
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e2) {
+      showVcToast('⚠️ Camera permission blocked. Opening Backup Couple Room!');
+      openJitsiFallbackRoom();
+      return;
+    }
+  }
+
+  vcState.localStream = stream;
+  vcState.status = 'active';
+
+  const localVideo = document.getElementById('localVideo');
+  if (localVideo) {
+    localVideo.srcObject = stream;
+    localVideo.play().catch(() => {});
+  }
+
+  switchToActiveCallScreen();
+
+  const pc = new RTCPeerConnection(RTC_CONFIG);
+  vcState.peerConnection = pc;
+
+  stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+  pc.ontrack = (event) => {
+    const remoteVideo = document.getElementById('remoteVideo');
+    const placeholder = document.getElementById('remoteVideoPlaceholder');
+    if (remoteVideo && event.streams && event.streams[0]) {
+      vcState.remoteStream = event.streams[0];
+      remoteVideo.srcObject = event.streams[0];
+      remoteVideo.play().catch(() => {});
+      if (placeholder) placeholder.style.display = 'none';
+    }
+  };
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate && firebaseDb) {
+      firebaseDb.ref('our_story/webrtc_call/calleeCandidates').push(event.candidate.toJSON());
+    }
+  };
+
+  try {
+    const offerObj = JSON.parse(vcState.pendingOffer);
+    await pc.setRemoteDescription(new RTCSessionDescription(offerObj));
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    if (firebaseDb) {
+      firebaseDb.ref('our_story/webrtc_call/callMeta').update({
+        status: 'accepted',
+        sdpAnswer: JSON.stringify(answer)
+      });
+    }
+
+    broadcastUpdate('VC_SIGNAL', {
+      callId: vcState.callId,
+      status: 'accepted',
+      sdpAnswer: JSON.stringify(answer),
+      from: currentUser,
+      to: callerUser
+    }, false);
+
+    if (firebaseDb) {
+      firebaseDb.ref('our_story/webrtc_call/callerCandidates').on('child_added', (snapshot) => {
+        const candidateData = snapshot.val();
+        if (candidateData && vcState.peerConnection && vcState.peerConnection.remoteDescription) {
+          try {
+            vcState.peerConnection.addIceCandidate(new RTCIceCandidate(candidateData)).catch(() => {});
+          } catch (e) {}
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error answering call:', err);
+    showVcToast('⚠️ Handshake failed. Opening Backup Room.');
+    openJitsiFallbackRoom();
+  }
+}
+
+async function handleCallAcceptedByPartner(callData) {
+  if (vcState.status !== 'outgoing') return;
+  stopOutgoingRingtone();
+
+  vcState.status = 'active';
+  switchToActiveCallScreen();
+
+  if (callData.sdpAnswer && vcState.peerConnection) {
+    try {
+      const answerObj = JSON.parse(callData.sdpAnswer);
+      await vcState.peerConnection.setRemoteDescription(new RTCSessionDescription(answerObj));
+    } catch (err) {
+      console.error('Error applying remote SDP answer:', err);
+    }
+  }
+}
+
+function switchToActiveCallScreen() {
+  const modal = document.getElementById('videoCallModal');
+  const outgoingScreen = document.getElementById('vcOutgoingScreen');
+  const incomingScreen = document.getElementById('vcIncomingScreen');
+  const activeScreen = document.getElementById('vcActiveScreen');
+  const fallbackScreen = document.getElementById('vcFallbackScreen');
+
+  if (outgoingScreen) outgoingScreen.classList.add('is-hidden');
+  if (incomingScreen) incomingScreen.classList.add('is-hidden');
+  if (activeScreen) activeScreen.classList.remove('is-hidden');
+  if (fallbackScreen) fallbackScreen.classList.add('is-hidden');
+  if (modal) modal.classList.remove('is-hidden');
+
+  startCallDurationTimer();
+}
+
+function startCallDurationTimer() {
+  stopCallDurationTimer();
+  vcState.callDurationSeconds = 0;
+  const timerText = document.getElementById('vcCallTimerText');
+  if (timerText) timerText.textContent = '00:00';
+
+  vcState.timerInterval = setInterval(() => {
+    vcState.callDurationSeconds++;
+    const mins = Math.floor(vcState.callDurationSeconds / 60);
+    const secs = vcState.callDurationSeconds % 60;
+    const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    if (timerText) timerText.textContent = formatted;
+  }, 1000);
+}
+
+function stopCallDurationTimer() {
+  if (vcState.timerInterval) {
+    clearInterval(vcState.timerInterval);
+    vcState.timerInterval = null;
+  }
+}
+
+function endVideoCall(reason = 'Call ended ❤️') {
+  stopOutgoingRingtone();
+  stopIncomingRingtone();
+  stopCallDurationTimer();
+
+  const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+
+  if (vcState.callId) {
+    if (firebaseDb) {
+      firebaseDb.ref('our_story/webrtc_call/callMeta').update({
+        status: 'ended',
+        endedBy: currentUser
+      });
+    }
+    broadcastUpdate('VC_SIGNAL', {
+      callId: vcState.callId,
+      status: 'ended',
+      from: currentUser,
+      to: partnerUser
+    }, false);
+  }
+
+  cleanupCallState();
+  showVcToast(reason);
+}
+
+function declineIncomingCall() {
+  stopIncomingRingtone();
+  const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+
+  if (vcState.callId) {
+    if (firebaseDb) {
+      firebaseDb.ref('our_story/webrtc_call/callMeta').update({
+        status: 'declined',
+        declinedBy: currentUser
+      });
+    }
+    broadcastUpdate('VC_SIGNAL', {
+      callId: vcState.callId,
+      status: 'declined',
+      from: currentUser,
+      to: partnerUser
+    }, false);
+  }
+
+  cleanupCallState();
+  showVcToast('Call declined.');
+}
+
+function cleanupCallState() {
+  stopOutgoingRingtone();
+  stopIncomingRingtone();
+  stopCallDurationTimer();
+
+  if (vcState.localStream) {
+    try {
+      vcState.localStream.getTracks().forEach(track => track.stop());
+    } catch (e) {}
+    vcState.localStream = null;
+  }
+
+  if (vcState.peerConnection) {
+    try {
+      vcState.peerConnection.close();
+    } catch (e) {}
+    vcState.peerConnection = null;
+  }
+
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
+  const placeholder = document.getElementById('remoteVideoPlaceholder');
+  const iframeContainer = document.getElementById('vcIframeContainer');
+
+  if (localVideo) localVideo.srcObject = null;
+  if (remoteVideo) remoteVideo.srcObject = null;
+  if (placeholder) placeholder.style.display = 'flex';
+  if (iframeContainer) iframeContainer.innerHTML = '';
+
+  const modal = document.getElementById('videoCallModal');
+  if (modal) modal.classList.add('is-hidden');
+
+  vcState.callId = null;
+  vcState.role = null;
+  vcState.status = 'idle';
+  vcState.pendingOffer = null;
+  vcState.isMicMuted = false;
+  vcState.isCamMuted = false;
+
+  const micBtn = document.getElementById('vcToggleMicBtn');
+  const camBtn = document.getElementById('vcToggleCamBtn');
+  const micIcon = document.getElementById('vcMicIcon');
+  const camIcon = document.getElementById('vcCamIcon');
+  if (micBtn) micBtn.classList.remove('active-off');
+  if (camBtn) camBtn.classList.remove('active-off');
+  if (micIcon) micIcon.textContent = '🎙️';
+  if (camIcon) camIcon.textContent = '📷';
+}
+
+function toggleMicrophone() {
+  if (!vcState.localStream) return;
+  const audioTrack = vcState.localStream.getAudioTracks()[0];
+  if (!audioTrack) return;
+
+  vcState.isMicMuted = !vcState.isMicMuted;
+  audioTrack.enabled = !vcState.isMicMuted;
+
+  const btn = document.getElementById('vcToggleMicBtn');
+  const icon = document.getElementById('vcMicIcon');
+  if (btn) btn.classList.toggle('active-off', vcState.isMicMuted);
+  if (icon) icon.textContent = vcState.isMicMuted ? '🔇' : '🎙️';
+  showVcToast(vcState.isMicMuted ? 'Microphone muted 🔇' : 'Microphone unmuted 🎙️');
+}
+
+function toggleCameraVideo() {
+  if (!vcState.localStream) return;
+  const videoTrack = vcState.localStream.getVideoTracks()[0];
+  if (!videoTrack) return;
+
+  vcState.isCamMuted = !vcState.isCamMuted;
+  videoTrack.enabled = !vcState.isCamMuted;
+
+  const btn = document.getElementById('vcToggleCamBtn');
+  const icon = document.getElementById('vcCamIcon');
+  if (btn) btn.classList.toggle('active-off', vcState.isCamMuted);
+  if (icon) icon.textContent = vcState.isCamMuted ? '🚫' : '📷';
+  showVcToast(vcState.isCamMuted ? 'Camera turned off 🚫' : 'Camera turned on 📷');
+}
+
+async function flipCameraFacing() {
+  if (!vcState.localStream) return;
+  vcState.facingMode = vcState.facingMode === 'user' ? 'environment' : 'user';
+
+  try {
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: vcState.facingMode, width: { ideal: 640 }, height: { ideal: 480 } }
+    });
+
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    const oldVideoTrack = vcState.localStream.getVideoTracks()[0];
+
+    if (vcState.peerConnection) {
+      const sender = vcState.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) {
+        sender.replaceTrack(newVideoTrack);
+      }
+    }
+
+    if (oldVideoTrack) oldVideoTrack.stop();
+    vcState.localStream.removeTrack(oldVideoTrack);
+    vcState.localStream.addTrack(newVideoTrack);
+
+    const localVideo = document.getElementById('localVideo');
+    if (localVideo) {
+      localVideo.srcObject = vcState.localStream;
+      localVideo.style.transform = vcState.facingMode === 'user' ? 'scaleX(-1)' : 'none';
+    }
+
+    showVcToast(`Switched to ${vcState.facingMode === 'user' ? 'Front' : 'Back'} Camera 🔄`);
+  } catch (err) {
+    console.warn('Camera flip error:', err);
+    showVcToast('⚠️ Could not switch camera facing mode');
+  }
+}
+
+function sendLoveHeartTapInCall() {
+  triggerFloatingHeartAnimation();
+  const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+  broadcastUpdate('VC_HEART', { from: currentUser, to: partnerUser }, false);
+  playTone(880, 0.25, 'sine', 0.2);
+}
+
+function triggerFloatingHeartAnimation() {
+  const overlay = document.getElementById('vcHeartsOverlay');
+  if (!overlay) return;
+
+  const heartEmojis = ['💖', '💕', '🥰', '✨', '🌸', '❤️', '💋'];
+  for (let i = 0; i < 7; i++) {
+    setTimeout(() => {
+      const el = document.createElement('div');
+      el.className = 'vc-floating-heart';
+      el.textContent = heartEmojis[Math.floor(Math.random() * heartEmojis.length)];
+      el.style.left = (15 + Math.random() * 70) + '%';
+      el.style.bottom = '20px';
+      el.style.position = 'absolute';
+      el.style.fontSize = (1.6 + Math.random() * 1.4) + 'rem';
+      el.style.pointerEvents = 'none';
+      el.style.zIndex = '30';
+      el.style.animation = `heartFloatUp ${1.8 + Math.random() * 0.8}s cubic-bezier(0.2, 0.8, 0.2, 1) forwards`;
+      overlay.appendChild(el);
+
+      setTimeout(() => el.remove(), 2600);
+    }, i * 110);
+  }
+}
+
+function openJitsiFallbackRoom() {
+  const modal = document.getElementById('videoCallModal');
+  const outgoingScreen = document.getElementById('vcOutgoingScreen');
+  const incomingScreen = document.getElementById('vcIncomingScreen');
+  const activeScreen = document.getElementById('vcActiveScreen');
+  const fallbackScreen = document.getElementById('vcFallbackScreen');
+  const iframeContainer = document.getElementById('vcIframeContainer');
+
+  stopOutgoingRingtone();
+  stopIncomingRingtone();
+
+  if (outgoingScreen) outgoingScreen.classList.add('is-hidden');
+  if (incomingScreen) incomingScreen.classList.add('is-hidden');
+  if (activeScreen) activeScreen.classList.add('is-hidden');
+  if (fallbackScreen) fallbackScreen.classList.remove('is-hidden');
+  if (modal) modal.classList.remove('is-hidden');
+
+  const myDisplayName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+  const roomName = 'OurStoryCoupleHimanshuGulluSecret2026';
+  const jitsiUrl = `https://meet.jit.si/${roomName}#userInfo.displayName="${myDisplayName}"&config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.startWithVideoMuted=false`;
+
+  if (iframeContainer) {
+    iframeContainer.innerHTML = `<iframe src="${jitsiUrl}" allow="camera; microphone; fullscreen; display-capture; autoplay" style="width:100%;height:100%;border:none;"></iframe>`;
+  }
+}
+
+function handleIncomingVCSignal(data) {
+  if (!data || !data.callId) return;
+
+  const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+
+  // 1. Someone is calling me
+  if (data.to === currentUser && data.status === 'calling') {
+    const timeDiff = Date.now() - (data.timestamp || 0);
+    if (timeDiff < 60000 && vcState.status === 'idle') {
+      showIncomingCallScreen(data);
+    }
+  }
+
+  // 2. Partner accepted my call
+  if (data.from === partnerUser && data.to === currentUser && data.status === 'accepted') {
+    handleCallAcceptedByPartner(data);
+  }
+
+  // 3. Call was ended or declined
+  if (data.status === 'ended' || data.status === 'declined') {
+    if (vcState.status !== 'idle' && vcState.callId === data.callId) {
+      cleanupCallState();
+      showVcToast(data.status === 'declined' ? 'Partner was busy 💔' : 'Call ended ❤️');
+    }
+  }
+}
+
+function handleIncomingVCHeart(data) {
+  if (!data) return;
+  if (data.to === currentUser) {
+    triggerFloatingHeartAnimation();
+    playTone(880, 0.25, 'sine', 0.2);
+  }
+}
+
+function setupVideoCallEngine() {
+  const headerBtn = document.getElementById('headerVcBtn');
+  if (headerBtn) {
+    headerBtn.addEventListener('click', () => {
+      playTone(600, 0.1);
+      startVideoCall();
+    });
+  }
+
+  const chatVcBtn = document.getElementById('chatStartVcBtn');
+  if (chatVcBtn) {
+    chatVcBtn.addEventListener('click', () => {
+      playTone(600, 0.1);
+      startVideoCall();
+    });
+  }
+
+  const cancelBtn = document.getElementById('vcCancelCallBtn');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => endVideoCall('Call cancelled.'));
+  }
+
+  const acceptBtn = document.getElementById('vcAcceptCallBtn');
+  if (acceptBtn) {
+    acceptBtn.addEventListener('click', () => acceptIncomingCall());
+  }
+
+  const declineBtn = document.getElementById('vcDeclineCallBtn');
+  if (declineBtn) {
+    declineBtn.addEventListener('click', () => declineIncomingCall());
+  }
+
+  const endActiveBtn = document.getElementById('vcEndActiveCallBtn');
+  if (endActiveBtn) {
+    endActiveBtn.addEventListener('click', () => endVideoCall('Call ended with love ❤️'));
+  }
+
+  const micBtn = document.getElementById('vcToggleMicBtn');
+  if (micBtn) {
+    micBtn.addEventListener('click', toggleMicrophone);
+  }
+
+  const camBtn = document.getElementById('vcToggleCamBtn');
+  if (camBtn) {
+    camBtn.addEventListener('click', toggleCameraVideo);
+  }
+
+  const flipBtn = document.getElementById('vcSwitchFacingBtn');
+  if (flipBtn) {
+    flipBtn.addEventListener('click', flipCameraFacing);
+  }
+
+  const heartBtn = document.getElementById('vcSendHeartBtn');
+  if (heartBtn) {
+    heartBtn.addEventListener('click', sendLoveHeartTapInCall);
+  }
+
+  const jitsiBtn = document.getElementById('vcJitsiFallbackBtn');
+  if (jitsiBtn) {
+    jitsiBtn.addEventListener('click', openJitsiFallbackRoom);
+  }
+
+  const closeFallbackBtn = document.getElementById('vcCloseFallbackBtn');
+  if (closeFallbackBtn) {
+    closeFallbackBtn.addEventListener('click', () => cleanupCallState());
+  }
+}
+
 // --- INITIALIZE EVERYTHING ON LOAD ---
 document.addEventListener('DOMContentLoaded', () => {
   setupProfileSwitcher();
@@ -3994,6 +4784,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupInAppMusicPlayer();
   setupPWAandUpdates();
   setupChatUI();
+  setupVideoCallEngine();
   fetchState();
 
   // Check first-time identity selection
