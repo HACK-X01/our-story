@@ -1,5 +1,5 @@
 {
-  "version": "1.9.0",
-  "buildTime": 1791180000000,
-  "notes": "Add private couple login gate with separate credentials for Himanshu and Gullu portals"
+  "version": "1.9.1",
+  "buildTime": 1791185000000,
+  "notes": "Fix continuous floating hearts loop on login by adding deduplication and freshness guard on chat bursts"
 }

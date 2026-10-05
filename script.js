@@ -228,7 +228,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.9.0';
+const CURRENT_APP_VERSION = '1.9.1';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -2212,6 +2212,9 @@ function handleLoginSubmit() {
     if (submitText) submitText.textContent = '✨ Unlock My Portal';
     if (passInput) passInput.value = '';
 
+    // Clean up any lingering floating hearts from DOM
+    document.querySelectorAll('.floating-love-heart').forEach(el => el.remove());
+
     // Initialize & update all components for the authenticated user
     updateProfileUI();
     renderAll();
@@ -2221,10 +2224,12 @@ function handleLoginSubmit() {
       registerClosedAppPushSubscription();
     }
 
-    showAppModal(
-      '💖 Welcome to Your Portal!',
-      `Aapka portal unlock ho gaya hai, ${currentUser === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸'}! Saari memories, chats aur heartbeats ready hain ✨`
-    );
+    // Sweet non-blocking welcome toast
+    showPartnerMoodToast({
+      user: currentUser,
+      mood: 'romantic',
+      text: `Welcome back, ${currentUser === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸'}! Portal ready hai ✨`
+    });
   }, 400);
 }
 
@@ -4053,19 +4058,27 @@ function formatChatTime(timestamp) {
   }
 }
 
-function triggerLoveBurstAnimation(count = 25) {
+const processedBurstMsgIds = new Set();
+
+function triggerLoveBurstAnimation(count = 15) {
+  // Clear any existing burst hearts first to avoid stacking
+  document.querySelectorAll('.floating-love-heart').forEach(el => el.remove());
+
   const emojis = ['💖', '💕', '💗', '💓', '✨', '🌸', '❤️', '🥰'];
-  for (let i = 0; i < count; i++) {
+  const total = Math.min(count, 15);
+  for (let i = 0; i < total; i++) {
     setTimeout(() => {
       const heart = document.createElement('div');
       heart.className = 'floating-love-heart';
       heart.textContent = emojis[Math.floor(Math.random() * emojis.length)];
-      heart.style.left = (8 + Math.random() * 84) + 'vw';
-      heart.style.animationDuration = (1.6 + Math.random() * 1.2) + 's';
-      heart.style.fontSize = (1.4 + Math.random() * 1.4) + 'rem';
+      heart.style.left = (10 + Math.random() * 80) + 'vw';
+      heart.style.animationDuration = (1.5 + Math.random() * 1.0) + 's';
+      heart.style.fontSize = (1.2 + Math.random() * 1.0) + 'rem';
       document.body.appendChild(heart);
-      setTimeout(() => heart.remove(), 2600);
-    }, i * 50);
+      setTimeout(() => {
+        if (heart && heart.parentNode) heart.remove();
+      }, 2200);
+    }, i * 60);
   }
 }
 
@@ -4162,6 +4175,13 @@ function renderChatUI() {
   if (!listEl) return;
 
   const msgs = (appState && appState.chatMessages) ? appState.chatMessages : [];
+
+  // Seed processedBurstMsgIds with all existing burst messages so history never re-triggers animations
+  msgs.forEach(m => {
+    if (m && m.type === 'burst' && m.id) {
+      processedBurstMsgIds.add(m.id);
+    }
+  });
 
   // Remove existing message rows (preserve empty state if zero messages)
   const existingRows = listEl.querySelectorAll('.chat-msg-row');
@@ -4281,8 +4301,12 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
   if (!appState.chatMessages) appState.chatMessages = [];
 
-  const exists = appState.chatMessages.some(m => m.id === msg.id);
-  if (!exists) {
+  const isAlreadyStored = appState.chatMessages.some(m => m.id === msg.id);
+  const now = Date.now();
+  // Message is fresh only if it arrived within the last 15 seconds
+  const isFresh = msg.timestamp ? (Math.abs(now - msg.timestamp) < 15000) : false;
+
+  if (!isAlreadyStored) {
     appState.chatMessages.push(msg);
     appState.chatMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     if (appState.chatMessages.length > 200) {
@@ -4292,38 +4316,47 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
   }
 
   // ALWAYS append to DOM immediately (appendChatMessageDOM safely ignores if already rendered)
-  appendChatMessageDOM(msg, true);
+  appendChatMessageDOM(msg, isFresh);
 
-  // If chat pane is active
-  const chatPane = document.getElementById('paneChat');
-  const isChatActive = chatPane && chatPane.classList.contains('active');
+  // If this message was ALREADY in our stored state, OR it is not fresh (historical sync / REST poll repeat),
+  // DO NOT trigger audio, dock badge, notifications, or burst animations!
+  if (isAlreadyStored || !isFresh) {
+    if (msg.type === 'burst') {
+      processedBurstMsgIds.add(msg.id);
+    }
+    return;
+  }
 
-  if (isChatActive) {
-    if (msg.sender !== currentUser && !isLocalBroadcast) {
+  // Active notification for brand-new live incoming messages only
+  if (msg.sender !== currentUser && !isLocalBroadcast) {
+    const chatPane = document.getElementById('paneChat');
+    const isChatActive = chatPane && chatPane.classList.contains('active');
+
+    if (isChatActive) {
       playTone(523.25, 0.08);
       setTimeout(() => playTone(659.25, 0.1), 90);
       if (navigator.vibrate) {
         try { navigator.vibrate([60, 40, 60]); } catch (e) {}
       }
-    }
-  } else {
-    // Other tab is active: show unread badge on bottom dock
-    if (msg.sender !== currentUser && !isLocalBroadcast) {
+    } else {
       const badge = document.getElementById('dockChatBadge');
       if (badge) badge.classList.remove('is-hidden');
 
       playTone(523.25, 0.08);
       setTimeout(() => playTone(659.25, 0.12), 100);
 
-      // Trigger system notification if browser is in background
       if (document.hidden) {
         sendSystemNotificationForChat(msg);
       }
     }
   }
 
+  // Trigger Love Burst animation ONLY ONCE for a brand-new live incoming burst from partner
   if (msg.type === 'burst' && msg.sender !== currentUser && !isLocalBroadcast) {
-    triggerLoveBurstAnimation(25);
+    if (!processedBurstMsgIds.has(msg.id)) {
+      processedBurstMsgIds.add(msg.id);
+      triggerLoveBurstAnimation(15);
+    }
   }
 }
 
