@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=32">
+  <link rel="stylesheet" href="styles.css?v=33">
 </head>
 <body>
 
@@ -509,28 +509,34 @@
             <div class="radar-header">
               <div class="radar-title-wrap">
                 <span class="radar-icon-badge">📍</span>
-                <div>
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <h4 class="radar-title">Live Distance & Radar</h4>
-                    <span class="radar-live-badge" id="radarLivePill" title="Live 5s GPS tracking active">🟢 Live 5s</span>
+                <div class="radar-title-text-box">
+                  <div class="radar-headline-flex">
+                    <h4 class="radar-title">Live Couple Radar</h4>
+                    <span class="radar-live-badge" id="radarLivePill" title="Live 5s GPS auto-share active">
+                      <span class="live-pulse-dot"></span> Auto-Live (5s)
+                    </span>
                   </div>
-                  <p class="radar-subtitle">Exact distance & live GPS between Himanshu & Gullu</p>
+                  <p class="radar-subtitle">Himanshu & Gullu ki real-time location har 5s me auto-share ho rahi hai</p>
                 </div>
               </div>
               <div class="radar-header-actions">
                 <button class="radar-action-pill-btn" id="radarApartDemoBtn" title="Apart Mode ya Custom City set karein">
                   ✈️ Apart Mode
                 </button>
-                <button class="radar-refresh-btn" id="radarUpdateMyLocBtn" title="Share / Update My Current Location">
-                  <span class="refresh-btn-icon">🎯</span> Update Location
-                </button>
               </div>
+            </div>
+
+            <!-- Permission prompt banner if GPS blocked or needed -->
+            <div class="radar-perm-notice is-hidden" id="radarPermNotice">
+              <span class="notice-icon">⚠️</span>
+              <span class="notice-text">Auto-share ke liye phone me Location Permission allow karein:</span>
+              <button class="notice-action-btn" id="radarEnableGpsBtn">Allow GPS 📍</button>
             </div>
 
             <!-- Same-Device or Identical Coordinates Notice -->
             <div class="radar-device-notice is-hidden" id="radarDeviceNotice">
               <span class="notice-icon">📱</span>
-              <span class="notice-text" id="radarDeviceNoticeText">Dono profiles ek hi device se recorded hain (~14m). Partner jab apne alag phone se "Update Location" dabayegi tab exact distance dikhega.</span>
+              <span class="notice-text" id="radarDeviceNoticeText">Dono profiles ek hi device se recorded hain (~14m). Partner jab apne alag phone se portal kholegi tab real-time distance auto-update ho jayega. Ya "Apart Mode" se test karein.</span>
               <button class="notice-action-btn" id="noticeResetPartnerBtn">Reset Partner</button>
             </div>
 
@@ -544,7 +550,7 @@
                   <span class="radar-distance-number" id="radarDistanceValue">--</span>
                   <span class="radar-distance-unit" id="radarDistanceUnit">km</span>
                 </div>
-                <p class="radar-romantic-msg" id="radarRomanticMsg">Tap "Update Location" to calculate distance ❤️</p>
+                <p class="radar-romantic-msg" id="radarRomanticMsg">Live GPS auto-sync active... real-time distance calculate ho rahi hai ❤️</p>
               </div>
             </div>
 
@@ -563,7 +569,7 @@
                   <button class="loc-clear-btn" id="clearHimanshuLocBtn" title="Himanshu ki location clear karein">✕</button>
                 </div>
                 <span class="loc-address" id="himanshuLocAddress">Location not shared yet</span>
-                <small class="loc-time" id="himanshuLocTime">Tap Update Location</small>
+                <small class="loc-time" id="himanshuLocTime">Auto-syncing live...</small>
               </div>
               
               <div class="radar-loc-divider">
@@ -577,7 +583,7 @@
                   <button class="loc-clear-btn" id="clearGulluLocBtn" title="Gullu ki location clear karein">✕</button>
                 </div>
                 <span class="loc-address" id="gulluLocAddress">Location not shared yet</span>
-                <small class="loc-time" id="gulluLocTime">Tap Update Location</small>
+                <small class="loc-time" id="gulluLocTime">Auto-syncing live...</small>
               </div>
             </div>
 
@@ -1143,6 +1149,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=32"></script>
+  <script src="script.js?v=33"></script>
 </body>
 </html>

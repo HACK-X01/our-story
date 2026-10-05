@@ -547,6 +547,33 @@ function initFirebaseDatabase() {
   initFirebaseRestSync(dbUrl);
 }
 
+function applyCloudLocations(locs) {
+  if (!locs || typeof locs !== 'object') return;
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.locations) appState.locations = {};
+
+  const activeUser = currentUser || getAuthenticatedUser();
+  let changed = false;
+
+  ['himanshu', 'gullu'].forEach(userKey => {
+    const incLoc = locs[userKey];
+    if (incLoc && typeof incLoc === 'object') {
+      const curLoc = appState.locations[userKey];
+      // Prevent stale cloud echoes from overwriting active user's fresher local GPS coordinates
+      if (userKey === activeUser && curLoc && curLoc.timestamp && incLoc.timestamp && curLoc.timestamp > incLoc.timestamp) {
+        return;
+      }
+      appState.locations[userKey] = incLoc;
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    saveAppState(appState);
+    updateCoupleLocationsUI();
+  }
+}
+
 function setupFirebaseRealtimeListeners() {
   if (!firebaseDb) return;
 
@@ -614,14 +641,7 @@ function setupFirebaseRealtimeListeners() {
 
   // 3. Realtime Listener on our_story/locations (Himanshu & Gullu GPS Radar)
   firebaseDb.ref('our_story/locations').on('value', (snapshot) => {
-    const locs = snapshot.val() || {};
-    if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-    appState.locations = {
-      himanshu: locs.himanshu || null,
-      gullu: locs.gullu || null
-    };
-    saveAppState(appState);
-    updateCoupleLocationsUI();
+    applyCloudLocations(snapshot.val());
   });
 
   firebaseDb.ref('our_story/currentQA').on('value', (snapshot) => {
@@ -795,22 +815,15 @@ function initFirebaseRestSync(dbUrl) {
       .catch(() => {});
   }, 2500);
 
-  // Background Location Poller (Every 6s for Radar & Distance)
+  // Background Location Poller (Every 3.5s for Radar & Distance)
   setInterval(() => {
     fetch(`${dbUrl}/our_story/locations.json?t=` + Date.now())
       .then(r => r.ok ? r.json() : null)
       .then(locs => {
-        const parsedLocs = locs || {};
-        if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-        appState.locations = {
-          himanshu: parsedLocs.himanshu || null,
-          gullu: parsedLocs.gullu || null
-        };
-        saveAppState(appState);
-        updateCoupleLocationsUI();
+        applyCloudLocations(locs);
       })
       .catch(() => {});
-  }, 4000);
+  }, 3500);
 }
 
 function syncToFirebase(type, data) {
@@ -2486,6 +2499,7 @@ function setupTabNavigation() {
 
     if (tabId === 'panePulse') {
       fetchLatestCloudSync();
+      try { startAutoLocationSync(); } catch (e) {}
       setTimeout(() => {
         if (!coupleMap) initCoupleRadarMap();
         else coupleMap.invalidateSize();
@@ -3705,7 +3719,7 @@ function updateCoupleLocationsUI() {
       if (isSameDevice || (isIdenticalGps && !hLoc.isCustom && !gLoc.isCustom)) {
         deviceNotice.classList.remove('is-hidden');
         if (deviceNoticeText) {
-          deviceNoticeText.textContent = 'Dono profiles ek hi device se recorded hain (~14m). Partner jab apne alag phone se "Update Location" dabayegi tab real distance dikhega. Ya "Apart Mode" se test karein.';
+          deviceNoticeText.textContent = 'Dono profiles ek hi device se recorded hain (~14m). Partner jab apne alag phone se portal kholegi tab real-time distance auto-update ho jayega. Ya "Apart Mode" se test karein.';
         }
       } else {
         deviceNotice.classList.add('is-hidden');
@@ -3810,7 +3824,7 @@ function updateCoupleLocationsUI() {
     if (distVal) distVal.textContent = '--';
     if (distUnit) distUnit.textContent = 'km';
     if (headerDistText) headerDistText.textContent = '-- km';
-    if (romanticMsg) romanticMsg.textContent = 'Tap "Update Location" to calculate distance ❤️';
+    if (romanticMsg) romanticMsg.textContent = 'Live GPS auto-sync active... distance calculate ho rahi hai ❤️';
     if (directionsBtn) {
       directionsBtn.disabled = true;
       directionsBtn.textContent = '🚗 Directions to Partner in Google Maps';
@@ -3915,30 +3929,37 @@ async function shareMyLocation(silent = false) {
 
   if (isLocationSyncInProgress) return;
 
-  const btn = document.getElementById('radarUpdateMyLocBtn');
-  if (btn && !silent) {
-    btn.classList.add('loading');
-    btn.innerHTML = `<span class="refresh-btn-icon">⏳</span> Locating...`;
-  }
-
   isLocationSyncInProgress = true;
 
   navigator.geolocation.getCurrentPosition(
     async (position) => {
       isLocationSyncInProgress = false;
-      await processAndBroadcastLocation(position, activeUser, silent);
-      if (btn && !silent) {
-        btn.classList.remove('loading');
-        btn.innerHTML = `<span class="refresh-btn-icon">🎯</span> Update Location`;
+      const permNotice = document.getElementById('radarPermNotice');
+      if (permNotice) permNotice.classList.add('is-hidden');
+
+      const livePill = document.getElementById('radarLivePill');
+      if (livePill) {
+        livePill.innerHTML = '<span class="live-pulse-dot"></span> Auto-Live (5s)';
+        livePill.classList.remove('error');
       }
+
+      await processAndBroadcastLocation(position, activeUser, silent);
     },
     (error) => {
       isLocationSyncInProgress = false;
       console.warn('Geolocation error:', error);
-      if (btn && !silent) {
-        btn.classList.remove('loading');
-        btn.innerHTML = `<span class="refresh-btn-icon">🎯</span> Update Location`;
+      
+      if (error && error.code === 1) { // PERMISSION_DENIED
+        const permNotice = document.getElementById('radarPermNotice');
+        if (permNotice) permNotice.classList.remove('is-hidden');
+
+        const livePill = document.getElementById('radarLivePill');
+        if (livePill) {
+          livePill.innerHTML = '⚠️ GPS Blocked';
+          livePill.classList.add('error');
+        }
       }
+
       if (!silent) {
         showAppModal(
           '⚠️ Location Permission Required',
@@ -3973,6 +3994,11 @@ function startAutoLocationSync() {
   const label = document.getElementById('radarAutoSyncLabel');
   if (label) label.innerHTML = '🟢 Live (5s)';
 
+  const livePill = document.getElementById('radarLivePill');
+  if (livePill && !livePill.classList.contains('error')) {
+    livePill.innerHTML = '<span class="live-pulse-dot"></span> Auto-Live (5s)';
+  }
+
   // Run immediate update
   shareMyLocation(true);
 
@@ -3983,7 +4009,8 @@ function startAutoLocationSync() {
 
   // 5-second interval timer
   autoLocationSyncTimer = setInterval(() => {
-    if (currentUser && document.visibilityState === 'visible') {
+    const user = currentUser || getAuthenticatedUser();
+    if (user && document.visibilityState === 'visible') {
       shareMyLocation(true);
     }
   }, 5000);
@@ -3993,7 +4020,13 @@ function startAutoLocationSync() {
     try {
       autoLocationWatchId = navigator.geolocation.watchPosition(
         handleLiveGpsPosition,
-        (err) => console.warn('watchPosition warning:', err),
+        (err) => {
+          console.warn('watchPosition warning:', err);
+          if (err && err.code === 1) {
+            const permNotice = document.getElementById('radarPermNotice');
+            if (permNotice) permNotice.classList.remove('is-hidden');
+          }
+        },
         { enableHighAccuracy: true, maximumAge: 4000, timeout: 6000 }
       );
     } catch (e) {
@@ -4093,7 +4126,7 @@ function setCustomPartnerLocation(cityName, lat, lng) {
 }
 
 function setupCoupleRadar() {
-  const updateBtn = document.getElementById('radarUpdateMyLocBtn');
+  const enableGpsBtn = document.getElementById('radarEnableGpsBtn');
   const headerPill = document.getElementById('headerDistancePill');
   const autoSyncToggle = document.getElementById('radarAutoSyncToggle');
 
@@ -4109,8 +4142,10 @@ function setupCoupleRadar() {
   const searchCustomCityBtn = document.getElementById('searchCustomCityBtn');
   const customCityInput = document.getElementById('radarCustomCityInput');
 
-  if (updateBtn) {
-    updateBtn.addEventListener('click', () => shareMyLocation(false));
+  if (enableGpsBtn) {
+    enableGpsBtn.addEventListener('click', () => {
+      shareMyLocation(false);
+    });
   }
 
   if (headerPill) {
@@ -4473,6 +4508,9 @@ function setupPWAandUpdates() {
             try { firebaseDb.goOnline(); } catch (e) {}
           }
           fetchLatestCloudSync();
+          if (currentUser) {
+            try { startAutoLocationSync(); } catch (e) {}
+          }
         }
       });
 
@@ -4481,6 +4519,9 @@ function setupPWAandUpdates() {
           try { firebaseDb.goOnline(); } catch (e) {}
         }
         fetchLatestCloudSync();
+        if (currentUser) {
+          try { startAutoLocationSync(); } catch (e) {}
+        }
       });
     }).catch((err) => {
       console.warn('PWA Service Worker registration skipped:', err);
