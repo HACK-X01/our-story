@@ -2052,6 +2052,11 @@ body {
   flex-shrink: 0;
   background: #000;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.music-player-frame-wrap.is-hidden {
+  display: none !important;
 }
 
 .music-player-frame-wrap.expanded {
@@ -2073,6 +2078,34 @@ body {
   border: none;
 }
 
+.music-track-timer-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+}
+
+.music-time-curr, .music-time-total {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.music-progress-bar-wrap {
+  width: 60px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.music-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-rose), var(--accent-gold));
+  border-radius: 4px;
+  transition: width 0.2s linear;
+}
+
 .music-bar-controls {
   display: flex;
   align-items: center;
@@ -2080,19 +2113,45 @@ body {
   flex-shrink: 0;
 }
 
-.music-toggle-btn, .music-close-btn {
+.music-toggle-btn, .music-close-btn, .music-external-btn {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #fff;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
+  text-decoration: none;
   transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.music-toggle-btn.play-pause-btn {
+  background: linear-gradient(135deg, var(--accent-rose), #e83e8c);
+  border-color: rgba(255, 255, 255, 0.4);
+  font-size: 0.95rem;
+  box-shadow: 0 0 10px rgba(255, 75, 110, 0.4);
+}
+
+.music-toggle-btn.play-pause-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 16px rgba(255, 75, 110, 0.7);
+}
+
+.music-external-btn.yt-btn:hover {
+  background: rgba(255, 0, 0, 0.3);
+  border-color: #ff0000;
+  transform: scale(1.1);
+}
+
+.music-external-btn.spotify-btn:hover {
+  background: rgba(30, 215, 96, 0.3);
+  border-color: #1ed760;
+  transform: scale(1.1);
 }
 
 .music-toggle-btn:hover {
@@ -2104,6 +2163,58 @@ body {
 .music-close-btn:hover {
   background: rgba(255, 75, 110, 0.35);
   border-color: var(--accent-rose);
+  transform: scale(1.05);
+}
+
+.music-yt-unavailable-fallback {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 7, 20, 0.95);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #fff;
+  gap: 6px;
+  z-index: 5;
+}
+
+.music-player-frame-wrap.show-fallback .music-yt-unavailable-fallback {
+  display: flex;
+}
+
+.music-yt-app-btn {
+  background: #ff0000;
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 15px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.75rem;
+  box-shadow: 0 4px 15px rgba(255, 0, 0, 0.4);
+}
+
+.song-yt-btn {
+  background: rgba(255, 0, 0, 0.15);
+  border: 1px solid rgba(255, 0, 0, 0.35);
+  color: #ff4d4d;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.song-yt-btn:hover {
+  background: rgba(255, 0, 0, 0.3);
   transform: scale(1.05);
 }
 

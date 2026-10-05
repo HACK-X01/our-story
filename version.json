@@ -1,5 +1,5 @@
 {
-  "version": "1.9.7",
-  "buildTime": 1791216000000,
-  "notes": "Full-featured messaging app experience for chat: audio call, video call, voice notes with waveform, photo sharing with zoom lightbox, real-time typing indicator, and WhatsApp-style bubbles"
+  "version": "1.9.8",
+  "buildTime": 1791219600000,
+  "notes": "Fix photo upload song playback with direct HTML5 audio stream, live progress bar, play/pause controls, direct YouTube/Spotify app launch buttons, and resolve YouTube embed unavailable error"
 }

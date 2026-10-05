@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=34">
+  <link rel="stylesheet" href="styles.css?v=35">
 </head>
 <body>
 
@@ -264,7 +264,8 @@
                 </p>
               </div>
               <div class="match-action-btns">
-                <button class="song-listen-btn" id="listenSongBtn" title="Listen on YouTube">▶ Play</button>
+                <button class="song-listen-btn" id="listenSongBtn" title="Play Song in App">▶ Play</button>
+                <a class="song-yt-btn" id="smartSongYtBtn" href="#" target="_blank" rel="noopener noreferrer" title="Watch on YouTube">📺 YT</a>
                 <button class="shuffle-btn" id="shuffleSongBtn" title="Change Song">🔀</button>
               </div>
             </div>
@@ -863,25 +864,39 @@
     </button>
   </div>
 
-  <!-- IN-APP MUSIC PLAYER (Plays music inside app without opening YouTube!) -->
+  <!-- IN-APP MUSIC PLAYER (Plays music inside app with crystal-clear audio!) -->
   <div class="in-app-music-bar is-hidden" id="inAppMusicBar">
     <div class="music-bar-left">
       <div class="music-disc-art spinning" id="musicDiscArt">
         <span class="disc-emoji">🎵</span>
       </div>
       <div class="music-track-info">
-        <span class="music-playing-badge">NOW PLAYING IN-APP 🎶</span>
+        <span class="music-playing-badge">NOW PLAYING 🎶</span>
         <strong class="music-track-title" id="musicTrackTitle">Enchanted (Taylor's Version)</strong>
         <span class="music-track-artist" id="musicTrackArtist">Taylor Swift</span>
+        <div class="music-track-timer-row">
+          <span class="music-time-curr" id="musicTimeCurrent">0:00</span>
+          <div class="music-progress-bar-wrap">
+            <div class="music-progress-fill" id="musicProgressFill" style="width: 0%;"></div>
+          </div>
+          <span class="music-time-total" id="musicTimeTotal">0:30</span>
+        </div>
       </div>
     </div>
     
-    <div class="music-player-frame-wrap" id="musicPlayerFrameWrap">
+    <div class="music-player-frame-wrap is-hidden" id="musicPlayerFrameWrap">
       <iframe id="musicIframe" src="" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen playsinline></iframe>
+      <div class="music-yt-unavailable-fallback" id="musicYtFallback">
+        <span>⚠️ Video unavailable for third-party embeds</span>
+        <a id="musicYtDirectLink" href="#" target="_blank" rel="noopener noreferrer" class="music-yt-app-btn">Watch on YouTube App ↗</a>
+      </div>
     </div>
 
     <div class="music-bar-controls">
-      <button class="music-toggle-btn" id="musicExpandBtn" title="Expand / Minimize Video">📺</button>
+      <button class="music-toggle-btn play-pause-btn" id="musicPlayPauseBtn" title="Play/Pause">⏸</button>
+      <a class="music-external-btn yt-btn" id="musicYoutubeBtn" href="#" target="_blank" rel="noopener noreferrer" title="Watch on YouTube">📺</a>
+      <a class="music-external-btn spotify-btn" id="musicSpotifyBtn" href="#" target="_blank" rel="noopener noreferrer" title="Listen on Spotify">🎧</a>
+      <button class="music-toggle-btn" id="musicExpandBtn" title="Toggle Video Player">🎬</button>
       <button class="music-close-btn" id="musicCloseBtn" title="Stop Song">✕</button>
     </div>
   </div>
@@ -1267,7 +1282,7 @@
   </div>
 
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
-  <audio id="globalAudioPlayer" loop></audio>
+  <audio id="globalAudioPlayer" preload="auto" playsinline></audio>
 
   <!-- LEAFLET MAP & CLOUD DATABASE SDKS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1275,6 +1290,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=34"></script>
+  <script src="script.js?v=35"></script>
 </body>
 </html>

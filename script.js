@@ -52,18 +52,102 @@ let audioCtx = null;
 
 // --- CURATED SONG PLAYLIST (Bollywood, Hollywood & Taylor Swift) ---
 const SONG_CATALOG = [
-  { id: 'enchanted', title: "Enchanted (Taylor's Version)", artist: "Taylor Swift", vibe: "Sparkling & Magical ✨", ytId: "igIfiqqVHtA" },
-  { id: 'tumsehi', title: "Tum Se Hi", artist: "Mohit Chauhan", vibe: "Soft Rain & Road Trips 🌧️", ytId: "cbTKYt8fTvg" },
-  { id: 'lover', title: "Lover", artist: "Taylor Swift", vibe: "Candlelight & Coffee ☕", ytId: "-BjZmE2gtdo" },
-  { id: 'kesariya', title: "Kesariya", artist: "Arijit Singh", vibe: "Pure Heart Romance 🧡", ytId: "BddP6PYo2gs" },
-  { id: 'apnabanale', title: "Apna Bana Le", artist: "Arijit Singh", vibe: "Warm Hugs & Whispers 🫂", ytId: "ElZfdU54Cp8" },
-  { id: 'perfect', title: "Perfect", artist: "Ed Sheeran", vibe: "Dancing Under Stars 🌟", ytId: "2Vv-BfVoq4g" },
-  { id: 'matargashti', title: "Matargashti", artist: "Mohit Chauhan", vibe: "Silly Pout & Banter 🤪", ytId: "6vKucgAeF_Q" },
-  { id: 'cardigan', title: "Cardigan", artist: "Taylor Swift", vibe: "Cozy Weather & Warm Tea 🍂", ytId: "K-a8s8OLBSE" },
-  { id: 'peeloon', title: "Pee Loon", artist: "Mohit Chauhan", vibe: "Soulful Eyes & Dimples 🌸", ytId: "yW8D_u2v0-w" },
-  { id: 'untilifoundyou', title: "Until I Found You", artist: "Stephen Sanchez", vibe: "Retro Slow Dance 🕊️", ytId: "GxldQ9eX2wo" },
-  { id: 'goldenhour', title: "Golden Hour", artist: "JVKE", vibe: "Your Face in Sunset Glow 🌅", ytId: "PEM0Vs8jf1w" },
-  { id: 'raataan', title: "Raataan Lambiyan", artist: "Jubin Nautiyal & Asees Kaur", vibe: "Late Night Calls 🌙", ytId: "gvyUuxdRdR4" }
+  {
+    id: 'enchanted',
+    title: "Enchanted (Taylor's Version)",
+    artist: "Taylor Swift",
+    vibe: "Sparkling & Magical ✨",
+    ytId: "igIfiqqVHtA",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/ff/f2/da/fff2daa7-e089-c08b-9b34-d2ba8d8ee37c/mzaf_13585740172543756019.plus.aac.p.m4a"
+  },
+  {
+    id: 'tumsehi',
+    title: "Tum Se Hi",
+    artist: "Mohit Chauhan",
+    vibe: "Soft Rain & Road Trips 🌧️",
+    ytId: "cbTKYt8fTvg",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/e7/39/b8/e739b870-54a1-8f33-57d5-3817108b8bd9/mzaf_16925921654959290990.plus.aac.p.m4a"
+  },
+  {
+    id: 'lover',
+    title: "Lover",
+    artist: "Taylor Swift",
+    vibe: "Candlelight & Coffee ☕",
+    ytId: "-BjZmE2gtdo",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/e0/db/47/e0db47b0-7f70-0631-0414-cd4777d2fb3e/mzaf_6362891154838442638.plus.aac.p.m4a"
+  },
+  {
+    id: 'kesariya',
+    title: "Kesariya",
+    artist: "Arijit Singh",
+    vibe: "Pure Heart Romance 🧡",
+    ytId: "BddP6PYo2gs",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/38/4c/5c/384c5c8f-3ff8-e457-b2f7-3158ce108649/mzaf_12389299033886433185.plus.aac.p.m4a"
+  },
+  {
+    id: 'apnabanale',
+    title: "Apna Bana Le",
+    artist: "Arijit Singh & Sachin-Jigar",
+    vibe: "Warm Hugs & Whispers 🫂",
+    ytId: "ElZfdU54Cp8",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/a6/1c/9d/a61c9d7c-70a6-4c32-537d-671a923bbcd6/mzaf_16476369450587684583.plus.aac.p.m4a"
+  },
+  {
+    id: 'perfect',
+    title: "Perfect",
+    artist: "Ed Sheeran",
+    vibe: "Dancing Under Stars 🌟",
+    ytId: "2Vv-BfVoq4g",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/c7/ba/bc/c7babc66-f598-aaa6-bcf6-307281795817/mzaf_16337361235117168274.plus.aac.p.m4a"
+  },
+  {
+    id: 'matargashti',
+    title: "Matargashti",
+    artist: "Mohit Chauhan",
+    vibe: "Silly Pout & Banter 🤪",
+    ytId: "6vKucgAeF_Q",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/b8/97/f2/b897f255-71a6-852b-cfdb-a432f28a5f3b/mzaf_3055897486425416265.plus.aac.p.m4a"
+  },
+  {
+    id: 'cardigan',
+    title: "Cardigan",
+    artist: "Taylor Swift",
+    vibe: "Cozy Weather & Warm Tea 🍂",
+    ytId: "K-a8s8OLBSE",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/00/b3/f2/00b3f2a0-3228-b65f-7189-91eb26f5adf6/mzaf_3535055549125623460.plus.aac.p.m4a"
+  },
+  {
+    id: 'peeloon',
+    title: "Pee Loon",
+    artist: "Mohit Chauhan",
+    vibe: "Soulful Eyes & Dimples 🌸",
+    ytId: "yW8D_u2v0-w",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/a7/01/44/a7014423-fbed-c623-aa04-41bc84215593/mzaf_11299150908396348912.plus.aac.p.m4a"
+  },
+  {
+    id: 'untilifoundyou',
+    title: "Until I Found You",
+    artist: "Stephen Sanchez",
+    vibe: "Retro Slow Dance 🕊️",
+    ytId: "GxldQ9eX2wo",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/53/82/c1/5382c1d4-ddba-aa2b-90df-57268895fac9/mzaf_8926201202931541051.plus.aac.p.m4a"
+  },
+  {
+    id: 'goldenhour',
+    title: "Golden Hour",
+    artist: "JVKE",
+    vibe: "Your Face in Sunset Glow 🌅",
+    ytId: "PEM0Vs8jf1w",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/30/02/8c/30028c8a-a125-5466-bcc6-27a83b1c0135/mzaf_16911571635366913039.plus.aac.p.m4a"
+  },
+  {
+    id: 'raataan',
+    title: "Raataan Lambiyan",
+    artist: "Jubin Nautiyal & Asees Kaur",
+    vibe: "Late Night Calls 🌙",
+    ytId: "gvyUuxdRdR4",
+    audioUrl: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/99/0c/38/990c381b-0530-8c0d-87a9-18b050b97f0a/mzaf_10418866714500530894.plus.aac.p.m4a"
+  }
 ];
 
 let selectedSongIndex = 0;
@@ -2676,6 +2760,7 @@ function pickRandomMatching(isTogether = true, vibe = null) {
   const compEl = document.getElementById('smartComplimentText');
   const songEl = document.getElementById('smartSongText');
   const badgeEl = document.getElementById('aiVibeBadge');
+  const ytBtn = document.getElementById('smartSongYtBtn');
 
   if (badgeEl) {
     badgeEl.textContent = vibeCategory.label;
@@ -2687,45 +2772,197 @@ function pickRandomMatching(isTogether = true, vibe = null) {
     const s = SONG_CATALOG[selectedSongIndex];
     songEl.innerHTML = `<strong>${s.title}</strong> • ${s.artist} <span style="color:var(--text-muted); font-size:0.75rem;">(${s.vibe})</span>`;
   }
+  if (ytBtn) {
+    const s = SONG_CATALOG[selectedSongIndex];
+    if (s) {
+      ytBtn.href = s.ytId ? `https://www.youtube.com/watch?v=${s.ytId}` : `https://www.youtube.com/results?search_query=${encodeURIComponent(s.title + ' ' + s.artist)}`;
+    }
+  }
 }
 
-// --- IN-APP MUSIC PLAYER (PLAYS MUSIC DIRECTLY ON PAGE - NO REDIRECTION!) ---
+// --- IN-APP MUSIC PLAYER (PLAYS CRYSTAL-CLEAR AUDIO DIRECTLY ON PAGE - NO BROKEN EMBEDS!) ---
 let currentPlayingYtId = null;
+let currentPlayingAudioUrl = null;
 
-function playSongInApp(title, artist, ytId) {
+function formatMusicTime(seconds) {
+  if (isNaN(seconds) || seconds < 0) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+}
+
+function getOrCreateAudioPlayer() {
+  let player = document.getElementById('globalAudioPlayer');
+  if (!player) {
+    player = document.createElement('audio');
+    player.id = 'globalAudioPlayer';
+    player.preload = 'auto';
+    player.setAttribute('playsinline', 'true');
+    document.body.appendChild(player);
+  }
+  return player;
+}
+
+function startAudioStream(url, title, artist) {
+  const player = getOrCreateAudioPlayer();
+  const playPauseBtn = document.getElementById('musicPlayPauseBtn');
+  const discArt = document.getElementById('musicDiscArt');
+  const fill = document.getElementById('musicProgressFill');
+  const curEl = document.getElementById('musicTimeCurrent');
+  const totEl = document.getElementById('musicTimeTotal');
+
+  if (!url) {
+    const match = SONG_CATALOG.find(s => s.title.toLowerCase().includes((title || '').toLowerCase()));
+    url = match ? match.audioUrl : (SONG_CATALOG[0] && SONG_CATALOG[0].audioUrl);
+  }
+
+  currentPlayingAudioUrl = url;
+
+  if (fill) fill.style.width = '0%';
+  if (curEl) curEl.textContent = '0:00';
+  if (totEl) totEl.textContent = '0:30';
+
+  if (player.src !== url) {
+    player.src = url;
+  }
+  player.volume = 0.9;
+  player.currentTime = 0;
+
+  player.ontimeupdate = () => {
+    const cur = player.currentTime || 0;
+    const dur = player.duration || 30;
+    const pct = Math.min(100, (cur / dur) * 100);
+    if (fill) fill.style.width = pct + '%';
+    if (curEl) curEl.textContent = formatMusicTime(cur);
+    if (totEl && !isNaN(dur) && dur > 0) totEl.textContent = formatMusicTime(dur);
+  };
+
+  player.onended = () => {
+    if (discArt) discArt.classList.remove('spinning');
+    if (playPauseBtn) playPauseBtn.textContent = '▶';
+    if (fill) fill.style.width = '100%';
+  };
+
+  const playPromise = player.play();
+  if (playPromise !== undefined) {
+    playPromise.then(() => {
+      if (discArt) discArt.classList.add('spinning');
+      if (playPauseBtn) playPauseBtn.textContent = '⏸';
+    }).catch(err => {
+      console.warn('Audio auto-play prevented by browser policy (user gesture required):', err);
+      if (playPauseBtn) playPauseBtn.textContent = '▶';
+      if (discArt) discArt.classList.remove('spinning');
+    });
+  }
+}
+
+function toggleAudioPlayPause() {
+  const player = getOrCreateAudioPlayer();
+  const playPauseBtn = document.getElementById('musicPlayPauseBtn');
+  const discArt = document.getElementById('musicDiscArt');
+
+  if (!player.src && currentPlayingAudioUrl) {
+    player.src = currentPlayingAudioUrl;
+  }
+
+  if (player.paused) {
+    player.play().then(() => {
+      if (playPauseBtn) playPauseBtn.textContent = '⏸';
+      if (discArt) discArt.classList.add('spinning');
+    }).catch(err => console.error('Play error:', err));
+  } else {
+    player.pause();
+    if (playPauseBtn) playPauseBtn.textContent = '▶';
+    if (discArt) discArt.classList.remove('spinning');
+  }
+}
+
+function playSongInApp(title, artist, ytId, audioUrl) {
   const bar = document.getElementById('inAppMusicBar');
   const titleEl = document.getElementById('musicTrackTitle');
   const artistEl = document.getElementById('musicTrackArtist');
+  const ytBtn = document.getElementById('musicYoutubeBtn');
+  const spotifyBtn = document.getElementById('musicSpotifyBtn');
+  const ytFallback = document.getElementById('musicYtDirectLink');
   const iframe = document.getElementById('musicIframe');
+  const frameWrap = document.getElementById('musicPlayerFrameWrap');
 
-  if (!bar || !iframe) return;
+  if (!bar) return;
 
   currentPlayingYtId = ytId;
-  if (titleEl) titleEl.textContent = title || 'Romantic Track';
-  if (artistEl) artistEl.textContent = artist || 'Our Story';
+  const songTitle = title || 'Romantic Track';
+  const songArtist = artist || 'Our Story';
 
-  // Embed YouTube player directly into app with autoplay, playsinline and controls
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&enablejsapi=1&playsinline=1&controls=1&modestbranding=1&rel=0`;
-  iframe.src = embedUrl;
+  if (titleEl) titleEl.textContent = songTitle;
+  if (artistEl) artistEl.textContent = songArtist;
+
+  // Direct app links
+  const ytUrl = ytId ? `https://www.youtube.com/watch?v=${ytId}` : `https://www.youtube.com/results?search_query=${encodeURIComponent(songTitle + ' ' + songArtist)}`;
+  const spotifyUrl = `https://open.spotify.com/search/${encodeURIComponent(songTitle + ' ' + songArtist)}`;
+
+  if (ytBtn) ytBtn.href = ytUrl;
+  if (spotifyBtn) spotifyBtn.href = spotifyUrl;
+  if (ytFallback) ytFallback.href = ytUrl;
+
+  // Keep video iframe hidden by default so user never sees YouTube "Video unavailable" error
+  if (frameWrap) {
+    frameWrap.classList.add('is-hidden');
+    frameWrap.classList.remove('expanded');
+  }
+  if (iframe) {
+    iframe.src = '';
+  }
+
+  // Find audio stream url if not passed
+  if (!audioUrl) {
+    const found = SONG_CATALOG.find(s => (ytId && s.ytId === ytId) || s.title.toLowerCase().includes(songTitle.toLowerCase()));
+    if (found && found.audioUrl) {
+      audioUrl = found.audioUrl;
+    }
+  }
+
+  // Play direct audio stream in-app
+  startAudioStream(audioUrl, songTitle, songArtist);
 
   bar.classList.remove('is-hidden');
-  playTone(550, 0.15);
+  try {
+    playTone(550, 0.15);
+  } catch (e) {}
 }
 
 function stopInAppMusic() {
   const bar = document.getElementById('inAppMusicBar');
   const iframe = document.getElementById('musicIframe');
   const wrap = document.getElementById('musicPlayerFrameWrap');
+  const playPauseBtn = document.getElementById('musicPlayPauseBtn');
+  const discArt = document.getElementById('musicDiscArt');
+  const player = document.getElementById('globalAudioPlayer');
+  const fill = document.getElementById('musicProgressFill');
+
+  if (player) {
+    player.pause();
+    player.currentTime = 0;
+  }
   if (iframe) iframe.src = '';
   if (bar) bar.classList.add('is-hidden');
-  if (wrap) wrap.classList.remove('expanded');
+  if (wrap) {
+    wrap.classList.remove('expanded');
+    wrap.classList.add('is-hidden');
+  }
+  if (playPauseBtn) playPauseBtn.textContent = '▶';
+  if (discArt) discArt.classList.remove('spinning');
+  if (fill) fill.style.width = '0%';
   currentPlayingYtId = null;
+  currentPlayingAudioUrl = null;
 }
 
 function setupInAppMusicPlayer() {
   const closeBtn = document.getElementById('musicCloseBtn');
   const expandBtn = document.getElementById('musicExpandBtn');
+  const playPauseBtn = document.getElementById('musicPlayPauseBtn');
   const frameWrap = document.getElementById('musicPlayerFrameWrap');
+  const iframe = document.getElementById('musicIframe');
+  const progressWrap = document.querySelector('.music-progress-bar-wrap');
 
   if (closeBtn) {
     closeBtn.addEventListener('click', (e) => {
@@ -2734,12 +2971,44 @@ function setupInAppMusicPlayer() {
     });
   }
 
+  if (playPauseBtn) {
+    playPauseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleAudioPlayPause();
+    });
+  }
+
+  if (progressWrap) {
+    progressWrap.addEventListener('click', (e) => {
+      const player = document.getElementById('globalAudioPlayer');
+      if (player && player.duration) {
+        const rect = progressWrap.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const pct = Math.max(0, Math.min(1, clickX / rect.width));
+        player.currentTime = pct * player.duration;
+      }
+    });
+  }
+
   if (expandBtn && frameWrap) {
     expandBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const isExpanded = frameWrap.classList.toggle('expanded');
-      expandBtn.textContent = isExpanded ? '🔽' : '📺';
-      expandBtn.title = isExpanded ? 'Minimize Video' : 'Expand Video';
+      const isCurrentlyHidden = frameWrap.classList.contains('is-hidden');
+      if (isCurrentlyHidden) {
+        frameWrap.classList.remove('is-hidden');
+        frameWrap.classList.add('expanded');
+        expandBtn.textContent = '🔽';
+        expandBtn.title = 'Minimize Video Player';
+        if (iframe && currentPlayingYtId && !iframe.src) {
+          iframe.src = `https://www.youtube-nocookie.com/embed/${currentPlayingYtId}?autoplay=1&enablejsapi=1&playsinline=1&controls=1&rel=0`;
+        }
+      } else {
+        frameWrap.classList.add('is-hidden');
+        frameWrap.classList.remove('expanded');
+        expandBtn.textContent = '🎬';
+        expandBtn.title = 'Open Video Player';
+        if (iframe) iframe.src = '';
+      }
     });
   }
 }
@@ -2786,6 +3055,12 @@ function setupMemoryVault() {
     // Run real computer-vision image analysis
     const detectedVibe = await analyzePhotoVibe(base64Data);
     pickRandomMatching(currentMode === 'together', detectedVibe);
+
+    // Auto-play the suggested song immediately when photo is chosen/uploaded!
+    const s = SONG_CATALOG[selectedSongIndex];
+    if (s) {
+      playSongInApp(s.title, s.artist, s.ytId, s.audioUrl);
+    }
 
     try {
       playCelebrationChime();
@@ -2842,6 +3117,7 @@ function setupMemoryVault() {
       if (dropzoneEmpty) dropzoneEmpty.style.display = 'block';
       if (fileInput) fileInput.value = '';
       hideSmartMatchCard();
+      stopInAppMusic();
       playTone(350, 0.1);
     });
   }
@@ -2862,9 +3138,14 @@ function setupMemoryVault() {
       selectedSongIndex = (selectedSongIndex + 1) % SONG_CATALOG.length;
       const song = SONG_CATALOG[selectedSongIndex];
       const songEl = document.getElementById('smartSongText');
+      const ytBtn = document.getElementById('smartSongYtBtn');
       if (songEl) {
         songEl.innerHTML = `<strong>${song.title}</strong> • ${song.artist} <span style="color:var(--text-muted); font-size:0.75rem;">(${song.vibe})</span>`;
       }
+      if (ytBtn && song) {
+        ytBtn.href = song.ytId ? `https://www.youtube.com/watch?v=${song.ytId}` : `https://www.youtube.com/results?search_query=${encodeURIComponent(song.title + ' ' + song.artist)}`;
+      }
+      playSongInApp(song.title, song.artist, song.ytId, song.audioUrl);
       playTone(680, 0.15);
     });
   }
@@ -2874,8 +3155,8 @@ function setupMemoryVault() {
     listenSongBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const song = SONG_CATALOG[selectedSongIndex];
-      if (song && song.ytId) {
-        playSongInApp(song.title, song.artist, song.ytId);
+      if (song) {
+        playSongInApp(song.title, song.artist, song.ytId, song.audioUrl);
       }
     });
   }
@@ -2976,6 +3257,7 @@ function renderVaultFeed() {
     const cleanTitle = (m.song?.title || 'Enchanted').replace(/'/g, "\\'");
     const cleanArtist = (m.song?.artist || 'Taylor Swift').replace(/'/g, "\\'");
     const ytId = m.song?.ytId || 'igIfiqqVHtA';
+    const audioUrl = (m.song?.audioUrl || '').replace(/'/g, "\\'");
 
     return `
       <div class="memory-item-card">
@@ -2995,7 +3277,7 @@ function renderVaultFeed() {
             </div>
             <button class="memory-recompliment-btn" onclick="regenerateMemoryCompliment('${m.id}')" title="Get new AI Compliment">🎲</button>
           </div>
-          <div class="memory-song-pill" onclick="playSongInApp('${cleanTitle}', '${cleanArtist}', '${ytId}')">
+          <div class="memory-song-pill" onclick="playSongInApp('${cleanTitle}', '${cleanArtist}', '${ytId}', '${audioUrl}')">
             <span class="song-play-icon">▶</span>
             <span><strong>${m.song?.title || 'Enchanted'}</strong> • ${m.song?.artist || 'Taylor Swift'}</span>
             <span class="song-inline-badge">Listen in App 🎵</span>
