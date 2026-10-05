@@ -203,7 +203,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.7.1';
+const CURRENT_APP_VERSION = '1.7.2';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -1012,13 +1012,15 @@ function broadcastUpdate(type, data, retain = true) {
         priority: 4
       });
     } else if (type === 'LOCATION_UPDATE') {
-      sendClosedAppPushNotification(partnerUser, {
-        title: `📍 ${myName} ki Live Location!`,
-        message: `${myName} is at ${data.address || 'GPS Updated'}`,
-        click: getAppNavUrl('#pulse'),
-        tags: ['round_pushpin'],
-        priority: 4
-      });
+      if (!data.silent) {
+        sendClosedAppPushNotification(partnerUser, {
+          title: `📍 ${myName} ki Live Location!`,
+          message: `${myName} is at ${data.address || 'GPS Updated'}`,
+          click: getAppNavUrl('#pulse'),
+          tags: ['round_pushpin'],
+          priority: 4
+        });
+      }
     } else if (type === 'CHAT_MESSAGE') {
       sendClosedAppPushNotification(partnerUser, {
         title: `💬 New Message from ${myName}!`,
@@ -3258,7 +3260,8 @@ async function shareMyLocation(silent = false) {
         address: prettyAddress,
         time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
         timestamp: Date.now(),
-        user: currentUser
+        user: currentUser,
+        silent: !!silent
       };
 
       if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
@@ -3312,11 +3315,6 @@ function handleIncomingLocation(data) {
   appState.locations[data.user] = data;
   saveAppState(appState);
   updateCoupleLocationsUI();
-
-  if (data.user !== currentUser) {
-    const partnerName = data.user === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸';
-    showAppModal('📍 Partner Location Updated!', `${partnerName} has shared their live location: "${data.address || 'GPS Updated'}"`);
-  }
 }
 
 function setupCoupleRadar() {
@@ -3349,7 +3347,6 @@ function setupCoupleRadar() {
             shareMyLocation(true);
           }
         }, 120000); // 2 minutes
-        showAppModal('🔄 Auto-Sync Active', 'Location har 2 minute me automatically sync hoti rahegi!');
       } else {
         clearInterval(autoLocationSyncTimer);
         autoLocationSyncTimer = null;

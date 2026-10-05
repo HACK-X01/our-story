@@ -1,5 +1,5 @@
 {
-  "version": "1.7.1",
-  "buildTime": 1791148000000,
-  "notes": "Enhance chat text input visibility, auto-scroll to input bar, and clear placeholder for free-form custom messaging"
+  "version": "1.7.2",
+  "buildTime": 1791150000000,
+  "notes": "Remove intrusive partner location update modal pop-ups and make location syncing completely silent"
 }
