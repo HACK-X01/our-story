@@ -203,7 +203,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.7.0';
+const CURRENT_APP_VERSION = '1.7.1';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -1963,7 +1963,11 @@ function setupTabNavigation() {
       setTimeout(() => {
         const listEl = document.getElementById('chatMessagesList');
         if (listEl) listEl.scrollTop = listEl.scrollHeight;
-      }, 100);
+        const inputWrap = document.querySelector('.chat-input-bar');
+        if (inputWrap) {
+          inputWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 120);
     }
   }
 
@@ -3729,6 +3733,14 @@ function setupChatUI() {
       inputField.style.height = 'auto';
       inputField.style.height = Math.min(inputField.scrollHeight, 80) + 'px';
     });
+
+    inputField.addEventListener('focus', () => {
+      setTimeout(() => {
+        const listEl = document.getElementById('chatMessagesList');
+        if (listEl) listEl.scrollTop = listEl.scrollHeight;
+        inputField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 250);
+    });
   }
 
   if (heartBtn) {
@@ -3773,7 +3785,7 @@ function renderChatUI() {
   if (headingEl) headingEl.textContent = partnerName;
   if (avatarEl) avatarEl.textContent = partnerAvatar;
   if (inputField) {
-    inputField.placeholder = `Write something sweet for ${currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'}...`;
+    inputField.placeholder = `Kuch bhi message likhein (${currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'} ke liye)... ✍️`;
   }
 
   const listEl = document.getElementById('chatMessagesList');
