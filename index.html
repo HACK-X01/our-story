@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=29">
+  <link rel="stylesheet" href="styles.css?v=31">
 </head>
 <body>
 
@@ -514,9 +514,21 @@
                   <p class="radar-subtitle">Exact distance & live GPS between Himanshu & Gullu</p>
                 </div>
               </div>
-              <button class="radar-refresh-btn" id="radarUpdateMyLocBtn" title="Share / Update My Current Location">
-                <span class="refresh-btn-icon">🎯</span> Update Location
-              </button>
+              <div class="radar-header-actions">
+                <button class="radar-action-pill-btn" id="radarApartDemoBtn" title="Apart Mode ya Custom City set karein">
+                  ✈️ Apart Mode
+                </button>
+                <button class="radar-refresh-btn" id="radarUpdateMyLocBtn" title="Share / Update My Current Location">
+                  <span class="refresh-btn-icon">🎯</span> Update Location
+                </button>
+              </div>
+            </div>
+
+            <!-- Same-Device or Identical Coordinates Notice -->
+            <div class="radar-device-notice is-hidden" id="radarDeviceNotice">
+              <span class="notice-icon">📱</span>
+              <span class="notice-text" id="radarDeviceNoticeText">Dono profiles ek hi device se recorded hain (~14m). Partner jab apne alag phone se "Update Location" dabayegi tab exact distance dikhega.</span>
+              <button class="notice-action-btn" id="noticeResetPartnerBtn">Reset Partner</button>
             </div>
 
             <!-- Big Glowing Distance Display -->
@@ -545,6 +557,7 @@
                 <div class="loc-box-header">
                   <span class="loc-avatar">☕</span>
                   <strong class="loc-name">Himanshu</strong>
+                  <button class="loc-clear-btn" id="clearHimanshuLocBtn" title="Himanshu ki location clear karein">✕</button>
                 </div>
                 <span class="loc-address" id="himanshuLocAddress">Location not shared yet</span>
                 <small class="loc-time" id="himanshuLocTime">Tap Update Location</small>
@@ -558,6 +571,7 @@
                 <div class="loc-box-header">
                   <span class="loc-avatar">🌸</span>
                   <strong class="loc-name">Gullu</strong>
+                  <button class="loc-clear-btn" id="clearGulluLocBtn" title="Gullu ki location clear karein">✕</button>
                 </div>
                 <span class="loc-address" id="gulluLocAddress">Location not shared yet</span>
                 <small class="loc-time" id="gulluLocTime">Tap Update Location</small>
@@ -892,6 +906,50 @@
     </div>
   </div>
 
+  <!-- ============================================================
+       COUPLE RADAR: CUSTOM LOCATION & APART MODE MODAL
+       ============================================================ -->
+  <div class="modal-overlay is-hidden" id="radarCustomLocModal">
+    <div class="modal-box radar-modal-box">
+      <button class="modal-dismiss" id="closeRadarCustomLocBtn">✕</button>
+      <div class="modal-celebration-emoji">📍</div>
+      <h3 class="modal-heading">Location & Apart Mode ✈️</h3>
+      <p class="modal-desc">
+        Partner ki alag location set karein ya demo city choose karein taaki real distance aur route calculate ho sake:
+      </p>
+
+      <div class="radar-modal-presets">
+        <h5 class="preset-title">⚡ Quick Distance Presets:</h5>
+        <div class="preset-grid">
+          <button class="preset-btn" data-city="Mansarovar, Jaipur" data-lat="26.8530" data-lng="75.7600">
+            🛵 Mansarovar (~12 km)
+          </button>
+          <button class="preset-btn" data-city="Malviya Nagar, Jaipur" data-lat="26.8550" data-lng="75.8150">
+            ☕ Malviya Nagar (~6 km)
+          </button>
+          <button class="preset-btn" data-city="Delhi NCR" data-lat="28.6139" data-lng="77.2090">
+            ✈️ Delhi (~260 km)
+          </button>
+          <button class="preset-btn" data-city="Mumbai, Maharashtra" data-lat="19.0760" data-lng="72.8777">
+            🌊 Mumbai (~1,150 km)
+          </button>
+        </div>
+      </div>
+
+      <div class="radar-modal-search" style="margin-top: 14px;">
+        <label class="fb-input-label" for="radarCustomCityInput">🔍 Ya koi bhi City / Area likhein:</label>
+        <div class="city-search-row">
+          <input type="text" class="fb-text-input" id="radarCustomCityInput" placeholder="Jaise: Kota, Udaipur, Chandigarh...">
+          <button class="fb-btn-secondary" id="searchCustomCityBtn" style="padding: 8px 14px; white-space: nowrap;">Set GPS 🎯</button>
+        </div>
+      </div>
+
+      <div class="radar-modal-danger-row">
+        <button class="radar-modal-clear-btn" id="modalClearPartnerBtn">🗑️ Clear Partner GPS (Wait for Real Phone)</button>
+      </div>
+    </div>
+  </div>
+
   <!-- FIRST-TIME USER IDENTITY SETUP MODAL -->
   <div class="identity-modal is-hidden" id="identitySetupModal" style="display: none !important;">
     <div class="identity-modal-backdrop"></div>
@@ -1082,6 +1140,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=29"></script>
+  <script src="script.js?v=31"></script>
 </body>
 </html>

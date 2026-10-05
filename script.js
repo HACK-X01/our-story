@@ -228,7 +228,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.9.3';
+const CURRENT_APP_VERSION = '1.9.4';
 
 const NOTIFICATION_DEDUPE_KEY = 'our_story_shown_notification_ids';
 
@@ -276,7 +276,18 @@ function getStoredCoupleData() {
   try {
     const primary = localStorage.getItem(PERMANENT_STORAGE_KEY);
     if (primary) {
-      return sanitizeAppStateArrays(JSON.parse(primary));
+      const data = sanitizeAppStateArrays(JSON.parse(primary));
+      // Cleanup stale test locations older than 6 hours so partner location is not stuck with identical coordinates
+      if (data && data.locations) {
+        const now = Date.now();
+        if (data.locations.gullu && data.locations.gullu.timestamp && (now - data.locations.gullu.timestamp > 21600000)) {
+          data.locations.gullu = null;
+        }
+        if (data.locations.himanshu && data.locations.himanshu.timestamp && (now - data.locations.himanshu.timestamp > 21600000)) {
+          data.locations.himanshu = null;
+        }
+      }
+      return data;
     }
 
     // Migration fallback across all previous versions so NO previous memories/coupons are lost
@@ -358,15 +369,25 @@ function mergePreservingUserData(local, incoming) {
     };
   }
 
-  // 5. Preserve Locations (Freshest GPS timestamp wins)
+  // 5. Preserve Locations (Freshest GPS timestamp wins, but never resurrect expired/cleared locations)
   if (local.locations || incoming.locations) {
-    const locH = ((incoming.locations?.himanshu?.timestamp || 0) >= (local.locations?.himanshu?.timestamp || 0))
-      ? (incoming.locations?.himanshu || local.locations?.himanshu || null)
-      : (local.locations?.himanshu || incoming.locations?.himanshu || null);
-    const locG = ((incoming.locations?.gullu?.timestamp || 0) >= (local.locations?.gullu?.timestamp || 0))
-      ? (incoming.locations?.gullu || local.locations?.gullu || null)
-      : (local.locations?.gullu || incoming.locations?.gullu || null);
-    merged.locations = { himanshu: locH, gullu: locG };
+    const incH = incoming.locations?.himanshu;
+    const locH_local = local.locations?.himanshu;
+    const incG = incoming.locations?.gullu;
+    const locG_local = local.locations?.gullu;
+
+    const isLocalHFresh = locH_local && (Date.now() - (locH_local.timestamp || 0) < 21600000);
+    const isLocalGFresh = locG_local && (Date.now() - (locG_local.timestamp || 0) < 21600000);
+
+    const locH = ((incH?.timestamp || 0) >= (locH_local?.timestamp || 0))
+      ? (incH || (isLocalHFresh ? locH_local : null))
+      : (isLocalHFresh ? locH_local : incH);
+
+    const locG = ((incG?.timestamp || 0) >= (locG_local?.timestamp || 0))
+      ? (incG || (isLocalGFresh ? locG_local : null))
+      : (isLocalGFresh ? locG_local : incG);
+
+    merged.locations = { himanshu: locH || null, gullu: locG || null };
   }
 
   // 6. Preserve Pulses (Union by id/timestamp, sorted newest first)
@@ -593,13 +614,14 @@ function setupFirebaseRealtimeListeners() {
 
   // 3. Realtime Listener on our_story/locations (Himanshu & Gullu GPS Radar)
   firebaseDb.ref('our_story/locations').on('value', (snapshot) => {
-    const locs = snapshot.val();
-    if (locs) {
-      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-      appState.locations = locs;
-      saveAppState(appState);
-      updateCoupleLocationsUI();
-    }
+    const locs = snapshot.val() || {};
+    if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+    appState.locations = {
+      himanshu: locs.himanshu || null,
+      gullu: locs.gullu || null
+    };
+    saveAppState(appState);
+    updateCoupleLocationsUI();
   });
 
   firebaseDb.ref('our_story/currentQA').on('value', (snapshot) => {
@@ -778,9 +800,12 @@ function initFirebaseRestSync(dbUrl) {
     fetch(`${dbUrl}/our_story/locations.json?t=` + Date.now())
       .then(r => r.ok ? r.json() : null)
       .then(locs => {
-        if (!locs) return;
+        const parsedLocs = locs || {};
         if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-        appState.locations = locs;
+        appState.locations = {
+          himanshu: parsedLocs.himanshu || null,
+          gullu: parsedLocs.gullu || null
+        };
         saveAppState(appState);
         updateCoupleLocationsUI();
       })
@@ -803,6 +828,8 @@ function syncToFirebase(type, data) {
         firebaseDb.ref('our_story/pulses').push(data);
       } else if (type === 'LOCATION_UPDATE') {
         firebaseDb.ref('our_story/locations/' + data.user).set(data);
+      } else if (type === 'LOCATION_CLEAR') {
+        firebaseDb.ref('our_story/locations/' + data.user).remove();
       } else if (type === 'QA_ANSWER') {
         firebaseDb.ref('our_story/currentQA/answers/' + data.user).set(data.answer);
       } else if (type === 'QA_NEW') {
@@ -845,6 +872,10 @@ function syncToFirebase(type, data) {
       endpoint += `/locations/${data.user}.json`;
       method = 'PUT';
       body = data;
+    } else if (type === 'LOCATION_CLEAR') {
+      endpoint += `/locations/${data.user}.json`;
+      method = 'DELETE';
+      body = null;
     } else if (type === 'QA_ANSWER') {
       endpoint += `/currentQA/answers/${data.user}.json`;
       method = 'PUT';
@@ -1199,6 +1230,8 @@ function handleIncomingSyncMessage(payload) {
     handleIncomingMemory(payload.data);
   } else if (payload.type === 'LOCATION_UPDATE') {
     handleIncomingLocation(payload.data);
+  } else if (payload.type === 'LOCATION_CLEAR') {
+    handleIncomingLocationClear(payload.data);
   } else if (payload.type === 'CHAT_MESSAGE') {
     handleIncomingChatMessage(payload.data, true);
   } else if (payload.type === 'VC_SIGNAL' || payload.type === 'VC_CALL') {
@@ -3599,6 +3632,17 @@ function createCustomMarkerIcon(user, name, emoji) {
   });
 }
 
+function formatLocationAge(loc) {
+  if (!loc || !loc.timestamp) return 'Location not shared yet';
+  const diff = Date.now() - loc.timestamp;
+  if (diff < 60 * 1000) return 'Updated Just now ✨';
+  if (diff < 60 * 60 * 1000) return `Updated ${Math.floor(diff / 60000)}m ago (${loc.time || ''})`;
+  if (diff < 24 * 60 * 60 * 1000) return `Today at ${loc.time || ''} (${Math.floor(diff / 3600000)}h ago)`;
+  if (diff < 48 * 60 * 60 * 1000) return `Yesterday at ${loc.time || ''} <span class="stale-badge">⏱️ Old</span>`;
+  const d = new Date(loc.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return `${d} at ${loc.time || ''} <span class="stale-badge">⏱️ Stale</span>`;
+}
+
 function updateCoupleLocationsUI() {
   const hLoc = appState?.locations?.himanshu;
   const gLoc = appState?.locations?.gullu;
@@ -3613,12 +3657,14 @@ function updateCoupleLocationsUI() {
   const headerDistText = document.getElementById('headerDistanceText');
   const romanticMsg = document.getElementById('radarRomanticMsg');
   const directionsBtn = document.getElementById('radarDirectionsBtn');
+  const deviceNotice = document.getElementById('radarDeviceNotice');
+  const deviceNoticeText = document.getElementById('radarDeviceNoticeText');
 
   if (hAddr) hAddr.textContent = hLoc?.address || 'Location not shared yet';
-  if (hTime) hTime.textContent = hLoc?.time ? `Updated at ${hLoc.time}` : 'Tap Update Location';
+  if (hTime) hTime.innerHTML = formatLocationAge(hLoc);
 
   if (gAddr) gAddr.textContent = gLoc?.address || 'Location not shared yet';
-  if (gTime) gTime.textContent = gLoc?.time ? `Updated at ${gLoc.time}` : 'Tap Update Location';
+  if (gTime) gTime.innerHTML = formatLocationAge(gLoc);
 
   // If both locations are available, calculate real distance & update map
   if (hLoc && gLoc && typeof hLoc.lat === 'number' && typeof gLoc.lat === 'number') {
@@ -3640,6 +3686,21 @@ function updateCoupleLocationsUI() {
     if (distUnit) distUnit.textContent = displayUnit;
     if (headerDistText) headerDistText.textContent = headerText;
     if (romanticMsg) romanticMsg.textContent = getRomanticDistanceMessage(distKm);
+
+    // Same-device or Identical GPS detection (< 35m)
+    const isSameDevice = (hLoc.deviceId && gLoc.deviceId && hLoc.deviceId === gLoc.deviceId);
+    const isIdenticalGps = distKm < 0.035;
+
+    if (deviceNotice) {
+      if (isSameDevice || (isIdenticalGps && !hLoc.isCustom && !gLoc.isCustom)) {
+        deviceNotice.classList.remove('is-hidden');
+        if (deviceNoticeText) {
+          deviceNoticeText.textContent = 'Dono profiles ek hi device se recorded hain (~14m). Partner jab apne alag phone se "Update Location" dabayegi tab real distance dikhega. Ya "Apart Mode" se test karein.';
+        }
+      } else {
+        deviceNotice.classList.add('is-hidden');
+      }
+    }
 
     if (directionsBtn) {
       directionsBtn.disabled = false;
@@ -3690,6 +3751,8 @@ function updateCoupleLocationsUI() {
       } catch (e) {}
     }
   } else if (hLoc || gLoc) {
+    if (deviceNotice) deviceNotice.classList.add('is-hidden');
+
     const singleLoc = hLoc || gLoc;
     const singleUser = hLoc ? 'himanshu' : 'gullu';
     const singleName = hLoc ? 'Himanshu ☕' : 'Gullu 🌸';
@@ -3699,25 +3762,55 @@ function updateCoupleLocationsUI() {
     if (headerDistText) headerDistText.textContent = '-- km';
     if (romanticMsg) romanticMsg.textContent = `Waiting for ${singleUser === currentUser ? 'partner' : singleName} to share location... ❤️`;
 
-    if (directionsBtn) directionsBtn.disabled = true;
+    if (directionsBtn) {
+      directionsBtn.disabled = true;
+      directionsBtn.textContent = '🚗 Directions to Partner in Google Maps';
+    }
+
+    if (connectionLine && coupleMap) {
+      coupleMap.removeLayer(connectionLine);
+      connectionLine = null;
+    }
 
     if (coupleMap && typeof L !== 'undefined' && singleLoc.lat) {
       const pos = [singleLoc.lat, singleLoc.lng];
       if (hLoc) {
         if (!markerH) markerH = L.marker(pos, { icon: createCustomMarkerIcon('himanshu', 'Himanshu', '☕') }).addTo(coupleMap);
         else markerH.setLatLng(pos);
+        if (markerG && coupleMap) { coupleMap.removeLayer(markerG); markerG = null; }
       } else {
         if (!markerG) markerG = L.marker(pos, { icon: createCustomMarkerIcon('gullu', 'Gullu', '🌸') }).addTo(coupleMap);
         else markerG.setLatLng(pos);
+        if (markerH && coupleMap) { coupleMap.removeLayer(markerH); markerH = null; }
       }
       coupleMap.setView(pos, 13);
     }
+  } else {
+    // Neither location available
+    if (deviceNotice) deviceNotice.classList.add('is-hidden');
+    if (distVal) distVal.textContent = '--';
+    if (distUnit) distUnit.textContent = 'km';
+    if (headerDistText) headerDistText.textContent = '-- km';
+    if (romanticMsg) romanticMsg.textContent = 'Tap "Update Location" to calculate distance ❤️';
+    if (directionsBtn) {
+      directionsBtn.disabled = true;
+      directionsBtn.textContent = '🚗 Directions to Partner in Google Maps';
+    }
+    if (connectionLine && coupleMap) { coupleMap.removeLayer(connectionLine); connectionLine = null; }
+    if (markerH && coupleMap) { coupleMap.removeLayer(markerH); markerH = null; }
+    if (markerG && coupleMap) { coupleMap.removeLayer(markerG); markerG = null; }
   }
 }
 
 async function shareMyLocation(silent = false) {
   if (!navigator.geolocation) {
     if (!silent) showAppModal('ℹ️ GPS Not Supported', 'Aapka browser geolocation support nahi karta.');
+    return;
+  }
+
+  const activeUser = currentUser || getAuthenticatedUser();
+  if (!activeUser) {
+    if (!silent) showAppModal('🔐 Login Required', 'Location share karne ke liye pehle apna portal unlock karein.');
     return;
   }
 
@@ -3767,13 +3860,15 @@ async function shareMyLocation(silent = false) {
         address: prettyAddress,
         time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
         timestamp: Date.now(),
-        user: currentUser,
+        user: activeUser,
+        deviceId: myDeviceId,
+        deviceType: /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'phone' : 'pc',
         silent: !!silent
       };
 
       if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
       if (!appState.locations) appState.locations = {};
-      appState.locations[currentUser] = locPayload;
+      appState.locations[activeUser] = locPayload;
       saveAppState(appState);
       updateCoupleLocationsUI();
 
@@ -3815,6 +3910,37 @@ async function shareMyLocation(silent = false) {
   );
 }
 
+async function clearUserLocation(userToClear, notify = true) {
+  if (!userToClear) return;
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.locations) appState.locations = {};
+  appState.locations[userToClear] = null;
+  saveAppState(appState);
+  updateCoupleLocationsUI();
+
+  // 1. Firebase SDK
+  if (firebaseDb) {
+    try {
+      firebaseDb.ref('our_story/locations/' + userToClear).remove();
+    } catch (e) {}
+  }
+
+  // 2. Firebase REST DELETE
+  const config = getStoredFirebaseConfig();
+  if (config && config.databaseURL) {
+    const dbUrl = config.databaseURL.trim().replace(/\/$/, '');
+    fetch(`${dbUrl}/our_story/locations/${userToClear}.json`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  // 3. Cloud Broadcast
+  broadcastUpdate('LOCATION_CLEAR', { user: userToClear }, false);
+
+  if (notify) {
+    const name = userToClear === 'himanshu' ? 'Himanshu' : 'Gullu';
+    showToast(`🗑️ ${name} ki location clear ho gayi!`);
+  }
+}
+
 function handleIncomingLocation(data) {
   if (!data || !data.user) return;
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
@@ -3824,10 +3950,56 @@ function handleIncomingLocation(data) {
   updateCoupleLocationsUI();
 }
 
+function handleIncomingLocationClear(data) {
+  if (!data || !data.user) return;
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.locations) appState.locations = {};
+  appState.locations[data.user] = null;
+  saveAppState(appState);
+  updateCoupleLocationsUI();
+}
+
+function setCustomPartnerLocation(cityName, lat, lng) {
+  const partner = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+  const locPayload = {
+    lat: Number(lat),
+    lng: Number(lng),
+    accuracy: 10,
+    address: cityName,
+    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    timestamp: Date.now(),
+    user: partner,
+    deviceId: 'demo_device_' + partner,
+    isCustom: true
+  };
+
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.locations) appState.locations = {};
+  appState.locations[partner] = locPayload;
+  saveAppState(appState);
+  updateCoupleLocationsUI();
+
+  // Cloud broadcast
+  broadcastUpdate('LOCATION_UPDATE', locPayload, true);
+  showToast(`✨ ${partner === 'himanshu' ? 'Himanshu' : 'Gullu'} ki location "${cityName}" set ho gayi!`);
+}
+
 function setupCoupleRadar() {
   const updateBtn = document.getElementById('radarUpdateMyLocBtn');
   const headerPill = document.getElementById('headerDistancePill');
   const autoSyncToggle = document.getElementById('radarAutoSyncToggle');
+
+  const apartDemoBtn = document.getElementById('radarApartDemoBtn');
+  const customLocModal = document.getElementById('radarCustomLocModal');
+  const closeCustomLocBtn = document.getElementById('closeRadarCustomLocBtn');
+  const noticeResetPartnerBtn = document.getElementById('noticeResetPartnerBtn');
+  const modalClearPartnerBtn = document.getElementById('modalClearPartnerBtn');
+
+  const clearHimanshuLocBtn = document.getElementById('clearHimanshuLocBtn');
+  const clearGulluLocBtn = document.getElementById('clearGulluLocBtn');
+
+  const searchCustomCityBtn = document.getElementById('searchCustomCityBtn');
+  const customCityInput = document.getElementById('radarCustomCityInput');
 
   if (updateBtn) {
     updateBtn.addEventListener('click', () => shareMyLocation(false));
@@ -3835,13 +4007,122 @@ function setupCoupleRadar() {
 
   if (headerPill) {
     headerPill.addEventListener('click', () => {
-      // Switch to pulse tab and scroll to radar card
       const dockPulse = document.getElementById('dockBtnPulse');
       if (dockPulse) dockPulse.click();
       setTimeout(() => {
         const radar = document.getElementById('radarCard');
         if (radar) radar.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 250);
+    });
+  }
+
+  if (apartDemoBtn && customLocModal) {
+    apartDemoBtn.addEventListener('click', () => {
+      customLocModal.classList.remove('is-hidden');
+    });
+  }
+
+  if (closeCustomLocBtn && customLocModal) {
+    closeCustomLocBtn.addEventListener('click', () => {
+      customLocModal.classList.add('is-hidden');
+    });
+  }
+
+  if (customLocModal) {
+    customLocModal.addEventListener('click', (e) => {
+      if (e.target === customLocModal) customLocModal.classList.add('is-hidden');
+    });
+  }
+
+  // Preset location buttons
+  const presetBtns = document.querySelectorAll('.radar-modal-presets .preset-btn');
+  presetBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const city = btn.dataset.city;
+      const lat = parseFloat(btn.dataset.lat);
+      const lng = parseFloat(btn.dataset.lng);
+      if (city && !isNaN(lat) && !isNaN(lng)) {
+        setCustomPartnerLocation(city, lat, lng);
+        if (customLocModal) customLocModal.classList.add('is-hidden');
+      }
+    });
+  });
+
+  // Search custom city via OpenStreetMap
+  const triggerCitySearch = async () => {
+    if (!customCityInput) return;
+    const query = customCityInput.value.trim();
+    if (!query) return;
+
+    if (searchCustomCityBtn) {
+      searchCustomCityBtn.disabled = true;
+      searchCustomCityBtn.textContent = 'Searching...';
+    }
+
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lng = parseFloat(data[0].lon);
+          const name = data[0].display_name.split(',').slice(0, 2).join(',').trim();
+          setCustomPartnerLocation(name, lat, lng);
+          if (customLocModal) customLocModal.classList.add('is-hidden');
+          customCityInput.value = '';
+        } else {
+          showToast('❌ City nahi mili. Please doosra naam try karein.');
+        }
+      }
+    } catch (err) {
+      console.warn('City search warning:', err);
+      showToast('⚠️ Search failed, please try again.');
+    } finally {
+      if (searchCustomCityBtn) {
+        searchCustomCityBtn.disabled = false;
+        searchCustomCityBtn.textContent = 'Set GPS 🎯';
+      }
+    }
+  };
+
+  if (searchCustomCityBtn) {
+    searchCustomCityBtn.addEventListener('click', triggerCitySearch);
+  }
+  if (customCityInput) {
+    customCityInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') triggerCitySearch();
+    });
+  }
+
+  // Reset / Clear partner locations
+  if (noticeResetPartnerBtn) {
+    noticeResetPartnerBtn.addEventListener('click', () => {
+      const partner = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+      clearUserLocation(partner);
+    });
+  }
+
+  if (modalClearPartnerBtn) {
+    modalClearPartnerBtn.addEventListener('click', () => {
+      const partner = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+      clearUserLocation(partner);
+      if (customLocModal) customLocModal.classList.add('is-hidden');
+    });
+  }
+
+  if (clearHimanshuLocBtn) {
+    clearHimanshuLocBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearUserLocation('himanshu');
+    });
+  }
+
+  if (clearGulluLocBtn) {
+    clearGulluLocBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearUserLocation('gullu');
     });
   }
 

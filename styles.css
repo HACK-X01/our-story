@@ -2832,6 +2832,186 @@ body {
   transform: translateX(14px);
 }
 
+/* Radar Actions & Controls */
+.radar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.radar-action-pill-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 107, 139, 0.35);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.radar-action-pill-btn:hover,
+.radar-action-pill-btn:active {
+  background: rgba(255, 107, 139, 0.25);
+  border-color: #ff4b6e;
+  transform: translateY(-1px);
+}
+
+/* Device Notice Banner */
+.radar-device-notice {
+  background: linear-gradient(135deg, rgba(255, 152, 0, 0.18), rgba(255, 87, 34, 0.12));
+  border: 1px solid rgba(255, 152, 0, 0.4);
+  border-radius: 14px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.74rem;
+  color: #ffe0b2;
+}
+
+.radar-device-notice.is-hidden {
+  display: none !important;
+}
+
+.radar-device-notice .notice-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.radar-device-notice .notice-text {
+  flex: 1;
+  line-height: 1.35;
+}
+
+.radar-device-notice .notice-action-btn {
+  background: rgba(255, 152, 0, 0.25);
+  border: 1px solid rgba(255, 152, 0, 0.6);
+  color: #fff;
+  border-radius: 12px;
+  padding: 5px 11px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.radar-device-notice .notice-action-btn:hover {
+  background: rgba(255, 152, 0, 0.45);
+}
+
+/* Clear Location Cross Button */
+.loc-clear-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  margin-left: auto;
+}
+
+.loc-clear-btn:hover {
+  color: #ff4b6e;
+  background: rgba(255, 75, 110, 0.15);
+}
+
+/* Stale GPS Badge */
+.stale-badge {
+  display: inline-block;
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* Radar Custom Location & Apart Mode Modal */
+.radar-modal-box {
+  max-width: 440px !important;
+}
+
+.radar-modal-presets {
+  margin-top: 14px;
+}
+
+.preset-title {
+  font-size: 0.78rem;
+  color: #fff;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.preset-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 107, 139, 0.25);
+  color: #fff;
+  padding: 10px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.preset-btn:hover,
+.preset-btn:active {
+  background: rgba(255, 107, 139, 0.22);
+  border-color: #ff4b6e;
+  transform: translateY(-1px);
+}
+
+.city-search-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.radar-modal-danger-row {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.radar-modal-clear-btn {
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid rgba(244, 67, 54, 0.4);
+  color: #ff8a80;
+  padding: 9px 16px;
+  border-radius: 14px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.radar-modal-clear-btn:hover,
+.radar-modal-clear-btn:active {
+  background: rgba(244, 67, 54, 0.3);
+  color: #fff;
+}
+
 /* 5. Fullscreen Romantic Incoming Heartbeat Modal */
 .incoming-heartbeat-modal {
   position: fixed;

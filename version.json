@@ -1,5 +1,5 @@
 {
-  "version": "1.9.3",
-  "buildTime": 1791200000000,
-  "notes": "Fix notification repetition and timing: add deduplication, strict freshness guards, and disable MQTT/ntfy caching loops"
+  "version": "1.9.4",
+  "buildTime": 1791210000000,
+  "notes": "Fix couple live radar & location: prevent same-device coordinate overwrite, add stale location guards, Apart Mode simulation, and instant reset options"
 }
