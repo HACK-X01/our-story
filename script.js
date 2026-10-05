@@ -228,14 +228,30 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.9.1';
+const CURRENT_APP_VERSION = '1.9.2';
+
+function normalizeArray(val) {
+  if (Array.isArray(val)) return val;
+  if (val && typeof val === 'object') return Object.values(val);
+  return [];
+}
+
+function sanitizeAppStateArrays(state) {
+  if (!state || typeof state !== 'object') return state;
+  state.memories = normalizeArray(state.memories);
+  state.coupons = normalizeArray(state.coupons);
+  state.pulses = normalizeArray(state.pulses);
+  state.chatMessages = normalizeArray(state.chatMessages || state.chat_messages);
+  state.pastQAs = normalizeArray(state.pastQAs);
+  return state;
+}
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
   try {
     const primary = localStorage.getItem(PERMANENT_STORAGE_KEY);
     if (primary) {
-      return JSON.parse(primary);
+      return sanitizeAppStateArrays(JSON.parse(primary));
     }
 
     // Migration fallback across all previous versions so NO previous memories/coupons are lost
@@ -253,8 +269,9 @@ function getStoredCoupleData() {
         try {
           const parsed = JSON.parse(data);
           if (parsed && (parsed.memories || parsed.coupons || parsed.currentQA)) {
-            localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(parsed));
-            return parsed;
+            const sanitized = sanitizeAppStateArrays(parsed);
+            localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(sanitized));
+            return sanitized;
           }
         } catch (e) {}
       }
@@ -267,6 +284,7 @@ function getStoredCoupleData() {
 
 function saveAppState(newState) {
   if (!newState) return;
+  sanitizeAppStateArrays(newState);
   appState = newState;
   try {
     localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(appState));
@@ -277,22 +295,22 @@ function saveAppState(newState) {
 
 // Merge server and local states without losing any memories, answers, or coupons
 function mergePreservingUserData(local, incoming) {
-  if (!local) return incoming;
-  if (!incoming) return local;
+  if (!local) return sanitizeAppStateArrays(incoming);
+  if (!incoming) return sanitizeAppStateArrays(local);
 
   const merged = { ...incoming };
 
   // 1. Preserve memories (Union by id)
-  const localMems = local.memories || [];
-  const incMems = incoming.memories || [];
+  const localMems = normalizeArray(local.memories);
+  const incMems = normalizeArray(incoming.memories);
   const memMap = new Map();
   incMems.forEach(m => { if (m && m.id) memMap.set(m.id, m); });
   localMems.forEach(m => { if (m && m.id) memMap.set(m.id, m); });
   merged.memories = Array.from(memMap.values());
 
   // 2. Preserve coupons (Union by id)
-  const localCoupons = local.coupons || [];
-  const incCoupons = incoming.coupons || [];
+  const localCoupons = normalizeArray(local.coupons);
+  const incCoupons = normalizeArray(incoming.coupons);
   const coupMap = new Map();
   incCoupons.forEach(c => { if (c && c.id) coupMap.set(c.id, c); });
   localCoupons.forEach(c => { if (c && c.id) coupMap.set(c.id, c); });
@@ -326,15 +344,23 @@ function mergePreservingUserData(local, incoming) {
     merged.locations = { himanshu: locH, gullu: locG };
   }
 
-  // 6. Preserve Chat Messages (Union by id, sorted by timestamp)
-  const localMsgs = local.chatMessages || [];
-  const incMsgs = incoming.chatMessages || (incoming.chat_messages ? Object.values(incoming.chat_messages) : []);
+  // 6. Preserve Pulses (Union by id/timestamp, sorted newest first)
+  const localPulses = normalizeArray(local.pulses);
+  const incPulses = normalizeArray(incoming.pulses);
+  const pulseMap = new Map();
+  incPulses.forEach(p => { if (p) pulseMap.set(p.id || (p.timestamp + '_' + p.from), p); });
+  localPulses.forEach(p => { if (p) pulseMap.set(p.id || (p.timestamp + '_' + p.from), p); });
+  merged.pulses = Array.from(pulseMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 50);
+
+  // 7. Preserve Chat Messages (Union by id, sorted by timestamp)
+  const localMsgs = normalizeArray(local.chatMessages || local.chat_messages);
+  const incMsgs = normalizeArray(incoming.chatMessages || incoming.chat_messages);
   const msgMap = new Map();
   incMsgs.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
   localMsgs.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
   merged.chatMessages = Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).slice(-200);
 
-  return merged;
+  return sanitizeAppStateArrays(merged);
 }
 
 async function fetchState() {
@@ -367,14 +393,14 @@ async function fetchState() {
 
 // --- RENDER ALL SECTIONS ---
 function renderAll() {
-  renderHeader();
-  renderVaultFeed();
-  renderQA();
-  renderCoupons();
-  renderPulseHistory();
-  renderMoods();
-  updateCoupleLocationsUI();
-  renderChatUI();
+  try { renderHeader(); } catch (e) { console.error('renderHeader failed:', e); }
+  try { renderVaultFeed(); } catch (e) { console.error('renderVaultFeed failed:', e); }
+  try { renderQA(); } catch (e) { console.error('renderQA failed:', e); }
+  try { renderCoupons(); } catch (e) { console.error('renderCoupons failed:', e); }
+  try { renderPulseHistory(); } catch (e) { console.error('renderPulseHistory failed:', e); }
+  try { renderMoods(); } catch (e) { console.error('renderMoods failed:', e); }
+  try { updateCoupleLocationsUI(); } catch (e) { console.error('updateCoupleLocationsUI failed:', e); }
+  try { renderChatUI(); } catch (e) { console.error('renderChatUI failed:', e); }
 }
 
 // ==========================================================================
@@ -1266,7 +1292,9 @@ function handleIncomingPulse(pulse) {
   };
 
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-  if (!appState.pulses) appState.pulses = [];
+  if (!Array.isArray(appState.pulses)) {
+    appState.pulses = normalizeArray(appState.pulses);
+  }
 
   const exists = appState.pulses.some(p => p.id === pulseId || (p.timestamp && p.timestamp === pulse.timestamp));
   if (!exists) {
@@ -1991,6 +2019,10 @@ function updatePulseIdentityUI() {
   }
 }
 
+function updateProfileUI() {
+  renderHeader();
+}
+
 // ==========================================================================
 // COUPLE PRIVATE AUTHENTICATION & LOGIN GATE FUNCTIONS
 // ==========================================================================
@@ -2302,12 +2334,13 @@ function setupProfileSwitcher() {
 }
 
 function checkForIncomingPulseOnPortalSwitch() {
-  if (!appState || !appState.pulses || appState.pulses.length === 0) {
+  const pulses = normalizeArray(appState?.pulses);
+  if (pulses.length === 0) {
     updatePulseTabIncomingState(null);
     return;
   }
   const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
-  const latestPulse = appState.pulses[0];
+  const latestPulse = pulses[0];
 
   if (latestPulse && latestPulse.from === partnerName) {
     const pulseKey = latestPulse.id || ('pulse_' + latestPulse.timestamp) || ('pulse_' + latestPulse.time);
@@ -2719,6 +2752,7 @@ function setupMemoryVault() {
         timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
         ...payload
       };
+      if (!Array.isArray(appState.memories)) appState.memories = normalizeArray(appState.memories);
       appState.memories.unshift(newMemory);
       saveAppState(appState);
       renderVaultFeed();
@@ -2749,7 +2783,7 @@ function renderVaultFeed() {
   const feedCount = document.getElementById('feedCount');
   if (!feedList || !appState) return;
 
-  const memories = appState.memories || [];
+  const memories = normalizeArray(appState.memories);
   if (feedCount) {
     feedCount.textContent = memories.length === 1 ? '1 Memory Saved' : `${memories.length} Memories Saved`;
   }
@@ -2898,12 +2932,13 @@ function renderQA() {
 
   // Past QAs
   if (pastList && appState.pastQAs) {
-    pastList.innerHTML = appState.pastQAs.map(p => `
+    const pastQAs = normalizeArray(appState.pastQAs);
+    pastList.innerHTML = pastQAs.map(p => `
       <div class="past-qa-item">
         <p class="past-q">"${p.question}"</p>
         <div style="font-size:0.75rem; color:var(--text-muted);">
-          <strong style="color:var(--accent-gold);">☕ Himanshu:</strong> ${p.answers.himanshu || ''}<br>
-          <strong style="color:var(--accent-rose);">🌸 Gullu:</strong> ${p.answers.gullu || ''}
+          <strong style="color:var(--accent-gold);">☕ Himanshu:</strong> ${(p.answers && p.answers.himanshu) || ''}<br>
+          <strong style="color:var(--accent-rose);">🌸 Gullu:</strong> ${(p.answers && p.answers.gullu) || ''}
         </div>
       </div>
     `).join('');
@@ -3043,7 +3078,10 @@ function renderCoupons() {
   if (!grid) return;
 
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-  if (!appState.coupons || !Array.isArray(appState.coupons) || appState.coupons.length === 0) {
+  if (!Array.isArray(appState.coupons)) {
+    appState.coupons = normalizeArray(appState.coupons);
+  }
+  if (appState.coupons.length === 0) {
     appState.coupons = JSON.parse(JSON.stringify(DEFAULT_APP_STATE.coupons));
     saveAppState(appState);
   }
@@ -3240,7 +3278,9 @@ function dispatchHeartbeatPulse(customNote = null) {
   };
 
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-  if (!appState.pulses) appState.pulses = [];
+  if (!Array.isArray(appState.pulses)) {
+    appState.pulses = normalizeArray(appState.pulses);
+  }
   appState.pulses.unshift(newPulse);
   if (appState.pulses.length > 25) appState.pulses.pop();
   saveAppState(appState);
@@ -3312,7 +3352,8 @@ function setupPulseArena() {
     // If there is an active incoming pulse waiting to be felt, feeling takes precedence
     if (heart.classList.contains('has-incoming-pulse')) {
       const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
-      const latestPulse = appState?.pulses?.find(p => p.from === partnerName);
+      const pulses = normalizeArray(appState?.pulses);
+      const latestPulse = pulses.find(p => p.from === partnerName);
       if (latestPulse) {
         feelIncomingHeartbeat(latestPulse);
         return;
@@ -3765,16 +3806,17 @@ function renderPulseHistory() {
   const logList = document.getElementById('pulseLogList');
   if (!logList) return;
 
-  if (!appState || !appState.pulses || appState.pulses.length === 0) {
+  const pulses = normalizeArray(appState?.pulses);
+  if (pulses.length === 0) {
     logList.innerHTML = `<div class="pulse-log-item" style="justify-content:center; text-align:center;"><span class="pulse-item-text" style="color:var(--text-muted); font-size:0.8rem;">Touch & hold the heart above to send your first pulse! ❤️</span></div>`;
     return;
   }
 
-  logList.innerHTML = appState.pulses.slice(0, 6).map(p => `
+  logList.innerHTML = pulses.slice(0, 6).map(p => `
     <div class="pulse-log-item">
       <span class="pulse-item-icon">💓</span>
-      <span class="pulse-item-text">${p.from} sent a heartbeat!</span>
-      <span class="pulse-item-time">${p.time}</span>
+      <span class="pulse-item-text">${p.from || 'Partner'} sent a heartbeat!</span>
+      <span class="pulse-item-time">${p.time || ''}</span>
     </div>
   `).join('');
 }
@@ -4174,7 +4216,7 @@ function renderChatUI() {
   const listEl = document.getElementById('chatMessagesList');
   if (!listEl) return;
 
-  const msgs = (appState && appState.chatMessages) ? appState.chatMessages : [];
+  const msgs = normalizeArray(appState?.chatMessages || appState?.chat_messages);
 
   // Seed processedBurstMsgIds with all existing burst messages so history never re-triggers animations
   msgs.forEach(m => {
@@ -5147,39 +5189,53 @@ function setupVideoCallEngine() {
 
 // --- INITIALIZE EVERYTHING ON LOAD ---
 document.addEventListener('DOMContentLoaded', () => {
-  setupCoupleLogin();
-  checkAuthGate();
-  setupProfileSwitcher();
-  setupTabNavigation();
-  setupMemoryVault();
-  setupQAHandlers();
-  setupCouponCreation();
-  setupPulseArena();
-  setupMoodIndicator();
-  setupModalDismiss();
-  setupIncomingPulseModal();
-  setupNotificationPermissions();
-  setupInAppMusicPlayer();
-  setupPWAandUpdates();
-  setupChatUI();
-  setupVideoCallEngine();
-  fetchState();
+  const safeInit = (name, fn) => {
+    try {
+      fn();
+    } catch (err) {
+      console.error(`Initialization step failed: ${name}`, err);
+    }
+  };
+
+  safeInit('setupCoupleLogin', setupCoupleLogin);
+  safeInit('checkAuthGate', checkAuthGate);
+  safeInit('setupProfileSwitcher', setupProfileSwitcher);
+  safeInit('setupTabNavigation', setupTabNavigation);
+  safeInit('setupMemoryVault', setupMemoryVault);
+  safeInit('setupQAHandlers', setupQAHandlers);
+  safeInit('setupCouponCreation', setupCouponCreation);
+  safeInit('setupPulseArena', setupPulseArena);
+  safeInit('setupMoodIndicator', setupMoodIndicator);
+  safeInit('setupModalDismiss', setupModalDismiss);
+  safeInit('setupIncomingPulseModal', setupIncomingPulseModal);
+  safeInit('setupNotificationPermissions', setupNotificationPermissions);
+  safeInit('setupInAppMusicPlayer', setupInAppMusicPlayer);
+  safeInit('setupPWAandUpdates', setupPWAandUpdates);
+  safeInit('setupChatUI', setupChatUI);
+  safeInit('setupVideoCallEngine', setupVideoCallEngine);
+  safeInit('fetchState', fetchState);
 
   // Check first-time identity selection
-  checkFirstTimeIdentity();
+  safeInit('checkFirstTimeIdentity', checkFirstTimeIdentity);
 
   // Initialize Live Location & Distance Radar
-  setupCoupleRadar();
+  safeInit('setupCoupleRadar', setupCoupleRadar);
 
   // Initialize Real-Time Cloud (MQTT WSS) & Cross-Tab Sync
-  initCloudSync();
+  safeInit('initCloudSync', initCloudSync);
 
   // Initialize Firebase Realtime Cloud Database
-  initFirebaseDatabase();
-  setupFirebaseModal();
+  safeInit('initFirebaseDatabase', initFirebaseDatabase);
+  safeInit('setupFirebaseModal', setupFirebaseModal);
 
   // Check if an incoming heartbeat was already waiting for this user on boot
   if (currentUser) {
-    setTimeout(checkForIncomingPulseOnPortalSwitch, 600);
+    setTimeout(() => {
+      try {
+        checkForIncomingPulseOnPortalSwitch();
+      } catch (err) {
+        console.error('Initial pulse check failed:', err);
+      }
+    }, 600);
   }
 });

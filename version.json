@@ -1,5 +1,5 @@
 {
-  "version": "1.9.1",
-  "buildTime": 1791185000000,
-  "notes": "Fix continuous floating hearts loop on login by adding deduplication and freshness guard on chat bursts"
+  "version": "1.9.2",
+  "buildTime": 1791195000000,
+  "notes": "Define updateProfileUI and normalize pulses/collections to fix all app functionality"
 }
