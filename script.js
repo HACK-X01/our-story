@@ -193,7 +193,7 @@ const DEFAULT_APP_STATE = {
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.6.1';
+const CURRENT_APP_VERSION = '1.6.2';
 
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
@@ -956,7 +956,7 @@ function broadcastUpdate(type, data, retain = true) {
       sendClosedAppPushNotification(partnerUser, {
         title: `💓 Dil Ki Dhadkan from ${myName}!`,
         message: `${myName}: "${data.note || 'Feel my heartbeat... thinking of you right now! ❤️'}"`,
-        click: 'https://hack-x01.github.io/our-story/#pulse',
+        click: getAppNavUrl('#pulse'),
         tags: ['heart', 'sparkles'],
         priority: 5
       });
@@ -964,7 +964,7 @@ function broadcastUpdate(type, data, retain = true) {
       sendClosedAppPushNotification(partnerUser, {
         title: `✨ ${myName} ka Mood Update!`,
         message: `${myName}: "${data.text || data.mood}"`,
-        click: 'https://hack-x01.github.io/our-story/#mood',
+        click: getAppNavUrl('#paneMood'),
         tags: ['sparkles'],
         priority: 4
       });
@@ -972,7 +972,7 @@ function broadcastUpdate(type, data, retain = true) {
       sendClosedAppPushNotification(partnerUser, {
         title: `📍 ${myName} ki Live Location!`,
         message: `${myName} is at ${data.address || 'GPS Updated'}`,
-        click: 'https://hack-x01.github.io/our-story/#pulse',
+        click: getAppNavUrl('#pulse'),
         tags: ['round_pushpin'],
         priority: 4
       });
@@ -1031,7 +1031,7 @@ function sendSystemNotificationForMood(data) {
     vibrate: [200, 80, 200, 80, 300],
     tag: 'partner-mood-update',
     renotify: true,
-    data: { url: './#paneMood' }
+    data: { url: getAppNavUrl('#paneMood') }
   };
 
   if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
@@ -1081,7 +1081,7 @@ function sendSystemNotificationForPulse(pulse) {
       tag: 'heartbeat-pulse',
       renotify: true,
       requireInteraction: true,
-      data: { url: './#pulse' }
+      data: { url: getAppNavUrl('#pulse') }
     };
 
     if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
@@ -1354,6 +1354,13 @@ function getMyNotificationTopic(user = currentUser) {
   return user === 'himanshu' ? 'ourstory_himanshu_dhadkan_2026' : 'ourstory_gullu_dhadkan_2026';
 }
 
+function getAppNavUrl(hash = '#pulse') {
+  const cleanPath = window.location.pathname.replace(/\/(index\.html)?$/, '');
+  const prefix = cleanPath.endsWith('/') ? cleanPath : cleanPath + '/';
+  const cleanHash = hash.startsWith('#') ? hash : '#' + hash;
+  return window.location.origin + prefix + cleanHash;
+}
+
 async function registerClosedAppPushSubscription() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     console.warn('PushManager not available in this browser');
@@ -1431,7 +1438,7 @@ async function sendClosedAppPushNotification(targetUser, payload) {
       message: payload.message || payload.body || 'New message from partner!',
       priority: payload.priority || 5,
       tags: payload.tags || ['heart', 'sparkles'],
-      click: payload.click || 'https://hack-x01.github.io/our-story/#pulse'
+      click: payload.click || getAppNavUrl('#pulse')
     };
 
     fetch('https://ntfy.sh/', {
@@ -1557,7 +1564,7 @@ function setupNotificationPermissions() {
           sendClosedAppPushNotification(currentUser, {
             title: '💓 Test Heartbeat Received!',
             message: 'Closed-app notification is working perfectly! Dil ki dhadkan phone par aa gayi! 🎉',
-            click: 'https://hack-x01.github.io/our-story/#pulse',
+            click: getAppNavUrl('#pulse'),
             tags: ['tada', 'sparkles', 'heart'],
             priority: 5
           });
@@ -1573,7 +1580,7 @@ function setupNotificationPermissions() {
                 tag: 'heartbeat-test',
                 renotify: true,
                 requireInteraction: true,
-                data: { url: './#pulse' }
+                data: { url: getAppNavUrl('#pulse') }
               });
             }).catch(() => {});
           }

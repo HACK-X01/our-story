@@ -3,13 +3,13 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-const CACHE_NAME = 'our-story-v15';
+const CACHE_NAME = 'our-story-v16';
 
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './styles.css?v=19',
-  './script.js?v=19',
+  './styles.css?v=20',
+  './script.js?v=20',
   './paho-mqtt.min.js',
   './manifest.json',
   './version.json',
@@ -99,7 +99,10 @@ self.addEventListener('message', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const rawUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : './#pulse';
-  const urlToOpen = new URL(rawUrl, self.location.origin).href;
+  const baseScope = (self.registration && self.registration.scope)
+    ? self.registration.scope
+    : (self.location.origin + '/our-story/');
+  const urlToOpen = new URL(rawUrl, baseScope).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
@@ -139,6 +142,11 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  const baseScope = (self.registration && self.registration.scope)
+    ? self.registration.scope
+    : (self.location.origin + '/our-story/');
+  const finalClickUrl = new URL(clickUrl, baseScope).href;
+
   const options = {
     body: body,
     icon: './icon-192.png',
@@ -147,7 +155,7 @@ self.addEventListener('push', (event) => {
     tag: 'heartbeat-pulse',
     renotify: true,
     requireInteraction: true,
-    data: { url: clickUrl }
+    data: { url: finalClickUrl }
   };
 
   event.waitUntil(self.registration.showNotification(title, options));

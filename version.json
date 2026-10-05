@@ -1,5 +1,5 @@
 {
-  "version": "1.6.1",
-  "buildTime": 1791140000000,
-  "notes": "Guaranteed instant Bell modal opening, modal-overlay refactor, and dual callback/promise permission handler"
+  "version": "1.6.2",
+  "buildTime": 1791145000000,
+  "notes": "Fix notification click 404 error using self.registration.scope and getAppNavUrl"
 }
