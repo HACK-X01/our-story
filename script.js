@@ -684,7 +684,16 @@ function setupFirebaseRealtimeListeners() {
     }
   });
 
-  // 6. Realtime WebRTC Private Video Call Signaling
+  // 6. Chat Typing Indicator Realtime Listener
+  const partnerKey = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+  firebaseDb.ref('our_story/chat_typing/' + partnerKey).on('value', (snapshot) => {
+    const typingData = snapshot.val();
+    if (typeof setPartnerTypingUI === 'function') {
+      setPartnerTypingUI(typingData);
+    }
+  });
+
+  // 7. Realtime WebRTC Private Video & Audio Call Signaling
   firebaseDb.ref('our_story/webrtc_call/callMeta').on('value', (snapshot) => {
     const callMeta = snapshot.val();
     if (callMeta) {
@@ -854,6 +863,8 @@ function syncToFirebase(type, data) {
         firebaseDb.ref('our_story/memories').set(appState.memories);
       } else if (type === 'CHAT_MESSAGE') {
         firebaseDb.ref('our_story/chat_messages/' + data.id).set(data);
+      } else if (type === 'CHAT_TYPING') {
+        firebaseDb.ref('our_story/chat_typing/' + currentUser).set(data);
       } else if (type === 'VC_SIGNAL' || type === 'VC_CALL') {
         firebaseDb.ref('our_story/webrtc_call/callMeta').set(data);
       }
@@ -907,6 +918,10 @@ function syncToFirebase(type, data) {
       body = appState.memories;
     } else if (type === 'CHAT_MESSAGE') {
       endpoint += `/chat_messages/${data.id}.json`;
+      method = 'PUT';
+      body = data;
+    } else if (type === 'CHAT_TYPING') {
+      endpoint += `/chat_typing/${currentUser}.json`;
       method = 'PUT';
       body = data;
     } else if (type === 'VC_SIGNAL' || type === 'VC_CALL') {
@@ -1152,7 +1167,7 @@ function broadcastUpdate(type, data, retain = false) {
       else if (type.startsWith('COUPON_')) subTopic = 'coupon';
       else if (type === 'MEMORY_ADD') subTopic = 'memory';
       else if (type === 'LOCATION_UPDATE') subTopic = 'location';
-      else if (type === 'CHAT_MESSAGE') subTopic = 'chat';
+      else if (type === 'CHAT_MESSAGE' || type === 'CHAT_TYPING') subTopic = 'chat';
 
       const msg = new Paho.MQTT.Message(JSON.stringify(payload));
       msg.destinationName = SYNC_TOPIC_PREFIX + subTopic;
@@ -1202,19 +1217,36 @@ function broadcastUpdate(type, data, retain = false) {
         });
       }
     } else if (type === 'CHAT_MESSAGE') {
+      let previewText = data.text ? data.text.slice(0, 80) : '';
+      let tags = ['speech_balloon', 'love_letter'];
+      if (data.type === 'image') {
+        previewText = '📷 Shared a romantic photo with you!';
+        tags = ['camera', 'sparkles'];
+      } else if (data.type === 'audio') {
+        previewText = '🎙️ Sent you a sweet voice note (' + (data.duration || '0:05') + ')';
+        tags = ['studio_microphone', 'musical_note'];
+      } else if (data.type === 'call') {
+        previewText = data.text || 'Call log';
+        tags = ['phone', 'heart'];
+      } else if (data.type === 'burst') {
+        previewText = '💖 Sent a 10x Love Burst!';
+        tags = ['sparkles', 'heart'];
+      }
+
       sendClosedAppPushNotification(partnerUser, {
         title: `💬 New Message from ${myName}!`,
-        message: `${myName}: "${data.text.slice(0, 80)}"`,
+        message: `${myName}: "${previewText}"`,
         click: getAppNavUrl('#chat'),
-        tags: ['speech_balloon', 'love_letter'],
+        tags: tags,
         priority: 5
       });
     } else if (type === 'VC_CALL') {
+      const isAudio = data.callType === 'audio';
       sendClosedAppPushNotification(partnerUser, {
-        title: `📹 Video Call from ${myName}!`,
-        message: `${myName} is calling you for a private video call... Tap to answer! ❤️`,
-        click: getAppNavUrl('#vc'),
-        tags: ['video_camera', 'phone'],
+        title: `${isAudio ? '📞 Voice' : '📹 Video'} Call from ${myName}!`,
+        message: `${myName} is calling you... Tap to answer and connect! ❤️`,
+        click: getAppNavUrl('#chat'),
+        tags: isAudio ? ['telephone_receiver', 'phone'] : ['video_camera', 'phone'],
         priority: 5
       });
     }
@@ -1247,6 +1279,10 @@ function handleIncomingSyncMessage(payload) {
     handleIncomingLocationClear(payload.data);
   } else if (payload.type === 'CHAT_MESSAGE') {
     handleIncomingChatMessage(payload.data, true);
+  } else if (payload.type === 'CHAT_TYPING') {
+    if (typeof setPartnerTypingUI === 'function') {
+      setPartnerTypingUI(payload.data);
+    }
   } else if (payload.type === 'VC_SIGNAL' || payload.type === 'VC_CALL') {
     handleIncomingVCSignal(payload.data);
   } else if (payload.type === 'VC_HEART') {
@@ -4633,6 +4669,299 @@ function triggerLoveBurstAnimation(count = 15) {
   }
 }
 
+// ==========================================================================
+// COUPLE MESSAGING APP ENGINE (Voice Notes, Photos, Typing, Call Cards)
+// ==========================================================================
+
+let typingDebounceTimer = null;
+let amICurrentlyTyping = false;
+let partnerTypingFadeTimeout = null;
+
+function broadcastMyTypingStatus(isTyping) {
+  if (amICurrentlyTyping === isTyping) return;
+  amICurrentlyTyping = isTyping;
+  broadcastUpdate('CHAT_TYPING', { user: currentUser, isTyping: isTyping });
+}
+
+function setPartnerTypingUI(data) {
+  if (!data || data.user === currentUser) return;
+  const bubble = document.getElementById('chatTypingBubble');
+  const subHeading = document.getElementById('chatPartnerSubtitle');
+  const partnerAvatar = currentUser === 'himanshu' ? '🌸' : '☕';
+  const typingAvatar = document.getElementById('typingPartnerAvatar');
+
+  if (typingAvatar) typingAvatar.textContent = partnerAvatar;
+
+  clearTimeout(partnerTypingFadeTimeout);
+
+  if (data.isTyping) {
+    if (bubble) bubble.classList.remove('is-hidden');
+    if (subHeading) subHeading.textContent = '✍️ typing...';
+    const listEl = document.getElementById('chatMessagesList');
+    if (listEl) {
+      const isNearBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 150;
+      if (isNearBottom) listEl.scrollTo({ top: listEl.scrollHeight, behavior: 'smooth' });
+    }
+    // Auto-clear after 4s in case partner paused typing or connection dropped
+    partnerTypingFadeTimeout = setTimeout(() => {
+      if (bubble) bubble.classList.add('is-hidden');
+      if (subHeading) subHeading.textContent = 'Online • Always Connected';
+    }, 4000);
+  } else {
+    if (bubble) bubble.classList.add('is-hidden');
+    if (subHeading) subHeading.textContent = 'Online • Always Connected';
+  }
+}
+
+// --- Voice Note Recording System (MediaRecorder API) ---
+let voiceMediaRecorder = null;
+let voiceAudioChunks = [];
+let voiceRecordTimerInterval = null;
+let voiceRecordSeconds = 0;
+let voiceRecordStream = null;
+
+async function startVoiceRecording() {
+  if (voiceMediaRecorder && voiceMediaRecorder.state === 'recording') return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    voiceRecordStream = stream;
+    voiceAudioChunks = [];
+    voiceRecordSeconds = 0;
+
+    let mimeType = 'audio/webm';
+    if (!MediaRecorder.isTypeSupported('audio/webm')) {
+      mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+    }
+    const options = mimeType ? { mimeType } : {};
+    voiceMediaRecorder = new MediaRecorder(stream, options);
+
+    voiceMediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        voiceAudioChunks.push(e.data);
+      }
+    };
+
+    voiceMediaRecorder.start();
+
+    const bar = document.getElementById('chatVoiceRecordBar');
+    const timer = document.getElementById('voiceRecTimer');
+    if (bar) bar.classList.remove('is-hidden');
+    if (timer) timer.textContent = '00:00';
+
+    clearInterval(voiceRecordTimerInterval);
+    voiceRecordTimerInterval = setInterval(() => {
+      voiceRecordSeconds++;
+      const m = Math.floor(voiceRecordSeconds / 60).toString().padStart(2, '0');
+      const s = (voiceRecordSeconds % 60).toString().padStart(2, '0');
+      if (timer) timer.textContent = `${m}:${s}`;
+    }, 1000);
+
+    playTone(523.25, 0.08);
+  } catch (err) {
+    console.warn('Voice recording microphone error:', err);
+    alert('Microphone access is required to record voice notes. Please grant permission in your browser! 🎙️');
+  }
+}
+
+function cancelVoiceRecording() {
+  if (voiceRecordTimerInterval) {
+    clearInterval(voiceRecordTimerInterval);
+    voiceRecordTimerInterval = null;
+  }
+  if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
+    voiceMediaRecorder.onstop = null;
+    voiceMediaRecorder.stop();
+  }
+  if (voiceRecordStream) {
+    try { voiceRecordStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    voiceRecordStream = null;
+  }
+  voiceAudioChunks = [];
+  const bar = document.getElementById('chatVoiceRecordBar');
+  if (bar) bar.classList.add('is-hidden');
+  playTone(329.63, 0.1);
+}
+
+function finishAndSendVoiceRecording() {
+  if (!voiceMediaRecorder || voiceMediaRecorder.state === 'inactive') return;
+  const recordedDurationSec = Math.max(1, voiceRecordSeconds);
+  const m = Math.floor(recordedDurationSec / 60);
+  const s = (recordedDurationSec % 60).toString().padStart(2, '0');
+  const durStr = `${m}:${s}`;
+
+  if (voiceRecordTimerInterval) {
+    clearInterval(voiceRecordTimerInterval);
+    voiceRecordTimerInterval = null;
+  }
+
+  voiceMediaRecorder.onstop = () => {
+    if (voiceRecordStream) {
+      try { voiceRecordStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+      voiceRecordStream = null;
+    }
+    const mimeType = voiceMediaRecorder.mimeType || 'audio/webm';
+    const blob = new Blob(voiceAudioChunks, { type: mimeType });
+    voiceAudioChunks = [];
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64Audio = reader.result;
+      sendChatMessage('Voice Note 🎙️', 'audio', {
+        audioData: base64Audio,
+        duration: durStr
+      });
+    };
+    reader.readAsDataURL(blob);
+  };
+
+  voiceMediaRecorder.stop();
+  const bar = document.getElementById('chatVoiceRecordBar');
+  if (bar) bar.classList.add('is-hidden');
+}
+
+// --- Image Attachment & Canvas Compression ---
+function handleImageFileSelected(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const rawDataUrl = e.target.result;
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 800;
+      let w = img.width;
+      let h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
+
+      const previewTray = document.getElementById('chatImagePreviewTray');
+      const previewImg = document.getElementById('chatPreviewImage');
+      const captionInput = document.getElementById('chatImageCaption');
+      if (previewImg) previewImg.src = compressedDataUrl;
+      if (captionInput) captionInput.value = '';
+      if (previewTray) previewTray.classList.remove('is-hidden');
+      if (captionInput) captionInput.focus();
+    };
+    img.src = rawDataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+function sendSelectedChatImage() {
+  const previewImg = document.getElementById('chatPreviewImage');
+  const captionInput = document.getElementById('chatImageCaption');
+  const previewTray = document.getElementById('chatImagePreviewTray');
+  const fileInput = document.getElementById('chatImageInput');
+
+  if (!previewImg || !previewImg.src) return;
+
+  const base64Data = previewImg.src;
+  const caption = captionInput ? captionInput.value.trim() : '';
+
+  sendChatMessage(caption || 'Shared a photo 📷', 'image', {
+    imageData: base64Data,
+    caption: caption
+  });
+
+  if (previewTray) previewTray.classList.add('is-hidden');
+  if (previewImg) previewImg.src = '';
+  if (captionInput) captionInput.value = '';
+  if (fileInput) fileInput.value = '';
+}
+
+// --- Voice Note Playback Manager ---
+let currentActiveVoicePlayer = null;
+let currentActiveVoiceBtn = null;
+
+function setupVoicePlayListener(btn) {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const audioSrc = btn.getAttribute('data-audio-src');
+    if (!audioSrc) return;
+
+    const bubble = btn.closest('.chat-voice-bubble');
+
+    if (currentActiveVoiceBtn === btn && currentActiveVoicePlayer) {
+      if (currentActiveVoicePlayer.paused) {
+        currentActiveVoicePlayer.play().then(() => {
+          btn.textContent = '⏸';
+          if (bubble) bubble.classList.add('playing');
+        }).catch(() => {});
+      } else {
+        currentActiveVoicePlayer.pause();
+        btn.textContent = '▶';
+        if (bubble) bubble.classList.remove('playing');
+      }
+      return;
+    }
+
+    if (currentActiveVoicePlayer) {
+      currentActiveVoicePlayer.pause();
+      if (currentActiveVoiceBtn) {
+        currentActiveVoiceBtn.textContent = '▶';
+        const prevBubble = currentActiveVoiceBtn.closest('.chat-voice-bubble');
+        if (prevBubble) prevBubble.classList.remove('playing');
+      }
+    }
+
+    const player = new Audio(audioSrc);
+    currentActiveVoicePlayer = player;
+    currentActiveVoiceBtn = btn;
+
+    btn.textContent = '⏸';
+    if (bubble) bubble.classList.add('playing');
+
+    player.onended = () => {
+      btn.textContent = '▶';
+      if (bubble) bubble.classList.remove('playing');
+      currentActiveVoicePlayer = null;
+      currentActiveVoiceBtn = null;
+    };
+
+    player.onerror = () => {
+      btn.textContent = '▶';
+      if (bubble) bubble.classList.remove('playing');
+      currentActiveVoicePlayer = null;
+      currentActiveVoiceBtn = null;
+    };
+
+    player.play().catch(err => {
+      console.warn('Voice playback failed:', err);
+      btn.textContent = '▶';
+      if (bubble) bubble.classList.remove('playing');
+    });
+  });
+}
+
+// --- Photo Lightbox Modal ---
+function openChatImageLightbox(src, caption) {
+  const modal = document.getElementById('chatImageZoomModal');
+  const img = document.getElementById('chatLightboxImg');
+  const cap = document.getElementById('chatLightboxCaption');
+  if (img) img.src = src;
+  if (cap) cap.textContent = caption || '';
+  if (modal) modal.classList.remove('is-hidden');
+}
+
+function closeChatImageLightbox() {
+  const modal = document.getElementById('chatImageZoomModal');
+  if (modal) modal.classList.add('is-hidden');
+  const img = document.getElementById('chatLightboxImg');
+  if (img) img.src = '';
+}
+
 function setupChatUI() {
   const sendBtn = document.getElementById('chatSendBtn');
   const inputField = document.getElementById('chatTextInput');
@@ -4640,6 +4969,90 @@ function setupChatUI() {
   const burstBtn = document.getElementById('chatLoveBurstBtn');
   const chipsContainer = document.getElementById('chatQuickChips');
 
+  // Header Call Action Buttons
+  const audioCallBtn = document.getElementById('chatStartAudioBtn');
+  const vcCallBtn = document.getElementById('chatStartVcBtn');
+
+  if (audioCallBtn) {
+    audioCallBtn.addEventListener('click', () => {
+      playTone(600, 0.1);
+      startAudioCall();
+    });
+  }
+
+  if (vcCallBtn) {
+    vcCallBtn.addEventListener('click', () => {
+      playTone(600, 0.1);
+      startVideoCall('video');
+    });
+  }
+
+  // Photo Attachment Controls
+  const attachBtn = document.getElementById('chatAttachBtn');
+  const fileInput = document.getElementById('chatImageInput');
+  const previewRemoveBtn = document.getElementById('chatPreviewRemoveBtn');
+  const previewSendBtn = document.getElementById('chatImageSendBtn');
+  const previewTray = document.getElementById('chatImagePreviewTray');
+
+  if (attachBtn && fileInput) {
+    attachBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleImageFileSelected(e.target.files[0]);
+      }
+    });
+  }
+
+  if (previewRemoveBtn) {
+    previewRemoveBtn.addEventListener('click', () => {
+      if (previewTray) previewTray.classList.add('is-hidden');
+      const previewImg = document.getElementById('chatPreviewImage');
+      if (previewImg) previewImg.src = '';
+      if (fileInput) fileInput.value = '';
+    });
+  }
+
+  if (previewSendBtn) {
+    previewSendBtn.addEventListener('click', sendSelectedChatImage);
+  }
+
+  // Voice Note Recording Controls
+  const voiceNoteBtn = document.getElementById('chatVoiceNoteBtn');
+  const voiceRecCancelBtn = document.getElementById('voiceRecCancelBtn');
+  const voiceRecSendBtn = document.getElementById('voiceRecSendBtn');
+
+  if (voiceNoteBtn) {
+    voiceNoteBtn.addEventListener('click', () => {
+      const bar = document.getElementById('chatVoiceRecordBar');
+      if (bar && !bar.classList.contains('is-hidden')) {
+        finishAndSendVoiceRecording();
+      } else {
+        startVoiceRecording();
+      }
+    });
+  }
+
+  if (voiceRecCancelBtn) {
+    voiceRecCancelBtn.addEventListener('click', cancelVoiceRecording);
+  }
+
+  if (voiceRecSendBtn) {
+    voiceRecSendBtn.addEventListener('click', finishAndSendVoiceRecording);
+  }
+
+  // Lightbox Close Handlers
+  const closeLightboxBtn = document.getElementById('closeChatImageZoomBtn');
+  const lightboxModal = document.getElementById('chatImageZoomModal');
+  if (closeLightboxBtn) {
+    closeLightboxBtn.addEventListener('click', closeChatImageLightbox);
+  }
+  if (lightboxModal) {
+    lightboxModal.addEventListener('click', (e) => {
+      if (e.target === lightboxModal) closeChatImageLightbox();
+    });
+  }
+
+  // Text Messaging Controls & Typing Detection
   if (sendBtn && inputField) {
     sendBtn.addEventListener('click', () => {
       const text = inputField.value.trim();
@@ -4665,7 +5078,17 @@ function setupChatUI() {
 
     inputField.addEventListener('input', () => {
       inputField.style.height = 'auto';
-      inputField.style.height = Math.min(inputField.scrollHeight, 80) + 'px';
+      inputField.style.height = Math.min(inputField.scrollHeight, 100) + 'px';
+      broadcastMyTypingStatus(true);
+      clearTimeout(typingDebounceTimer);
+      typingDebounceTimer = setTimeout(() => {
+        broadcastMyTypingStatus(false);
+      }, 2200);
+    });
+
+    inputField.addEventListener('blur', () => {
+      clearTimeout(typingDebounceTimer);
+      broadcastMyTypingStatus(false);
     });
 
     inputField.addEventListener('focus', () => {
@@ -4715,11 +5138,13 @@ function renderChatUI() {
   const headingEl = document.getElementById('chatPartnerName');
   const avatarEl = document.getElementById('chatPartnerAvatar');
   const inputField = document.getElementById('chatTextInput');
+  const typingAvatar = document.getElementById('typingPartnerAvatar');
 
   if (headingEl) headingEl.textContent = partnerName;
   if (avatarEl) avatarEl.textContent = partnerAvatar;
+  if (typingAvatar) typingAvatar.textContent = partnerAvatar;
   if (inputField) {
-    inputField.placeholder = `Kuch bhi message likhein (${currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'} ke liye)... ✍️`;
+    inputField.placeholder = `Message likhein (${currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'} ke liye)... ✍️`;
   }
 
   const listEl = document.getElementById('chatMessagesList');
@@ -4734,7 +5159,7 @@ function renderChatUI() {
     }
   });
 
-  // Remove existing message rows (preserve empty state if zero messages)
+  // Remove existing message rows (preserve empty state & typing bubble)
   const existingRows = listEl.querySelectorAll('.chat-msg-row');
   existingRows.forEach(r => r.remove());
 
@@ -4780,41 +5205,117 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
         <span class="burst-icon">💖</span>
       </div>
     `;
-  } else {
+  } else if (msg.type === 'call') {
     row.className = `chat-msg-row ${isMe ? 'me' : 'partner'}`;
-
-    if (!isMe) {
-      row.innerHTML = `
-        <div class="chat-msg-avatar" title="${escapeChatHtml(msg.senderName || 'Partner')}">${partnerAvatar}</div>
-        <div class="chat-msg-bubble">
-          <span class="chat-msg-sender-name">${escapeChatHtml(msg.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'))}</span>
-          <p class="chat-msg-text">${escapeChatHtml(msg.text)}</p>
-          <div class="chat-msg-footer">
-            <span class="chat-msg-time">${timeStr}</span>
+    const callType = msg.callType || (msg.text && msg.text.includes('Video') ? 'video' : 'audio');
+    const isAudio = callType === 'audio';
+    row.innerHTML = `
+      ${!isMe ? `<div class="chat-msg-avatar" title="${escapeChatHtml(msg.senderName || 'Partner')}">${partnerAvatar}</div>` : ''}
+      <div class="chat-msg-bubble chat-call-bubble">
+        <div class="chat-call-card ${isAudio ? 'audio' : 'video'}">
+          <div class="chat-call-icon">${isAudio ? '📞' : '📹'}</div>
+          <div class="chat-call-info">
+            <span class="chat-call-title">${isAudio ? 'Audio Call' : 'Video Call'}</span>
+            <span class="chat-call-meta">${escapeChatHtml(msg.text)}</span>
           </div>
+          <button class="chat-call-back-btn" data-call-type="${callType}">Call back</button>
         </div>
-      `;
-    } else {
-      row.innerHTML = `
-        <div class="chat-msg-bubble">
-          <p class="chat-msg-text">${escapeChatHtml(msg.text)}</p>
-          <div class="chat-msg-footer">
-            <span class="chat-msg-time">${timeStr}</span>
-            <span class="chat-msg-ticks">✓✓</span>
-          </div>
+        <div class="chat-msg-footer">
+          <span class="chat-msg-time">${timeStr}</span>
+          ${isMe ? '<span class="chat-msg-ticks">✓✓</span>' : ''}
         </div>
-      `;
+      </div>
+    `;
+    const callBackBtn = row.querySelector('.chat-call-back-btn');
+    if (callBackBtn) {
+      callBackBtn.addEventListener('click', () => {
+        const ct = callBackBtn.getAttribute('data-call-type');
+        if (ct === 'video') startVideoCall('video');
+        else startAudioCall();
+      });
     }
+  } else if (msg.type === 'image') {
+    row.className = `chat-msg-row ${isMe ? 'me' : 'partner'}`;
+    const captionHtml = (msg.caption || (msg.text && msg.text !== 'Shared a photo 📷'))
+      ? `<p class="chat-msg-caption">${escapeChatHtml(msg.caption || msg.text)}</p>`
+      : '';
+    row.innerHTML = `
+      ${!isMe ? `<div class="chat-msg-avatar" title="${escapeChatHtml(msg.senderName || 'Partner')}">${partnerAvatar}</div>` : ''}
+      <div class="chat-msg-bubble">
+        ${!isMe ? `<span class="chat-msg-sender-name">${escapeChatHtml(msg.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'))}</span>` : ''}
+        <div class="chat-image-msg-bubble">
+          <img class="chat-msg-image-thumb" src="${msg.imageData || msg.text}" alt="Shared photo" loading="lazy">
+          ${captionHtml}
+        </div>
+        <div class="chat-msg-footer">
+          <span class="chat-msg-time">${timeStr}</span>
+          ${isMe ? '<span class="chat-msg-ticks">✓✓</span>' : ''}
+        </div>
+      </div>
+    `;
+    const thumb = row.querySelector('.chat-msg-image-thumb');
+    if (thumb) {
+      thumb.addEventListener('click', () => {
+        const cap = msg.caption || (msg.text !== 'Shared a photo 📷' ? msg.text : '');
+        openChatImageLightbox(thumb.src, cap);
+      });
+    }
+  } else if (msg.type === 'audio') {
+    row.className = `chat-msg-row ${isMe ? 'me' : 'partner'}`;
+    row.innerHTML = `
+      ${!isMe ? `<div class="chat-msg-avatar" title="${escapeChatHtml(msg.senderName || 'Partner')}">${partnerAvatar}</div>` : ''}
+      <div class="chat-msg-bubble">
+        ${!isMe ? `<span class="chat-msg-sender-name">${escapeChatHtml(msg.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'))}</span>` : ''}
+        <div class="chat-voice-bubble">
+          <button class="voice-play-btn" data-audio-src="${msg.audioData || ''}" title="Play Voice Note">▶</button>
+          <div class="voice-waveform">
+            <span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span>
+            <span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span>
+            <span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span>
+            <span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span>
+          </div>
+          <span class="voice-duration">${msg.duration || '0:05'}</span>
+        </div>
+        <div class="chat-msg-footer">
+          <span class="chat-msg-time">${timeStr}</span>
+          ${isMe ? '<span class="chat-msg-ticks">✓✓</span>' : ''}
+        </div>
+      </div>
+    `;
+    const playBtn = row.querySelector('.voice-play-btn');
+    if (playBtn) {
+      setupVoicePlayListener(playBtn);
+    }
+  } else {
+    // Standard Text Message
+    row.className = `chat-msg-row ${isMe ? 'me' : 'partner'}`;
+    row.innerHTML = `
+      ${!isMe ? `<div class="chat-msg-avatar" title="${escapeChatHtml(msg.senderName || 'Partner')}">${partnerAvatar}</div>` : ''}
+      <div class="chat-msg-bubble">
+        ${!isMe ? `<span class="chat-msg-sender-name">${escapeChatHtml(msg.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'))}</span>` : ''}
+        <p class="chat-msg-text">${escapeChatHtml(msg.text)}</p>
+        <div class="chat-msg-footer">
+          <span class="chat-msg-time">${timeStr}</span>
+          ${isMe ? '<span class="chat-msg-ticks">✓✓</span>' : ''}
+        </div>
+      </div>
+    `;
   }
 
-  listEl.appendChild(row);
+  // Insert before typing bubble if typing bubble is in the DOM
+  const typingBubble = document.getElementById('chatTypingBubble');
+  if (typingBubble && typingBubble.parentNode === listEl) {
+    listEl.insertBefore(row, typingBubble);
+  } else {
+    listEl.appendChild(row);
+  }
 
   if (shouldScroll) {
     listEl.scrollTo({ top: listEl.scrollHeight, behavior: 'smooth' });
   }
 }
 
-function sendChatMessage(text, type = 'text') {
+function sendChatMessage(text, type = 'text', extraData = {}) {
   if (!text || !text.trim()) return;
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
   if (!appState.chatMessages) appState.chatMessages = [];
@@ -4828,7 +5329,8 @@ function sendChatMessage(text, type = 'text') {
     senderName: myName,
     text: text.trim(),
     timestamp: Date.now(),
-    type: type
+    type: type,
+    ...extraData
   };
 
   appState.chatMessages.push(msg);
@@ -4843,12 +5345,15 @@ function sendChatMessage(text, type = 'text') {
   playTone(587.33, 0.08);
   setTimeout(() => playTone(880, 0.1), 80);
 
+  // Stop typing indicator on message send
+  broadcastMyTypingStatus(false);
+
   // Real-time broadcast (MQTT, BroadcastChannel, Firebase RTDB, and Closed-App Web Push!)
   broadcastUpdate('CHAT_MESSAGE', msg);
 }
 
 function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
-  if (!msg || !msg.id || !msg.text) return;
+  if (!msg || !msg.id || (!msg.text && !msg.imageData && !msg.audioData)) return;
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
   if (!appState.chatMessages) appState.chatMessages = [];
 
@@ -4926,9 +5431,14 @@ function sendSystemNotificationForChat(msg) {
   recordNotificationShown(notifId);
 
   const senderName = msg.sender === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸';
+  let preview = msg.text ? msg.text.slice(0, 80) : '';
+  if (msg.type === 'image') preview = 'Shared a romantic photo 📷';
+  else if (msg.type === 'audio') preview = `Voice note 🎙️ (${msg.duration || '0:05'})`;
+  else if (msg.type === 'call') preview = msg.text || 'Call log';
+
   const title = `💬 New Message from ${senderName}`;
   const options = {
-    body: `${senderName}: "${msg.text.slice(0, 80)}"`,
+    body: `${senderName}: "${preview}"`,
     icon: './icon-192.png',
     badge: './icon-192.png',
     vibrate: [250, 100, 250],
@@ -4964,6 +5474,7 @@ const RTC_CONFIG = {
 
 let vcState = {
   callId: null,
+  callType: 'video', // 'video' | 'audio'
   role: null, // 'caller' | 'callee'
   status: 'idle', // 'idle' | 'outgoing' | 'incoming' | 'active'
   localStream: null,
@@ -5055,25 +5566,42 @@ function stopIncomingRingtone() {
   }
 }
 
-async function startVideoCall() {
+function startAudioCall() {
+  playTone(600, 0.1);
+  startVideoCall('audio');
+}
+
+async function startVideoCall(callType = 'video') {
+  vcState.callType = callType;
   const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
   const partnerName = partnerUser === 'himanshu' ? 'Himanshu' : 'Gullu';
   const partnerAvatar = partnerUser === 'himanshu' ? '☕' : '🌸';
+  const isAudioOnly = callType === 'audio';
 
-  // Request Camera & Microphone
+  // Request Microphone, and Camera if video call
   let stream = null;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: vcState.facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
-      audio: true
-    });
-  } catch (err) {
-    console.warn('getUserMedia failed with video+audio, trying audio only:', err);
-    try {
+    if (isAudioOnly) {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e2) {
-      showVcToast('⚠️ Camera permission blocked. Opening Backup Couple Room!');
-      openJitsiFallbackRoom();
+    } else {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: vcState.facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: true
+      });
+    }
+  } catch (err) {
+    console.warn('getUserMedia failed with requested constraints:', err);
+    if (!isAudioOnly) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        vcState.callType = 'audio';
+      } catch (e2) {
+        showVcToast('⚠️ Permission blocked. Opening Backup Couple Room!');
+        openJitsiFallbackRoom();
+        return;
+      }
+    } else {
+      showVcToast('⚠️ Microphone permission blocked.');
       return;
     }
   }
@@ -5083,11 +5611,16 @@ async function startVideoCall() {
   vcState.callId = 'call_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
   vcState.status = 'outgoing';
 
-  // Attach local stream to PiP
+  // Attach local stream to PiP if video
   const localVideo = document.getElementById('localVideo');
   if (localVideo) {
-    localVideo.srcObject = stream;
-    localVideo.play().catch(() => {});
+    if (!isAudioOnly && vcState.callType === 'video') {
+      localVideo.srcObject = stream;
+      localVideo.play().catch(() => {});
+      localVideo.style.display = 'block';
+    } else {
+      localVideo.style.display = 'none';
+    }
   }
 
   // Set screens
@@ -5095,15 +5628,18 @@ async function startVideoCall() {
   const outgoingScreen = document.getElementById('vcOutgoingScreen');
   const incomingScreen = document.getElementById('vcIncomingScreen');
   const activeScreen = document.getElementById('vcActiveScreen');
+  const audioActiveScreen = document.getElementById('vcAudioActiveScreen');
   const fallbackScreen = document.getElementById('vcFallbackScreen');
 
   const outAvatar = document.getElementById('vcOutgoingPartnerAvatar');
   const outName = document.getElementById('vcOutgoingPartnerName');
   const outStatus = document.getElementById('vcOutgoingStatusText');
+  const outTypeTag = document.getElementById('vcOutgoingCallTypeTag');
 
   if (outAvatar) outAvatar.textContent = partnerAvatar;
   if (outName) outName.textContent = `Calling ${partnerName}...`;
-  if (outStatus) outStatus.textContent = `Ringing partner's phone... 🔔`;
+  if (outStatus) outStatus.textContent = `Ringing ${partnerName}'s phone... 🔔`;
+  if (outTypeTag) outTypeTag.textContent = vcState.callType === 'audio' ? '📞 Voice Call' : '📹 Video Call';
 
   const topAvatar = document.getElementById('vcTopBarAvatar');
   const topName = document.getElementById('vcTopBarName');
@@ -5112,9 +5648,16 @@ async function startVideoCall() {
   if (topName) topName.textContent = partnerName;
   if (placeholderAvatar) placeholderAvatar.textContent = partnerAvatar;
 
+  // Pre-fill audio partner info
+  const audioPartnerAvatar = document.getElementById('vcAudioPartnerAvatar');
+  const audioPartnerName = document.getElementById('vcAudioPartnerName');
+  if (audioPartnerAvatar) audioPartnerAvatar.textContent = partnerAvatar;
+  if (audioPartnerName) audioPartnerName.textContent = partnerName;
+
   if (outgoingScreen) outgoingScreen.classList.remove('is-hidden');
   if (incomingScreen) incomingScreen.classList.add('is-hidden');
   if (activeScreen) activeScreen.classList.add('is-hidden');
+  if (audioActiveScreen) audioActiveScreen.classList.add('is-hidden');
   if (fallbackScreen) fallbackScreen.classList.add('is-hidden');
   if (modal) modal.classList.remove('is-hidden');
 
@@ -5129,10 +5672,12 @@ async function startVideoCall() {
   pc.ontrack = (event) => {
     const remoteVideo = document.getElementById('remoteVideo');
     const placeholder = document.getElementById('remoteVideoPlaceholder');
-    if (remoteVideo && event.streams && event.streams[0]) {
+    if (event.streams && event.streams[0]) {
       vcState.remoteStream = event.streams[0];
-      remoteVideo.srcObject = event.streams[0];
-      remoteVideo.play().catch(() => {});
+      if (remoteVideo) {
+        remoteVideo.srcObject = event.streams[0];
+        remoteVideo.play().catch(() => {});
+      }
       if (placeholder) placeholder.style.display = 'none';
     }
   };
@@ -5146,33 +5691,29 @@ async function startVideoCall() {
   try {
     const offer = await pc.createOffer({
       offerToReceiveAudio: true,
-      offerToReceiveVideo: true
+      offerToReceiveVideo: vcState.callType === 'video'
     });
     await pc.setLocalDescription(offer);
 
-    // Clear candidates and write offer
-    if (firebaseDb) {
-      firebaseDb.ref('our_story/webrtc_call/callerCandidates').set(null);
-      firebaseDb.ref('our_story/webrtc_call/calleeCandidates').set(null);
-      firebaseDb.ref('our_story/webrtc_call/callMeta').set({
-        callId: vcState.callId,
-        from: currentUser,
-        to: partnerUser,
-        status: 'calling',
-        sdpOffer: JSON.stringify(offer),
-        timestamp: Date.now()
-      });
-    }
-
-    // Broadcast for MQTT & push notification
-    broadcastUpdate('VC_CALL', {
+    const callPayload = {
       callId: vcState.callId,
+      callType: vcState.callType,
       from: currentUser,
       to: partnerUser,
       status: 'calling',
       sdpOffer: JSON.stringify(offer),
       timestamp: Date.now()
-    }, false);
+    };
+
+    // Clear candidates and write offer
+    if (firebaseDb) {
+      firebaseDb.ref('our_story/webrtc_call/callerCandidates').set(null);
+      firebaseDb.ref('our_story/webrtc_call/calleeCandidates').set(null);
+      firebaseDb.ref('our_story/webrtc_call/callMeta').set(callPayload);
+    }
+
+    // Broadcast for MQTT & push notification
+    broadcastUpdate('VC_CALL', callPayload, false);
 
     // Listen for Callee candidates
     if (firebaseDb) {
@@ -5186,7 +5727,7 @@ async function startVideoCall() {
       });
     }
   } catch (err) {
-    console.error('Error starting video call:', err);
+    console.error('Error starting video/audio call:', err);
     showVcToast('⚠️ Failed to initialize call. Opening Backup Room.');
     openJitsiFallbackRoom();
   }
@@ -5200,6 +5741,7 @@ function showIncomingCallScreen(callData) {
   const callerAvatar = callerUser === 'himanshu' ? '☕' : '🌸';
 
   vcState.callId = callData.callId;
+  vcState.callType = callData.callType || 'video';
   vcState.role = 'callee';
   vcState.status = 'incoming';
   vcState.pendingOffer = callData.sdpOffer;
@@ -5208,13 +5750,20 @@ function showIncomingCallScreen(callData) {
   const outgoingScreen = document.getElementById('vcOutgoingScreen');
   const incomingScreen = document.getElementById('vcIncomingScreen');
   const activeScreen = document.getElementById('vcActiveScreen');
+  const audioActiveScreen = document.getElementById('vcAudioActiveScreen');
   const fallbackScreen = document.getElementById('vcFallbackScreen');
 
   const inAvatar = document.getElementById('vcIncomingPartnerAvatar');
   const inName = document.getElementById('vcIncomingPartnerName');
+  const inTag = document.getElementById('vcIncomingCallTypeTag');
+  const inStatus = document.getElementById('vcIncomingStatusText');
 
   if (inAvatar) inAvatar.textContent = callerAvatar;
   if (inName) inName.textContent = `${callerName} is calling!`;
+  if (inTag) inTag.textContent = vcState.callType === 'audio' ? 'INCOMING VOICE CALL 📞' : 'INCOMING VIDEO CALL 📹';
+  if (inStatus) inStatus.textContent = vcState.callType === 'audio'
+    ? 'Hear the sweetness of your love... Voice Call ❤️'
+    : 'Feel the warmth... Video call with your love ❤️';
 
   const topAvatar = document.getElementById('vcTopBarAvatar');
   const topName = document.getElementById('vcTopBarName');
@@ -5223,33 +5772,45 @@ function showIncomingCallScreen(callData) {
   if (topName) topName.textContent = callerName;
   if (placeholderAvatar) placeholderAvatar.textContent = callerAvatar;
 
+  const audioPartnerAvatar = document.getElementById('vcAudioPartnerAvatar');
+  const audioPartnerName = document.getElementById('vcAudioPartnerName');
+  if (audioPartnerAvatar) audioPartnerAvatar.textContent = callerAvatar;
+  if (audioPartnerName) audioPartnerName.textContent = callerName;
+
   if (outgoingScreen) outgoingScreen.classList.add('is-hidden');
   if (incomingScreen) incomingScreen.classList.remove('is-hidden');
   if (activeScreen) activeScreen.classList.add('is-hidden');
+  if (audioActiveScreen) audioActiveScreen.classList.add('is-hidden');
   if (fallbackScreen) fallbackScreen.classList.add('is-hidden');
   if (modal) modal.classList.remove('is-hidden');
 
   startIncomingRingtone();
-  showVcToast(`📹 Incoming Call from ${callerName}! Tap Accept to connect ❤️`);
+  showVcToast(`${vcState.callType === 'audio' ? '📞 Voice' : '📹 Video'} Call from ${callerName}! Tap Accept ❤️`);
 }
 
 async function acceptIncomingCall() {
   stopIncomingRingtone();
 
   const callerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+  const isAudioOnly = vcState.callType === 'audio';
 
   let stream = null;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: vcState.facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
-      audio: true
-    });
+    if (isAudioOnly) {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } else {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: vcState.facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: true
+      });
+    }
   } catch (err) {
-    console.warn('getUserMedia failed with video+audio, trying audio only:', err);
+    console.warn('getUserMedia failed in acceptIncomingCall:', err);
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      vcState.callType = 'audio';
     } catch (e2) {
-      showVcToast('⚠️ Camera permission blocked. Opening Backup Couple Room!');
+      showVcToast('⚠️ Permission blocked. Opening Backup Couple Room!');
       openJitsiFallbackRoom();
       return;
     }
@@ -5260,8 +5821,13 @@ async function acceptIncomingCall() {
 
   const localVideo = document.getElementById('localVideo');
   if (localVideo) {
-    localVideo.srcObject = stream;
-    localVideo.play().catch(() => {});
+    if (vcState.callType === 'video') {
+      localVideo.srcObject = stream;
+      localVideo.play().catch(() => {});
+      localVideo.style.display = 'block';
+    } else {
+      localVideo.style.display = 'none';
+    }
   }
 
   switchToActiveCallScreen();
@@ -5274,10 +5840,12 @@ async function acceptIncomingCall() {
   pc.ontrack = (event) => {
     const remoteVideo = document.getElementById('remoteVideo');
     const placeholder = document.getElementById('remoteVideoPlaceholder');
-    if (remoteVideo && event.streams && event.streams[0]) {
+    if (event.streams && event.streams[0]) {
       vcState.remoteStream = event.streams[0];
-      remoteVideo.srcObject = event.streams[0];
-      remoteVideo.play().catch(() => {});
+      if (remoteVideo) {
+        remoteVideo.srcObject = event.streams[0];
+        remoteVideo.play().catch(() => {});
+      }
       if (placeholder) placeholder.style.display = 'none';
     }
   };
@@ -5298,12 +5866,14 @@ async function acceptIncomingCall() {
     if (firebaseDb) {
       firebaseDb.ref('our_story/webrtc_call/callMeta').update({
         status: 'accepted',
+        callType: vcState.callType,
         sdpAnswer: JSON.stringify(answer)
       });
     }
 
     broadcastUpdate('VC_SIGNAL', {
       callId: vcState.callId,
+      callType: vcState.callType,
       status: 'accepted',
       sdpAnswer: JSON.stringify(answer),
       from: currentUser,
@@ -5332,6 +5902,7 @@ async function handleCallAcceptedByPartner(callData) {
   stopOutgoingRingtone();
 
   vcState.status = 'active';
+  if (callData.callType) vcState.callType = callData.callType;
   switchToActiveCallScreen();
 
   if (callData.sdpAnswer && vcState.peerConnection) {
@@ -5349,13 +5920,21 @@ function switchToActiveCallScreen() {
   const outgoingScreen = document.getElementById('vcOutgoingScreen');
   const incomingScreen = document.getElementById('vcIncomingScreen');
   const activeScreen = document.getElementById('vcActiveScreen');
+  const audioActiveScreen = document.getElementById('vcAudioActiveScreen');
   const fallbackScreen = document.getElementById('vcFallbackScreen');
 
   if (outgoingScreen) outgoingScreen.classList.add('is-hidden');
   if (incomingScreen) incomingScreen.classList.add('is-hidden');
-  if (activeScreen) activeScreen.classList.remove('is-hidden');
   if (fallbackScreen) fallbackScreen.classList.add('is-hidden');
   if (modal) modal.classList.remove('is-hidden');
+
+  if (vcState.callType === 'audio') {
+    if (activeScreen) activeScreen.classList.add('is-hidden');
+    if (audioActiveScreen) audioActiveScreen.classList.remove('is-hidden');
+  } else {
+    if (audioActiveScreen) audioActiveScreen.classList.add('is-hidden');
+    if (activeScreen) activeScreen.classList.remove('is-hidden');
+  }
 
   startCallDurationTimer();
 }
@@ -5364,7 +5943,9 @@ function startCallDurationTimer() {
   stopCallDurationTimer();
   vcState.callDurationSeconds = 0;
   const timerText = document.getElementById('vcCallTimerText');
+  const audioTimerText = document.getElementById('vcAudioCallTimerText');
   if (timerText) timerText.textContent = '00:00';
+  if (audioTimerText) audioTimerText.textContent = '00:00';
 
   vcState.timerInterval = setInterval(() => {
     vcState.callDurationSeconds++;
@@ -5372,6 +5953,7 @@ function startCallDurationTimer() {
     const secs = vcState.callDurationSeconds % 60;
     const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     if (timerText) timerText.textContent = formatted;
+    if (audioTimerText) audioTimerText.textContent = formatted;
   }, 1000);
 }
 
@@ -5385,9 +5967,24 @@ function stopCallDurationTimer() {
 function endVideoCall(reason = 'Call ended ❤️') {
   stopOutgoingRingtone();
   stopIncomingRingtone();
-  stopCallDurationTimer();
 
   const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+  const durationSec = vcState.callDurationSeconds;
+  const currentCallType = vcState.callType;
+
+  stopCallDurationTimer();
+
+  // If call had active duration, log to couple chat!
+  if (durationSec > 0) {
+    const mins = Math.floor(durationSec / 60);
+    const secs = durationSec % 60;
+    const durFormatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    const callLabel = currentCallType === 'audio' ? '📞 Audio Call' : '📹 Video Call';
+    sendChatMessage(`${callLabel} • ${durFormatted}`, 'call', {
+      callType: currentCallType,
+      duration: durFormatted
+    });
+  }
 
   if (vcState.callId) {
     if (firebaseDb) {
@@ -5461,7 +6058,11 @@ function cleanupCallState() {
   if (iframeContainer) iframeContainer.innerHTML = '';
 
   const modal = document.getElementById('videoCallModal');
+  const activeScreen = document.getElementById('vcActiveScreen');
+  const audioActiveScreen = document.getElementById('vcAudioActiveScreen');
   if (modal) modal.classList.add('is-hidden');
+  if (activeScreen) activeScreen.classList.add('is-hidden');
+  if (audioActiveScreen) audioActiveScreen.classList.add('is-hidden');
 
   vcState.callId = null;
   vcState.role = null;
@@ -5478,6 +6079,11 @@ function cleanupCallState() {
   if (camBtn) camBtn.classList.remove('active-off');
   if (micIcon) micIcon.textContent = '🎙️';
   if (camIcon) camIcon.textContent = '📷';
+
+  const audioMicBtn = document.getElementById('vcAudioToggleMicBtn');
+  const audioMicIcon = document.getElementById('vcAudioMicIcon');
+  if (audioMicBtn) audioMicBtn.classList.remove('active-off');
+  if (audioMicIcon) audioMicIcon.textContent = '🎙️';
 }
 
 function toggleMicrophone() {
@@ -5492,6 +6098,12 @@ function toggleMicrophone() {
   const icon = document.getElementById('vcMicIcon');
   if (btn) btn.classList.toggle('active-off', vcState.isMicMuted);
   if (icon) icon.textContent = vcState.isMicMuted ? '🔇' : '🎙️';
+
+  const audioMicBtn = document.getElementById('vcAudioToggleMicBtn');
+  const audioMicIcon = document.getElementById('vcAudioMicIcon');
+  if (audioMicBtn) audioMicBtn.classList.toggle('active-off', vcState.isMicMuted);
+  if (audioMicIcon) audioMicIcon.textContent = vcState.isMicMuted ? '🔇' : '🎙️';
+
   showVcToast(vcState.isMicMuted ? 'Microphone muted 🔇' : 'Microphone unmuted 🎙️');
 }
 
@@ -5546,6 +6158,39 @@ async function flipCameraFacing() {
   }
 }
 
+async function switchAudioToVideoCall() {
+  if (vcState.status !== 'active') return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: vcState.facingMode, width: { ideal: 640 }, height: { ideal: 480 } }
+    });
+    const videoTrack = stream.getVideoTracks()[0];
+    if (vcState.peerConnection) {
+      const sender = vcState.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) {
+        sender.replaceTrack(videoTrack);
+      } else {
+        vcState.peerConnection.addTrack(videoTrack, vcState.localStream);
+      }
+    }
+    if (vcState.localStream) {
+      vcState.localStream.addTrack(videoTrack);
+    }
+    const localVideo = document.getElementById('localVideo');
+    if (localVideo) {
+      localVideo.srcObject = vcState.localStream;
+      localVideo.play().catch(() => {});
+      localVideo.style.display = 'block';
+    }
+    vcState.callType = 'video';
+    switchToActiveCallScreen();
+    showVcToast('📹 Switched to Video Call!');
+  } catch (err) {
+    console.warn('Switch to video error:', err);
+    showVcToast('⚠️ Camera permission required for video');
+  }
+}
+
 function sendLoveHeartTapInCall() {
   triggerFloatingHeartAnimation();
   const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
@@ -5582,6 +6227,7 @@ function openJitsiFallbackRoom() {
   const outgoingScreen = document.getElementById('vcOutgoingScreen');
   const incomingScreen = document.getElementById('vcIncomingScreen');
   const activeScreen = document.getElementById('vcActiveScreen');
+  const audioActiveScreen = document.getElementById('vcAudioActiveScreen');
   const fallbackScreen = document.getElementById('vcFallbackScreen');
   const iframeContainer = document.getElementById('vcIframeContainer');
 
@@ -5591,6 +6237,7 @@ function openJitsiFallbackRoom() {
   if (outgoingScreen) outgoingScreen.classList.add('is-hidden');
   if (incomingScreen) incomingScreen.classList.add('is-hidden');
   if (activeScreen) activeScreen.classList.add('is-hidden');
+  if (audioActiveScreen) audioActiveScreen.classList.add('is-hidden');
   if (fallbackScreen) fallbackScreen.classList.remove('is-hidden');
   if (modal) modal.classList.remove('is-hidden');
 
@@ -5643,7 +6290,14 @@ function setupVideoCallEngine() {
   if (headerBtn) {
     headerBtn.addEventListener('click', () => {
       playTone(600, 0.1);
-      startVideoCall();
+      startVideoCall('video');
+    });
+  }
+
+  const chatAudioBtn = document.getElementById('chatStartAudioBtn');
+  if (chatAudioBtn) {
+    chatAudioBtn.addEventListener('click', () => {
+      startAudioCall();
     });
   }
 
@@ -5651,7 +6305,7 @@ function setupVideoCallEngine() {
   if (chatVcBtn) {
     chatVcBtn.addEventListener('click', () => {
       playTone(600, 0.1);
-      startVideoCall();
+      startVideoCall('video');
     });
   }
 
@@ -5670,6 +6324,7 @@ function setupVideoCallEngine() {
     declineBtn.addEventListener('click', () => declineIncomingCall());
   }
 
+  // Video Active Screen Controls
   const endActiveBtn = document.getElementById('vcEndActiveCallBtn');
   if (endActiveBtn) {
     endActiveBtn.addEventListener('click', () => endVideoCall('Call ended with love ❤️'));
@@ -5693,6 +6348,35 @@ function setupVideoCallEngine() {
   const heartBtn = document.getElementById('vcSendHeartBtn');
   if (heartBtn) {
     heartBtn.addEventListener('click', sendLoveHeartTapInCall);
+  }
+
+  // Audio Active Screen Controls
+  const audioMicBtn = document.getElementById('vcAudioToggleMicBtn');
+  if (audioMicBtn) {
+    audioMicBtn.addEventListener('click', toggleMicrophone);
+  }
+
+  const audioSpeakerBtn = document.getElementById('vcAudioSpeakerBtn');
+  if (audioSpeakerBtn) {
+    audioSpeakerBtn.addEventListener('click', () => {
+      playTone(750, 0.15);
+      showVcToast('🔊 High-definition audio speaker active');
+    });
+  }
+
+  const audioSwitchVideoBtn = document.getElementById('vcAudioSwitchVideoBtn');
+  if (audioSwitchVideoBtn) {
+    audioSwitchVideoBtn.addEventListener('click', switchAudioToVideoCall);
+  }
+
+  const audioHeartBtn = document.getElementById('vcAudioSendHeartBtn');
+  if (audioHeartBtn) {
+    audioHeartBtn.addEventListener('click', sendLoveHeartTapInCall);
+  }
+
+  const audioEndBtn = document.getElementById('vcAudioEndCallBtn');
+  if (audioEndBtn) {
+    audioEndBtn.addEventListener('click', () => endVideoCall('Voice call ended with love ❤️'));
   }
 
   const jitsiBtn = document.getElementById('vcJitsiFallbackBtn');

@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=33">
+  <link rel="stylesheet" href="styles.css?v=34">
 </head>
 <body>
 
@@ -693,25 +693,33 @@
       <section class="tab-pane" id="paneChat">
         <div class="chat-container">
           
-          <!-- Chat Partner Status Banner -->
+          <!-- Messaging App Header Bar (WhatsApp / Telegram style) -->
           <div class="chat-header-bar">
             <div class="chat-partner-avatar-box">
               <span class="chat-partner-avatar" id="chatPartnerAvatar">🌸</span>
-              <span class="chat-status-dot pulse" title="Connected"></span>
+              <span class="chat-status-dot pulse" id="chatStatusDot" title="Online"></span>
             </div>
             <div class="chat-partner-meta">
               <div class="chat-partner-title-row">
                 <h3 class="chat-partner-heading" id="chatPartnerName">Gullu 🌸</h3>
-                <span class="chat-private-tag">🔒 Private</span>
+                <span class="chat-private-tag">🔒 Couple Space</span>
               </div>
-              <p class="chat-partner-sub" id="chatPartnerSub">Live Cloud Synced • Himanshu & Gullu Only</p>
+              <p class="chat-partner-sub" id="chatPartnerSub">
+                <span class="chat-online-badge">🟢 Online</span>
+              </p>
             </div>
             <div class="chat-header-actions">
-              <button class="chat-vc-btn" id="chatStartVcBtn" title="Start Private Video Call">
-                📹 Call
+              <!-- Audio Call Button -->
+              <button class="chat-header-btn audio" id="chatStartAudioBtn" title="Start Audio Call (Voice Call)">
+                <span class="header-btn-icon">📞</span>
               </button>
-              <button class="chat-love-burst-btn" id="chatLoveBurstBtn" title="Send Love Burst">
-                💖 Burst
+              <!-- Video Call (VC) Button -->
+              <button class="chat-header-btn video" id="chatStartVcBtn" title="Start Video Call (VC)">
+                <span class="header-btn-icon">📹</span>
+              </button>
+              <!-- Love Burst Button -->
+              <button class="chat-header-btn burst" id="chatLoveBurstBtn" title="Send Love Burst">
+                <span class="header-btn-icon">💖</span>
               </button>
             </div>
           </div>
@@ -721,28 +729,86 @@
             <button class="quick-chip-btn" data-text="Miss you so much ❤️">Miss you ❤️</button>
             <button class="quick-chip-btn" data-text="I love you baby 💖">Love you 💖</button>
             <button class="quick-chip-btn" data-text="Coffee date pe chalte hain? ☕">Coffee date? ☕</button>
-            <button class="quick-chip-btn" data-text="Pout band karo ab 🐷">Pout band karo 🐷</button>
             <button class="quick-chip-btn" data-text="Ek pyaari si jhappi! 🫂">Jhappi! 🫂</button>
-            <button class="quick-chip-btn" data-text="Kahan ho aap abhi? 📍">Kahan ho? 📍</button>
-            <button class="quick-chip-btn" data-text="Gussa ho kya mere se? 🥺">Gussa ho? 🥺</button>
             <button class="quick-chip-btn" data-text="Call karo na jaldi! 📞">Call me 📞</button>
+            <button class="quick-chip-btn" data-text="Kahan ho aap abhi? 📍">Kahan ho? 📍</button>
+            <button class="quick-chip-btn" data-text="Pout band karo ab 🐷">Pout band karo 🐷</button>
+            <button class="quick-chip-btn" data-text="Gussa ho kya mere se? 🥺">Gussa ho? 🥺</button>
           </div>
 
-          <!-- Message History List -->
+          <!-- Message History List (with WhatsApp / Telegram Style Wallpaper) -->
           <div class="chat-messages-wrap" id="chatMessagesList">
+            <div class="chat-date-divider" id="chatDateDivider">
+              <span>TODAY</span>
+            </div>
+
             <div class="chat-empty-state" id="chatEmptyState">
               <span class="chat-empty-icon">💌</span>
               <h4>Dil Ki Baatein Shuru Karein!</h4>
-              <p>Aapka aur partner ka 100% private couple chat space. Jo bhi likhenge, instant sync hoga! ❤️</p>
+              <p>Aapka aur partner ka 100% private couple chat space. Text, audio call, video call, photos aur voice notes sab realtime sync honge! ❤️</p>
+            </div>
+
+            <!-- Typing indicator bubble (Dynamic) -->
+            <div class="chat-typing-bubble is-hidden" id="chatTypingBubble">
+              <span class="typing-avatar" id="typingPartnerAvatar">🌸</span>
+              <div class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <span class="typing-text">typing...</span>
             </div>
           </div>
 
-          <!-- Chat Input Controls -->
-          <div class="chat-input-bar">
-            <button class="chat-quick-heart-btn" id="chatQuickHeartBtn" title="Send Heart">❤️</button>
-            <div class="chat-input-field-wrap">
-              <textarea class="chat-input-field" id="chatTextInput" rows="1" placeholder="Type any message here... ✍️ (Kuch bhi likhein)"></textarea>
+          <!-- Voice Recording Bar (Appears when recording audio note) -->
+          <div class="chat-voice-record-bar is-hidden" id="chatVoiceRecordBar">
+            <div class="recording-pulse-indicator">
+              <span class="rec-red-dot"></span>
+              <span class="rec-timer-text" id="voiceRecTimer">00:00</span>
             </div>
+            <span class="rec-wave-text">Voice note recording... 🎙️</span>
+            <div class="rec-actions">
+              <button class="rec-cancel-btn" id="voiceRecCancelBtn" title="Cancel Recording">✕ Cancel</button>
+              <button class="rec-send-btn" id="voiceRecSendBtn" title="Send Voice Note">✔ Send</button>
+            </div>
+          </div>
+
+          <!-- Photo Preview Tray (When selecting an image to send) -->
+          <div class="chat-image-preview-tray is-hidden" id="chatImagePreviewTray">
+            <div class="preview-img-wrap">
+              <img id="chatPreviewImage" src="" alt="Selected Preview">
+              <button class="preview-remove-btn" id="chatPreviewRemoveBtn">✕</button>
+            </div>
+            <input type="text" class="preview-caption-input" id="chatImageCaption" placeholder="Add a romantic caption... ✍️">
+            <button class="preview-send-btn" id="chatImageSendBtn">Send Photo ➤</button>
+          </div>
+
+          <!-- Messaging App Input Bar -->
+          <div class="chat-input-bar">
+            <!-- Hidden Image/Photo File Input -->
+            <input type="file" id="chatImageInput" accept="image/*" class="is-hidden" style="display: none;">
+            
+            <!-- Attachment Button (Photo share) -->
+            <button class="chat-bar-btn attach-btn" id="chatAttachBtn" title="Send Photo / Memory">
+              📷
+            </button>
+
+            <!-- Quick Heart Button -->
+            <button class="chat-bar-btn heart-btn" id="chatQuickHeartBtn" title="Send Heart">
+              ❤️
+            </button>
+
+            <!-- Auto-expanding Textarea Field -->
+            <div class="chat-input-field-wrap">
+              <textarea class="chat-input-field" id="chatTextInput" rows="1" placeholder="Message likhein... ✍️"></textarea>
+            </div>
+
+            <!-- Voice Note Record Button -->
+            <button class="chat-bar-btn voice-btn" id="chatVoiceNoteBtn" title="Record Voice Note">
+              🎙️
+            </button>
+
+            <!-- Send Button -->
             <button class="chat-send-btn" id="chatSendBtn" title="Send Message">
               <span class="send-icon">➤</span>
             </button>
@@ -1035,6 +1101,7 @@
           <div class="vc-avatar-ring ring-3"></div>
           <span class="vc-calling-avatar" id="vcOutgoingPartnerAvatar">🌸</span>
         </div>
+        <span class="vc-call-type-tag" id="vcOutgoingCallTypeTag">📹 Video Call</span>
         <h3 class="vc-calling-name" id="vcOutgoingPartnerName">Calling Gullu...</h3>
         <p class="vc-calling-status" id="vcOutgoingStatusText">Ringing partner's phone... 🔔</p>
         <span class="vc-encrypted-pill">🔒 Private P2P End-to-End Encrypted</span>
@@ -1054,9 +1121,9 @@
           <div class="vc-avatar-ring ring-3"></div>
           <span class="vc-calling-avatar" id="vcIncomingPartnerAvatar">☕</span>
         </div>
-        <span class="vc-incoming-tag">INCOMING VIDEO CALL 📹</span>
+        <span class="vc-incoming-tag" id="vcIncomingCallTypeTag">INCOMING VIDEO CALL 📹</span>
         <h3 class="vc-calling-name" id="vcIncomingPartnerName">Himanshu is calling!</h3>
-        <p class="vc-calling-status">Feel the warmth... Video call with your love ❤️</p>
+        <p class="vc-calling-status" id="vcIncomingStatusText">Feel the warmth... Call with your love ❤️</p>
 
         <div class="vc-incoming-actions-row">
           <button class="vc-answer-btn" id="vcAcceptCallBtn">
@@ -1070,7 +1137,7 @@
         </div>
       </div>
 
-      <!-- 3. ACTIVE LIVE VIDEO CALL SCREEN -->
+      <!-- 3A. ACTIVE LIVE VIDEO CALL SCREEN -->
       <div class="vc-sub-screen is-hidden" id="vcActiveScreen">
         <div class="vc-video-viewport">
           <!-- Remote Partner Video (Main View) -->
@@ -1126,6 +1193,51 @@
         </div>
       </div>
 
+      <!-- 3B. ACTIVE LIVE AUDIO / VOICE CALL SCREEN -->
+      <div class="vc-sub-screen is-hidden" id="vcAudioActiveScreen">
+        <div class="vc-audio-call-stage">
+          <div class="vc-audio-top-bar">
+            <span class="vc-encrypted-pill">🔒 Private P2P Voice Call</span>
+            <div class="vc-duration-badge" id="vcAudioDurationBadge">
+              <span class="rec-dot"></span> <span id="vcAudioCallTimerText">00:00</span>
+            </div>
+          </div>
+
+          <div class="vc-audio-avatar-center">
+            <div class="vc-audio-wave wave-1"></div>
+            <div class="vc-audio-wave wave-2"></div>
+            <div class="vc-audio-wave wave-3"></div>
+            <span class="vc-audio-avatar" id="vcAudioPartnerAvatar">🌸</span>
+          </div>
+
+          <h3 class="vc-audio-partner-name" id="vcAudioPartnerName">Gullu</h3>
+          <p class="vc-audio-call-status" id="vcAudioStatusText">Voice call in progress... 💖</p>
+
+          <div class="vc-audio-controls-dock">
+            <button class="vc-audio-ctrl-btn" id="vcAudioToggleMicBtn" title="Mute/Unmute Mic">
+              <span class="ctrl-icon" id="vcAudioMicIcon">🎙️</span>
+              <span class="ctrl-label">Mute</span>
+            </button>
+            <button class="vc-audio-ctrl-btn speaker" id="vcAudioSpeakerBtn" title="Speaker Toggle">
+              <span class="ctrl-icon" id="vcAudioSpeakerIcon">🔊</span>
+              <span class="ctrl-label">Speaker</span>
+            </button>
+            <button class="vc-audio-ctrl-btn switch-video" id="vcAudioSwitchVideoBtn" title="Switch to Video Call">
+              <span class="ctrl-icon">📹</span>
+              <span class="ctrl-label">Video</span>
+            </button>
+            <button class="vc-audio-ctrl-btn heart" id="vcAudioSendHeartBtn" title="Send Love Tap">
+              <span class="ctrl-icon">💖</span>
+              <span class="ctrl-label">Heart</span>
+            </button>
+            <button class="vc-audio-ctrl-btn end-call" id="vcAudioEndCallBtn" title="End Call">
+              <span class="ctrl-icon">🔴</span>
+              <span class="ctrl-label">End</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- 4. PRIVATE BACKUP JITSI ROOM (100% Reliable Fallback) -->
       <div class="vc-sub-screen is-hidden" id="vcFallbackScreen">
         <div class="vc-fallback-header">
@@ -1140,6 +1252,20 @@
     </div>
   </div>
 
+  <!-- FULLSCREEN PHOTO LIGHTBOX MODAL FOR CHAT IMAGES -->
+  <div class="modal-overlay is-hidden" id="chatImageZoomModal">
+    <div class="chat-lightbox-card">
+      <div class="chat-lightbox-header">
+        <span class="lightbox-title" id="chatLightboxTitle">Shared Photo 📸</span>
+        <button class="modal-dismiss" id="closeChatImageZoomBtn">✕</button>
+      </div>
+      <div class="chat-lightbox-body">
+        <img id="chatLightboxImg" src="" alt="Full view">
+      </div>
+      <p class="chat-lightbox-caption" id="chatLightboxCaption"></p>
+    </div>
+  </div>
+
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" loop></audio>
 
@@ -1149,6 +1275,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=33"></script>
+  <script src="script.js?v=34"></script>
 </body>
 </html>
