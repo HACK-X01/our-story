@@ -3,13 +3,13 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-const CACHE_NAME = 'our-story-v31';
+const CACHE_NAME = 'our-story-v33';
 
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './styles.css?v=36',
-  './script.js?v=36',
+  './styles.css?v=37',
+  './script.js?v=37',
   './paho-mqtt.min.js',
   './manifest.json',
   './version.json',

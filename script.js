@@ -257,6 +257,25 @@ function playCelebrationChime() {
   setTimeout(() => playTone(1046.50, 0.8), 300); // C6
 }
 
+function playPetHappySound() {
+  playTone(440, 0.15, 'sine', 0.15);
+  setTimeout(() => playTone(554.37, 0.18, 'sine', 0.18), 80);
+  setTimeout(() => playTone(659.25, 0.25, 'sine', 0.22), 160);
+  setTimeout(() => playTone(880, 0.35, 'triangle', 0.2), 240);
+}
+
+function playPetEatSound() {
+  playTone(330, 0.1, 'triangle', 0.2);
+  setTimeout(() => playTone(392, 0.12, 'triangle', 0.22), 90);
+  setTimeout(() => playTone(523.25, 0.18, 'sine', 0.25), 180);
+}
+
+function playPetPurrSound() {
+  playTone(130, 0.25, 'sine', 0.2);
+  setTimeout(() => playTone(120, 0.3, 'sine', 0.2), 150);
+  setTimeout(() => playTone(135, 0.35, 'sine', 0.22), 320);
+}
+
 // --- DEFAULT FRESH STATE (Fallback for GitHub Pages & Offline) ---
 const DEFAULT_APP_STATE = {
   profiles: {
@@ -307,12 +326,33 @@ const DEFAULT_APP_STATE = {
       timestamp: Date.now() - 3600000,
       type: "text"
     }
-  ]
+  ],
+  pet: {
+    name: "Mochi",
+    emoji: "🐼",
+    species: "Love Panda",
+    happiness: 95,
+    hunger: 80,
+    energy: 90,
+    level: 1,
+    streak: 1,
+    lastInteraction: Date.now(),
+    state: "happy",
+    activities: [
+      {
+        id: "act_init",
+        author: "Himanshu & Gullu",
+        actionText: "adopted Mochi the Love Panda! 🐼💖",
+        timestamp: Date.now() - 3600000,
+        emoji: "🎉"
+      }
+    ]
+  }
 };
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
 const PERMANENT_STORAGE_KEY = 'our_story_persistent_data';
-const CURRENT_APP_VERSION = '1.9.5';
+const CURRENT_APP_VERSION = '2.0.0';
 
 const NOTIFICATION_DEDUPE_KEY = 'our_story_shown_notification_ids';
 
@@ -352,6 +392,11 @@ function sanitizeAppStateArrays(state) {
   state.pulses = normalizeArray(state.pulses);
   state.chatMessages = normalizeArray(state.chatMessages || state.chat_messages);
   state.pastQAs = normalizeArray(state.pastQAs);
+  if (state.pet && state.pet.activities) {
+    state.pet.activities = normalizeArray(state.pet.activities);
+  } else if (!state.pet) {
+    state.pet = JSON.parse(JSON.stringify(DEFAULT_APP_STATE.pet));
+  }
   return state;
 }
 
@@ -490,6 +535,24 @@ function mergePreservingUserData(local, incoming) {
   localMsgs.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
   merged.chatMessages = Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).slice(-200);
 
+  // 8. Preserve Virtual Pet (Freshest interaction wins, keep union of activities)
+  if (incoming.pet || local.pet) {
+    const incPet = incoming.pet;
+    const locPet = local.pet;
+    if (incPet && locPet) {
+      const winner = ((incPet.lastInteraction || 0) >= (locPet.lastInteraction || 0)) ? incPet : locPet;
+      merged.pet = { ...winner };
+      const actMap = new Map();
+      (incPet.activities || []).forEach(a => { if (a && a.id) actMap.set(a.id, a); });
+      (locPet.activities || []).forEach(a => { if (a && a.id) actMap.set(a.id, a); });
+      merged.pet.activities = Array.from(actMap.values())
+        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        .slice(0, 30);
+    } else {
+      merged.pet = incPet || locPet || JSON.parse(JSON.stringify(DEFAULT_APP_STATE.pet));
+    }
+  }
+
   return sanitizeAppStateArrays(merged);
 }
 
@@ -531,6 +594,7 @@ function renderAll() {
   try { renderMoods(); } catch (e) { console.error('renderMoods failed:', e); }
   try { updateCoupleLocationsUI(); } catch (e) { console.error('updateCoupleLocationsUI failed:', e); }
   try { renderChatUI(); } catch (e) { console.error('renderChatUI failed:', e); }
+  try { renderPetState(); } catch (e) { console.error('renderPetState failed:', e); }
 }
 
 // ==========================================================================
@@ -784,6 +848,17 @@ function setupFirebaseRealtimeListeners() {
       handleIncomingVCSignal(callMeta);
     }
   });
+
+  // 8. Virtual Couple Pet Realtime Sync
+  firebaseDb.ref('our_story/pet').on('value', (snapshot) => {
+    const petData = snapshot.val();
+    if (petData && petData.name) {
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      appState.pet = petData;
+      saveAppState(appState);
+      renderPetState();
+    }
+  });
 }
 
 function syncInitialStateFromFirebase() {
@@ -951,6 +1026,8 @@ function syncToFirebase(type, data) {
         firebaseDb.ref('our_story/chat_typing/' + currentUser).set(data);
       } else if (type === 'VC_SIGNAL' || type === 'VC_CALL') {
         firebaseDb.ref('our_story/webrtc_call/callMeta').set(data);
+      } else if (type === 'PET_ACTION') {
+        firebaseDb.ref('our_story/pet').set(appState.pet);
       }
     } catch (e) {
       console.warn('Firebase SDK write error:', e);
@@ -1012,6 +1089,10 @@ function syncToFirebase(type, data) {
       endpoint += `/webrtc_call/callMeta.json`;
       method = 'PUT';
       body = data;
+    } else if (type === 'PET_ACTION') {
+      endpoint += `/pet.json`;
+      method = 'PUT';
+      body = appState.pet;
     }
 
     fetch(endpoint, {
@@ -1252,6 +1333,7 @@ function broadcastUpdate(type, data, retain = false) {
       else if (type === 'MEMORY_ADD') subTopic = 'memory';
       else if (type === 'LOCATION_UPDATE') subTopic = 'location';
       else if (type === 'CHAT_MESSAGE' || type === 'CHAT_TYPING') subTopic = 'chat';
+      else if (type === 'PET_ACTION') subTopic = 'pet';
 
       const msg = new Paho.MQTT.Message(JSON.stringify(payload));
       msg.destinationName = SYNC_TOPIC_PREFIX + subTopic;
@@ -1333,6 +1415,14 @@ function broadcastUpdate(type, data, retain = false) {
         tags: isAudio ? ['telephone_receiver', 'phone'] : ['video_camera', 'phone'],
         priority: 5
       });
+    } else if (type === 'PET_ACTION') {
+      sendClosedAppPushNotification(partnerUser, {
+        title: `🐾 Mochi Pet Update from ${myName}!`,
+        message: `${myName} ${data.actionText || 'did something cute with Mochi! 🐼'}`,
+        click: getAppNavUrl('#paneMood'),
+        tags: ['panda_face', 'sparkles'],
+        priority: 4
+      });
     }
   } catch (err) {
     console.warn('Closed-app push notification trigger failed:', err);
@@ -1371,6 +1461,8 @@ function handleIncomingSyncMessage(payload) {
     handleIncomingVCSignal(payload.data);
   } else if (payload.type === 'VC_HEART') {
     handleIncomingVCHeart(payload.data);
+  } else if (payload.type === 'PET_ACTION') {
+    handleIncomingPetAction(payload.data);
   }
 }
 
@@ -3067,21 +3159,54 @@ function setupMemoryVault() {
     } catch (e) {}
   }
 
-  // Photo Input Trigger & Change
-  if (dropzone && fileInput) {
+  // Photo Inputs (Camera, Gallery, Fallback) & Change Handlers
+  const fileInputCam = document.getElementById('memoryFileInputCamera');
+  const fileInputGal = document.getElementById('memoryFileInputGallery');
+  const dropzoneCameraBtn = document.getElementById('dropzoneCameraBtn');
+  const dropzoneGalleryBtn = document.getElementById('dropzoneGalleryBtn');
+  const previewImgContainer = document.getElementById('previewImgContainer');
+
+  const onFileInputSelected = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        handleLoadedPhoto(event.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  if (fileInput) fileInput.addEventListener('change', onFileInputSelected);
+  if (fileInputCam) fileInputCam.addEventListener('change', onFileInputSelected);
+  if (fileInputGal) fileInputGal.addEventListener('change', onFileInputSelected);
+
+  if (dropzoneCameraBtn) {
+    dropzoneCameraBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (fileInputCam) fileInputCam.click();
+    });
+  }
+
+  if (dropzoneGalleryBtn) {
+    dropzoneGalleryBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (fileInputGal) fileInputGal.click();
+      else if (fileInput) fileInput.click();
+    });
+  }
+
+  if (dropzone) {
     dropzone.addEventListener('click', (e) => {
       if (e.target.id === 'removePhotoBtn' || e.target.closest('#removePhotoBtn')) return;
-      fileInput.click();
-    });
-
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          handleLoadedPhoto(event.target.result);
-        };
-        reader.readAsDataURL(file);
+      if (e.target.closest('#previewImgContainer') || e.target.id === 'previewImg') {
+        if (currentPreviewBase64) {
+          openPhotoLightbox(currentPreviewBase64, 'Preview Memory 📸', 'Selected Photo Preview', 'Ready to save in our scrapbook');
+        }
+        return;
+      }
+      if (!currentPreviewBase64) {
+        promptPhotoSource('vault');
       }
     });
 
@@ -3103,6 +3228,15 @@ function setupMemoryVault() {
           handleLoadedPhoto(event.target.result);
         };
         reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  if (previewImgContainer) {
+    previewImgContainer.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (currentPreviewBase64) {
+        openPhotoLightbox(currentPreviewBase64, 'Preview Memory 📸', 'Selected Photo Preview', 'Ready to save in our scrapbook');
       }
     });
   }
@@ -3258,12 +3392,16 @@ function renderVaultFeed() {
     const cleanArtist = (m.song?.artist || 'Taylor Swift').replace(/'/g, "\\'");
     const ytId = m.song?.ytId || 'igIfiqqVHtA';
     const audioUrl = (m.song?.audioUrl || '').replace(/'/g, "\\'");
+    const cleanCaption = (m.caption || 'Our Sweet Memory').replace(/'/g, "\\'");
+    const cleanComp = (m.compliment || '').replace(/'/g, "\\'");
+    const metaStr = `By ${m.author || 'Couple'} • ${m.date || 'Today'}`.replace(/'/g, "\\'");
 
     return `
       <div class="memory-item-card">
-        <div class="memory-item-img-wrap">
-          <img src="${m.photoUrl}" alt="${m.caption}">
+        <div class="memory-item-img-wrap" onclick="openPhotoLightbox('${m.photoUrl}', '${cleanCaption}', '${cleanComp}', '${metaStr}')" title="Tap to view fullscreen photo 🔍">
+          <img src="${m.photoUrl}" alt="${m.caption}" loading="lazy">
           <span class="memory-mode-pill">${m.mode === 'together' ? '💑 Together' : '📱 Apart'}</span>
+          <span class="memory-zoom-pill">🔍 Khol Ke Dekhein</span>
         </div>
         <div class="memory-body">
           <div class="memory-meta-row">
@@ -5229,19 +5367,11 @@ function setupVoicePlayListener(btn) {
 
 // --- Photo Lightbox Modal ---
 function openChatImageLightbox(src, caption) {
-  const modal = document.getElementById('chatImageZoomModal');
-  const img = document.getElementById('chatLightboxImg');
-  const cap = document.getElementById('chatLightboxCaption');
-  if (img) img.src = src;
-  if (cap) cap.textContent = caption || '';
-  if (modal) modal.classList.remove('is-hidden');
+  openPhotoLightbox(src, 'Shared Photo 📸', caption, 'Couple Chat');
 }
 
 function closeChatImageLightbox() {
-  const modal = document.getElementById('chatImageZoomModal');
-  if (modal) modal.classList.add('is-hidden');
-  const img = document.getElementById('chatLightboxImg');
-  if (img) img.src = '';
+  closePhotoLightbox();
 }
 
 function setupChatUI() {
@@ -5269,19 +5399,29 @@ function setupChatUI() {
     });
   }
 
-  // Photo Attachment Controls
+  // Photo Attachment Controls (Camera vs Gallery)
   const attachBtn = document.getElementById('chatAttachBtn');
   const fileInput = document.getElementById('chatImageInput');
+  const fileInputCam = document.getElementById('chatImageInputCamera');
+  const fileInputGal = document.getElementById('chatImageInputGallery');
   const previewRemoveBtn = document.getElementById('chatPreviewRemoveBtn');
   const previewSendBtn = document.getElementById('chatImageSendBtn');
   const previewTray = document.getElementById('chatImagePreviewTray');
 
-  if (attachBtn && fileInput) {
-    attachBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        handleImageFileSelected(e.target.files[0]);
-      }
+  const onChatFileSelected = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleImageFileSelected(e.target.files[0]);
+    }
+  };
+
+  if (fileInput) fileInput.addEventListener('change', onChatFileSelected);
+  if (fileInputCam) fileInputCam.addEventListener('change', onChatFileSelected);
+  if (fileInputGal) fileInputGal.addEventListener('change', onChatFileSelected);
+
+  if (attachBtn) {
+    attachBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      promptPhotoSource('chat');
     });
   }
 
@@ -6798,6 +6938,459 @@ function setupVideoCallEngine() {
   });
 }
 
+// ==========================================================================
+// UNIVERSAL PHOTO LIGHTBOX & SOURCE SELECTOR
+// ==========================================================================
+
+let currentPhotoTarget = 'vault';
+
+function promptPhotoSource(target = 'vault') {
+  currentPhotoTarget = target;
+  const modal = document.getElementById('photoSourceModal');
+  if (modal) {
+    modal.classList.remove('is-hidden');
+    modal.classList.add('open');
+  }
+}
+
+function closePhotoSourceModal() {
+  const modal = document.getElementById('photoSourceModal');
+  if (modal) {
+    modal.classList.add('is-hidden');
+    modal.classList.remove('open');
+  }
+}
+
+function triggerPhotoSelection(sourceType) {
+  closePhotoSourceModal();
+  if (currentPhotoTarget === 'vault') {
+    if (sourceType === 'camera') {
+      const cam = document.getElementById('memoryFileInputCamera');
+      if (cam) cam.click();
+    } else {
+      const gal = document.getElementById('memoryFileInputGallery') || document.getElementById('memoryFileInput');
+      if (gal) gal.click();
+    }
+  } else if (currentPhotoTarget === 'chat') {
+    if (sourceType === 'camera') {
+      const cam = document.getElementById('chatImageInputCamera');
+      if (cam) cam.click();
+    } else {
+      const gal = document.getElementById('chatImageInputGallery') || document.getElementById('chatImageInput');
+      if (gal) gal.click();
+    }
+  }
+}
+
+function openPhotoLightbox(src, title = 'Our Memory 📸', caption = '', subText = '') {
+  if (!src) return;
+  const modal = document.getElementById('photoLightboxModal');
+  const img = document.getElementById('photoLightboxImg');
+  const cap = document.getElementById('photoLightboxCaption');
+  const titleEl = document.getElementById('photoLightboxTitle');
+  const subEl = document.getElementById('photoLightboxSub');
+  const downloadBtn = document.getElementById('photoLightboxDownloadBtn');
+
+  if (img) img.src = src;
+  if (titleEl) titleEl.textContent = title;
+  if (cap) cap.textContent = caption || '';
+  if (subEl) subEl.textContent = subText || '';
+  if (downloadBtn) {
+    downloadBtn.href = src;
+    downloadBtn.download = `OurStory_${Date.now()}.jpg`;
+  }
+  if (modal) {
+    modal.classList.remove('is-hidden');
+    modal.classList.add('open');
+  }
+}
+
+function closePhotoLightbox() {
+  const modal = document.getElementById('photoLightboxModal');
+  if (modal) {
+    modal.classList.add('is-hidden');
+    modal.classList.remove('open');
+  }
+  const img = document.getElementById('photoLightboxImg');
+  if (img) img.src = '';
+}
+
+function setupUniversalPhotoFeatures() {
+  // 1. Photo Source Action Sheet Buttons
+  const camBtn = document.getElementById('sourceCameraBtn');
+  if (camBtn) camBtn.addEventListener('click', () => triggerPhotoSelection('camera'));
+
+  const galBtn = document.getElementById('sourceGalleryBtn');
+  if (galBtn) galBtn.addEventListener('click', () => triggerPhotoSelection('gallery'));
+
+  const cancelBtn = document.getElementById('sourceCancelBtn');
+  if (cancelBtn) cancelBtn.addEventListener('click', closePhotoSourceModal);
+
+  const sourceModal = document.getElementById('photoSourceModal');
+  if (sourceModal) {
+    sourceModal.addEventListener('click', (e) => {
+      if (e.target === sourceModal) closePhotoSourceModal();
+    });
+  }
+
+  // 2. Lightbox Close Buttons
+  const closeBtn = document.getElementById('closePhotoLightboxBtn');
+  if (closeBtn) closeBtn.addEventListener('click', closePhotoLightbox);
+
+  const lightboxModal = document.getElementById('photoLightboxModal');
+  if (lightboxModal) {
+    lightboxModal.addEventListener('click', (e) => {
+      if (e.target === lightboxModal || e.target.id === 'photoLightboxBody') closePhotoLightbox();
+    });
+  }
+
+  // Escape key to dismiss modals
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closePhotoLightbox();
+      closePhotoSourceModal();
+    }
+  });
+}
+
+// ==========================================================================
+// VIRTUAL COUPLE PET: MOCHI THE LOVE PANDA 🐾
+// Co-Parenting Sanctuary for Himanshu & Gullu
+// ==========================================================================
+
+function getPetState() {
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.pet) {
+    appState.pet = JSON.parse(JSON.stringify(DEFAULT_APP_STATE.pet));
+  }
+  return appState.pet;
+}
+
+function renderPetState() {
+  const pet = getPetState();
+  if (!pet) return;
+
+  // Header status pill
+  const headerPetStatusText = document.getElementById('headerPetStatusText');
+  if (headerPetStatusText) {
+    headerPetStatusText.textContent = `Lvl ${pet.level || 1} • ${pet.name || 'Mochi'}`;
+  }
+
+  // Level & streak badges
+  const petLevelBadge = document.getElementById('petLevelBadge');
+  if (petLevelBadge) petLevelBadge.textContent = `⭐ Lvl ${pet.level || 1}`;
+
+  const petStreakBadge = document.getElementById('petStreakBadge');
+  if (petStreakBadge) petStreakBadge.textContent = `💖 Day ${pet.streak || 1}`;
+
+  // Vitals
+  const hunger = Math.max(0, Math.min(100, pet.hunger ?? 80));
+  const happy = Math.max(0, Math.min(100, pet.happiness ?? 95));
+  const energy = Math.max(0, Math.min(100, pet.energy ?? 90));
+
+  const petHungerVal = document.getElementById('petHungerVal');
+  const petHungerFill = document.getElementById('petHungerFill');
+  if (petHungerVal) petHungerVal.textContent = `${hunger}%`;
+  if (petHungerFill) petHungerFill.style.width = `${hunger}%`;
+
+  const petHappyVal = document.getElementById('petHappyVal');
+  const petHappyFill = document.getElementById('petHappyFill');
+  if (petHappyVal) petHappyVal.textContent = `${happy}%`;
+  if (petHappyFill) petHappyFill.style.width = `${happy}%`;
+
+  const petEnergyVal = document.getElementById('petEnergyVal');
+  const petEnergyFill = document.getElementById('petEnergyFill');
+  if (petEnergyVal) petEnergyVal.textContent = `${energy}%`;
+  if (petEnergyFill) petEnergyFill.style.width = `${energy}%`;
+
+  // Speech bubble & pet mood text
+  const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
+  const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
+  const petSpeechText = document.getElementById('petSpeechText');
+  const petMoodStatusText = document.getElementById('petMoodStatusText');
+
+  let speech = '';
+  let moodStatus = '';
+
+  if (pet.state === 'eating') {
+    speech = `Nom nom nom! 🍓 Tasty treats! ${myName} gives the best snacks! 😋`;
+    moodStatus = 'Eating Yummy Treats 🍓';
+  } else if (pet.state === 'cuddling') {
+    speech = `Purrrr... So cozy in ${myName}'s arms! Mochi loves you both forever! 💖`;
+    moodStatus = 'Feeling Extra Loved 🥰';
+  } else if (pet.state === 'bathing') {
+    speech = `Splish splash! 🫧 Mochi is sparkling clean and smells like baby lavender! ✨`;
+    moodStatus = 'Fresh & Clean 🛁';
+  } else if (pet.state === 'sleeping') {
+    speech = `Zzz... Shhh, Mochi is dreaming about Himanshu & Gullu's coffee dates... 🌙`;
+    moodStatus = 'Sleeping Peacefully 😴';
+  } else if (pet.state === 'playing') {
+    speech = `Yay! Catch the ball! Look how high Mochi can jump! 🎾🐾`;
+    moodStatus = 'Super Playful & Energetic 🎾';
+  } else {
+    // Dynamic default dialogues
+    if (hunger < 40) {
+      speech = `Panda tummy is rumbling! ${myName}, can I have some strawberries please? 🥺🍓`;
+      moodStatus = 'A Little Hungry 🍓';
+    } else if (happy < 50) {
+      speech = `Missing warm cuddles from ${partnerName} & ${myName}... Come snuggle me! 🥺`;
+      moodStatus = 'Needs Cuddles 💖';
+    } else if (energy < 40) {
+      speech = `Yawn... Panda eyelids are getting heavy. Tuck Mochi into bed? 😴`;
+      moodStatus = 'Sleepy Baby 🌙';
+    } else {
+      speech = `Yay! ${myName} is here! Mochi is the happiest panda in the world with Himanshu & Gullu! ✨`;
+      moodStatus = 'Super Happy & Loved 🥰';
+    }
+  }
+
+  if (petSpeechText) petSpeechText.textContent = speech;
+  if (petMoodStatusText) petMoodStatusText.textContent = moodStatus;
+
+  // Last interacted time
+  const petLastInteractedText = document.getElementById('petLastInteractedText');
+  if (petLastInteractedText) {
+    if (pet.lastInteraction) {
+      const diffMin = Math.floor((Date.now() - pet.lastInteraction) / 60000);
+      if (diffMin < 1) petLastInteractedText.textContent = 'Last loved: Just now';
+      else if (diffMin < 60) petLastInteractedText.textContent = `Last loved: ${diffMin}m ago`;
+      else petLastInteractedText.textContent = `Last loved: ${Math.floor(diffMin / 60)}h ago`;
+    } else {
+      petLastInteractedText.textContent = 'Last loved: Today';
+    }
+  }
+
+  // Render activity diary
+  renderPetActivityDiary();
+}
+
+function renderPetActivityDiary() {
+  const pet = getPetState();
+  const petActivityList = document.getElementById('petActivityList');
+  if (!petActivityList) return;
+
+  const acts = normalizeArray(pet.activities);
+  if (acts.length === 0) {
+    petActivityList.innerHTML = `
+      <div class="pet-activity-item" style="justify-content: center; opacity: 0.7;">
+        <span class="pet-activity-text">No pet care logged yet. Feed or cuddle Mochi to start! 🐾</span>
+      </div>`;
+    return;
+  }
+
+  petActivityList.innerHTML = acts.map(act => {
+    let timeStr = 'Just now';
+    if (act.timestamp) {
+      const diffMin = Math.floor((Date.now() - act.timestamp) / 60000);
+      if (diffMin < 1) timeStr = 'Just now';
+      else if (diffMin < 60) timeStr = `${diffMin}m ago`;
+      else timeStr = `${Math.floor(diffMin / 60)}h ago`;
+    }
+
+    return `
+      <div class="pet-activity-item">
+        <span class="pet-activity-emoji">${act.emoji || '🐾'}</span>
+        <div class="pet-activity-info">
+          <div class="pet-activity-actor-row">
+            <span class="pet-activity-author">${escapeHtml(act.author || 'Couple')}</span>
+            <span class="pet-activity-time">${timeStr}</span>
+          </div>
+          <span class="pet-activity-text">${escapeHtml(act.actionText || '')}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function spawnPetFloatingEmote(emoji, xSpread = 0) {
+  const container = document.getElementById('petFloatingEmotes');
+  if (!container) return;
+
+  const el = document.createElement('span');
+  el.className = 'floating-pet-emote';
+  el.textContent = emoji;
+  const randX = xSpread || ((Math.random() - 0.5) * 80);
+  el.style.setProperty('--x', `${randX}px`);
+  el.style.left = `calc(50% + ${randX}px)`;
+  container.appendChild(el);
+
+  setTimeout(() => {
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }, 1500);
+}
+
+function interactWithPet(actionType, isRemote = false, remoteData = null) {
+  const pet = getPetState();
+  const authorName = isRemote
+    ? (remoteData?.author || (currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕'))
+    : (currentUser === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸');
+
+  let actionText = '';
+  let emoji = '🐾';
+  let floatEmojis = ['💖', '✨'];
+
+  if (actionType === 'feed') {
+    pet.hunger = Math.min(100, (pet.hunger || 0) + 20);
+    pet.happiness = Math.min(100, (pet.happiness || 0) + 10);
+    pet.state = 'eating';
+    actionText = `fed Mochi juicy strawberries & sweet treats! 🍓 (+20 Tummy, +10 Pyar)`;
+    emoji = '🍓';
+    floatEmojis = ['🍓', '😋', '✨'];
+    playPetEatSound();
+  } else if (actionType === 'cuddle') {
+    pet.happiness = Math.min(100, (pet.happiness || 0) + 25);
+    pet.state = 'cuddling';
+    actionText = `gave Mochi warm tight cuddles & kisses! 💖 (+25 Pyar)`;
+    emoji = '💖';
+    floatEmojis = ['💖', '🥰', '💕', '✨'];
+    playPetPurrSound();
+  } else if (actionType === 'bath') {
+    pet.energy = Math.min(100, (pet.energy || 0) + 15);
+    pet.happiness = Math.min(100, (pet.happiness || 0) + 15);
+    pet.state = 'bathing';
+    actionText = `gave Mochi a gentle lavender bubble bath! 🛁 (+15 Masti, +15 Pyar)`;
+    emoji = '🛁';
+    floatEmojis = ['🫧', '🧼', '✨', '🛁'];
+    playTone(587.33, 0.2, 'sine', 0.2);
+    setTimeout(() => playTone(880, 0.3, 'sine', 0.18), 100);
+  } else if (actionType === 'sleep') {
+    pet.energy = Math.min(100, (pet.energy || 0) + 30);
+    pet.state = 'sleeping';
+    actionText = `tucked Mochi into soft warm blankets under the stars! 🌙 (+30 Energy)`;
+    emoji = '🌙';
+    floatEmojis = ['💤', '🌙', '⭐', '😴'];
+    playTone(261.63, 0.4, 'sine', 0.15);
+    setTimeout(() => playTone(329.63, 0.5, 'sine', 0.12), 200);
+  } else if (actionType === 'play') {
+    pet.happiness = Math.min(100, (pet.happiness || 0) + 20);
+    pet.hunger = Math.max(0, (pet.hunger || 0) - 10);
+    pet.energy = Math.max(0, (pet.energy || 0) - 15);
+    pet.state = 'playing';
+    actionText = `played fetch and bouncy yarn ball with Mochi! 🎾 (+20 Pyar, -10 Tummy)`;
+    emoji = '🎾';
+    floatEmojis = ['🎾', '🏃‍♂️', '⭐', '🐾'];
+    playPetHappySound();
+  } else if (actionType === 'tickle') {
+    pet.happiness = Math.min(100, (pet.happiness || 0) + 5);
+    actionText = `tickled Mochi's tummy! Giggles everywhere! 🥰`;
+    emoji = '🥰';
+    floatEmojis = ['💖', '✨'];
+    playTone(659.25, 0.15, 'triangle', 0.2);
+    setTimeout(() => playTone(880, 0.25, 'triangle', 0.2), 90);
+  }
+
+  // Level up calculation
+  pet.lastInteraction = Date.now();
+  const totalStats = (pet.hunger || 0) + (pet.happiness || 0) + (pet.energy || 0);
+  if (totalStats >= 270 && pet.level < 10) {
+    pet.level = Math.max(pet.level || 1, Math.min(10, Math.floor(totalStats / 90)));
+  }
+
+  // Add activity log
+  if (!pet.activities) pet.activities = [];
+  pet.activities.unshift({
+    id: 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    author: authorName,
+    actionText: actionText,
+    timestamp: Date.now(),
+    emoji: emoji
+  });
+  pet.activities = pet.activities.slice(0, 30);
+
+  // Avatar visual animation class
+  const petAvatar = document.getElementById('petAvatarEmoji');
+  if (petAvatar) {
+    petAvatar.className = 'pet-character-avatar ' + (pet.state || 'bounce');
+    setTimeout(() => {
+      if (petAvatar) petAvatar.className = 'pet-character-avatar';
+    }, 3500);
+  }
+
+  // Floating emotes
+  floatEmojis.forEach((em, idx) => {
+    setTimeout(() => spawnPetFloatingEmote(em, (idx - 1) * 35), idx * 180);
+  });
+
+  saveAppState(appState);
+  renderPetState();
+
+  // Broadcast to partner if local action
+  if (!isRemote) {
+    const payload = {
+      actionType,
+      author: authorName,
+      actionText,
+      emoji,
+      pet: pet,
+      sender: currentUser,
+      timestamp: Date.now()
+    };
+    broadcastUpdate('PET_ACTION', payload, true);
+    showToast(`🐾 ${actionText}`);
+  }
+}
+
+function handleIncomingPetAction(data) {
+  if (!data) return;
+  const pet = getPetState();
+
+  if (data.pet) {
+    appState.pet = data.pet;
+  } else {
+    pet.lastInteraction = data.timestamp || Date.now();
+  }
+
+  saveAppState(appState);
+  renderPetState();
+
+  // Audio & visual feedback on partner action
+  playPetHappySound();
+  spawnPetFloatingEmote(data.emoji || '🐾', 0);
+  spawnPetFloatingEmote('💖', 30);
+
+  const actor = data.author || (currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕');
+  showToast(`🐾 ${actor} ${data.actionText || 'cared for Mochi!'}`);
+}
+
+function setupVirtualPet() {
+  // 1. Header Pet Pill Click -> Switch to Tab 5 (Pet & Mood) and scroll to Pet Card
+  const headerPetPill = document.getElementById('headerPetPill');
+  if (headerPetPill) {
+    headerPetPill.addEventListener('click', () => {
+      switchTab('paneMood');
+      setTimeout(() => {
+        const petCard = document.getElementById('virtualPetCard');
+        if (petCard) petCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    });
+  }
+
+  // 2. Pet Stage Avatar Click (Tickle)
+  const petAvatarStage = document.getElementById('petAvatarStage');
+  if (petAvatarStage) {
+    petAvatarStage.addEventListener('click', () => interactWithPet('tickle'));
+  }
+
+  // 3. Action Buttons
+  const feedBtn = document.getElementById('petFeedBtn');
+  if (feedBtn) feedBtn.addEventListener('click', () => interactWithPet('feed'));
+
+  const cuddleBtn = document.getElementById('petCuddleBtn');
+  if (cuddleBtn) cuddleBtn.addEventListener('click', () => interactWithPet('cuddle'));
+
+  const bathBtn = document.getElementById('petBathBtn');
+  if (bathBtn) bathBtn.addEventListener('click', () => interactWithPet('bath'));
+
+  const sleepBtn = document.getElementById('petSleepBtn');
+  if (sleepBtn) sleepBtn.addEventListener('click', () => interactWithPet('sleep'));
+
+  const playBtn = document.getElementById('petPlayBtn');
+  if (playBtn) playBtn.addEventListener('click', () => interactWithPet('play'));
+
+  // Initial render
+  renderPetState();
+}
+
 // --- INITIALIZE EVERYTHING ON LOAD ---
 document.addEventListener('DOMContentLoaded', () => {
   const safeInit = (name, fn) => {
@@ -6824,6 +7417,8 @@ document.addEventListener('DOMContentLoaded', () => {
   safeInit('setupPWAandUpdates', setupPWAandUpdates);
   safeInit('setupChatUI', setupChatUI);
   safeInit('setupVideoCallEngine', setupVideoCallEngine);
+  safeInit('setupUniversalPhotoFeatures', setupUniversalPhotoFeatures);
+  safeInit('setupVirtualPet', setupVirtualPet);
   safeInit('fetchState', fetchState);
 
   // Check first-time identity selection
