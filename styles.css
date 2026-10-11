@@ -7425,6 +7425,212 @@ html, body {
   color: var(--text-muted);
 }
 
+/* Scrapbook Feed Download All Button */
+.feed-header {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.feed-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.feed-download-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, rgba(245, 195, 102, 0.18), rgba(240, 98, 146, 0.18));
+  border: 1px solid rgba(245, 195, 102, 0.4);
+  color: #ffecb3;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.feed-download-all-btn:hover {
+  background: linear-gradient(135deg, rgba(245, 195, 102, 0.3), rgba(240, 98, 146, 0.3));
+  border-color: var(--accent-gold);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* Direct download badge on memory item photo */
+.memory-card-download-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(14, 7, 22, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(245, 195, 102, 0.45);
+  color: var(--accent-gold);
+  border-radius: 14px;
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+
+.memory-card-download-badge:hover {
+  background: var(--accent-gold);
+  color: #120919;
+  transform: scale(1.06);
+}
+
+/* Memory Card Bottom Action Row */
+.memory-card-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.memory-save-photo-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(135deg, rgba(245, 195, 102, 0.15), rgba(240, 98, 146, 0.15));
+  border: 1px solid rgba(245, 195, 102, 0.35);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.memory-save-photo-btn:hover {
+  background: linear-gradient(135deg, rgba(245, 195, 102, 0.32), rgba(240, 98, 146, 0.32));
+  border-color: var(--accent-gold);
+  transform: translateY(-1px);
+}
+
+.memory-fullscreen-photo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-muted);
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.memory-fullscreen-photo-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* Lightbox Footer Actions */
+.lightbox-footer-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.lightbox-big-download-btn {
+  flex: 1;
+  min-width: 160px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #f5c366, #f06292);
+  border: none;
+  color: #120919;
+  font-weight: 800;
+  font-size: 0.88rem;
+  padding: 10px 16px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 18px rgba(245, 195, 102, 0.35);
+}
+
+.lightbox-big-download-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(240, 98, 146, 0.5);
+  filter: brightness(1.08);
+}
+
+.lightbox-big-share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.84rem;
+  padding: 10px 14px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lightbox-big-share-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Chat Image Message Download Overlay */
+.chat-image-msg-bubble {
+  position: relative;
+}
+
+.chat-image-download-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(14, 7, 22, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+
+.chat-image-download-btn:hover {
+  background: var(--accent-gold);
+  color: #120919;
+  transform: scale(1.12);
+}
+
+
 
 
 

@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=37">
+  <link rel="stylesheet" href="styles.css?v=38">
 </head>
 <body>
 
@@ -309,8 +309,13 @@
         <!-- Memories Timeline Feed -->
         <div class="memories-feed">
           <div class="feed-header">
-            <h3 class="feed-title">Our Memory Scrapbook</h3>
-            <span class="feed-count" id="feedCount">0 Memories Saved</span>
+            <div class="feed-title-wrap">
+              <h3 class="feed-title">Our Memory Scrapbook</h3>
+              <span class="feed-count" id="feedCount">0 Memories Saved</span>
+            </div>
+            <button type="button" class="feed-download-all-btn" id="downloadAllMemoriesBtn" title="Download all memories to your device 💾">
+              <span class="btn-emoji">📥</span> Download All Memories
+            </button>
           </div>
 
           <div class="timeline-list" id="timelineList">
@@ -1577,7 +1582,7 @@
           <span class="lightbox-title" id="photoLightboxTitle">Our Memory</span>
         </div>
         <div class="lightbox-actions">
-          <a class="lightbox-download-btn" id="photoLightboxDownloadBtn" download="our_story_memory.jpg" target="_blank" title="Download / Save Photo">⬇️</a>
+          <button type="button" class="lightbox-download-btn" id="photoLightboxDownloadBtn" title="Download Photo to Phone 💾">⬇️</button>
           <button class="modal-dismiss" id="closePhotoLightboxBtn" aria-label="Close Lightbox">✕</button>
         </div>
       </div>
@@ -1587,6 +1592,16 @@
       <div class="photo-lightbox-footer" id="photoLightboxFooter">
         <p class="photo-lightbox-caption" id="photoLightboxCaption"></p>
         <div class="photo-lightbox-sub" id="photoLightboxSub"></div>
+        <div class="lightbox-footer-actions">
+          <button type="button" class="lightbox-big-download-btn" id="lightboxFooterDownloadBtn">
+            <span class="btn-emoji">⬇️</span>
+            <span>Download &amp; Save Photo</span>
+          </button>
+          <button type="button" class="lightbox-big-share-btn" id="lightboxFooterShareBtn">
+            <span class="btn-emoji">📤</span>
+            <span>Share / Save to Gallery</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1649,6 +1664,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=37"></script>
+  <script src="script.js?v=38"></script>
 </body>
 </html>

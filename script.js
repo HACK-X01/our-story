@@ -3353,6 +3353,169 @@ function setupMemoryVault() {
       } catch (err) {}
     });
   }
+
+  // Download All Memories Button in Feed Header
+  const downloadAllBtn = document.getElementById('downloadAllMemoriesBtn');
+  if (downloadAllBtn) {
+    downloadAllBtn.addEventListener('click', downloadAllMemories);
+  }
+}
+
+// ==========================================================================
+// UNIVERSAL PHOTO DOWNLOAD & EXPORT ENGINE 💾
+// Allows Himanshu & Gullu to download and preserve any memory anytime
+// ==========================================================================
+
+function downloadPhotoFile(src, filename = 'OurStory_Memory.jpg', caption = '') {
+  if (!src) {
+    showToast('❌ Photo data not found!');
+    return;
+  }
+
+  try {
+    let cleanName = (filename || 'OurStory_Memory.jpg').replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    if (!cleanName.toLowerCase().endsWith('.jpg') && !cleanName.toLowerCase().endsWith('.png')) {
+      cleanName += '.jpg';
+    }
+
+    if (src.startsWith('data:')) {
+      const parts = src.split(',');
+      const mimeMatch = parts[0].match(/:(.*?);/);
+      const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+      const bstr = atob(parts[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      const blob = new Blob([u8arr], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = cleanName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+    } else {
+      fetch(src)
+        .then(res => res.blob())
+        .then(blob => {
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = cleanName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+        })
+        .catch(() => {
+          const link = document.createElement('a');
+          link.href = src;
+          link.download = cleanName;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        });
+    }
+
+    playTone(720, 0.15);
+    showToast(`⬇️ Photo download ho gayi! ("${cleanName}") 📸✨`);
+  } catch (err) {
+    console.error('Download error:', err);
+    const link = document.createElement('a');
+    link.href = src;
+    link.download = filename || 'OurStory_Photo.jpg';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('⬇️ Photo download started! 📸');
+  }
+}
+
+async function sharePhotoFile(src, filename = 'OurStory_Memory.jpg', caption = '') {
+  if (!src) return;
+
+  if (navigator.share && src.startsWith('data:')) {
+    try {
+      const parts = src.split(',');
+      const mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+      const bstr = atob(parts[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      const blob = new Blob([u8arr], { type: mime });
+      const file = new File([blob], filename, { type: mime });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: caption || 'Our Story Memory',
+          text: caption || 'Himanshu & Gullu Memory 💖'
+        });
+        showToast('💖 Photo saved / shared successfully!');
+        return;
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        console.warn('Native share failed, falling back to download', e);
+      } else {
+        return;
+      }
+    }
+  }
+
+  downloadPhotoFile(src, filename, caption);
+}
+
+function downloadMemoryPhoto(memoryId) {
+  if (!appState || !appState.memories) return;
+  const memory = appState.memories.find(m => m.id === memoryId);
+  if (!memory || !memory.photoUrl) {
+    showToast('❌ Memory photo not found!');
+    return;
+  }
+  const cleanCap = (memory.caption || 'Memory').slice(0, 20).replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `OurStory_${memory.date || 'moment'}_${cleanCap}.jpg`;
+  downloadPhotoFile(memory.photoUrl, filename, memory.caption);
+}
+
+async function downloadAllMemories() {
+  if (!appState || !appState.memories || appState.memories.length === 0) {
+    showToast('📖 Abhi tak koi saved memory nahi hai!');
+    return;
+  }
+
+  const memoriesWithPhotos = appState.memories.filter(m => m && m.photoUrl);
+  if (memoriesWithPhotos.length === 0) {
+    showToast('📖 Memories me photos nahi mili!');
+    return;
+  }
+
+  const confirmed = confirm(`Aapki sabhi ${memoriesWithPhotos.length} memories download karein? Ye photos aapke phone me save ho jayengi.`);
+  if (!confirmed) return;
+
+  showToast(`📥 Downloading ${memoriesWithPhotos.length} photos... 💾`);
+
+  for (let i = 0; i < memoriesWithPhotos.length; i++) {
+    const m = memoriesWithPhotos[i];
+    const cleanCap = (m.caption || 'Memory').slice(0, 15).replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `OurStory_${m.date || 'moment'}_${i + 1}_${cleanCap}.jpg`;
+    
+    downloadPhotoFile(m.photoUrl, filename, m.caption);
+    if (i < memoriesWithPhotos.length - 1) {
+      await new Promise(r => setTimeout(r, 600));
+    }
+  }
+
+  playCelebrationChime();
+  showToast(`🎉 Sabhi ${memoriesWithPhotos.length} photos download ho gayi! Forever saved 💖`);
 }
 
 function renderVaultFeed() {
@@ -3401,6 +3564,7 @@ function renderVaultFeed() {
         <div class="memory-item-img-wrap" onclick="openPhotoLightbox('${m.photoUrl}', '${cleanCaption}', '${cleanComp}', '${metaStr}')" title="Tap to view fullscreen photo 🔍">
           <img src="${m.photoUrl}" alt="${m.caption}" loading="lazy">
           <span class="memory-mode-pill">${m.mode === 'together' ? '💑 Together' : '📱 Apart'}</span>
+          <button type="button" class="memory-card-download-badge" onclick="event.stopPropagation(); downloadMemoryPhoto('${m.id}')" title="Download Photo to Phone 💾">⬇️ Save</button>
           <span class="memory-zoom-pill">🔍 Khol Ke Dekhein</span>
         </div>
         <div class="memory-body">
@@ -3419,6 +3583,16 @@ function renderVaultFeed() {
             <span class="song-play-icon">▶</span>
             <span><strong>${m.song?.title || 'Enchanted'}</strong> • ${m.song?.artist || 'Taylor Swift'}</span>
             <span class="song-inline-badge">Listen in App 🎵</span>
+          </div>
+          <div class="memory-card-actions-row">
+            <button type="button" class="memory-save-photo-btn" onclick="downloadMemoryPhoto('${m.id}')">
+              <span class="action-icon">⬇️</span>
+              <span>Download Photo</span>
+            </button>
+            <button type="button" class="memory-fullscreen-photo-btn" onclick="openPhotoLightbox('${m.photoUrl}', '${cleanCaption}', '${cleanComp}', '${metaStr}')">
+              <span class="action-icon">🔍</span>
+              <span>View Fullscreen</span>
+            </button>
           </div>
         </div>
       </div>
@@ -5667,6 +5841,7 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
         ${!isMe ? `<span class="chat-msg-sender-name">${escapeChatHtml(msg.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'))}</span>` : ''}
         <div class="chat-image-msg-bubble">
           <img class="chat-msg-image-thumb" src="${msg.imageData || msg.text}" alt="Shared photo" loading="lazy">
+          <button type="button" class="chat-image-download-btn" title="Download Photo to Phone 💾">⬇️</button>
           ${captionHtml}
         </div>
         <div class="chat-msg-footer">
@@ -5676,10 +5851,18 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
       </div>
     `;
     const thumb = row.querySelector('.chat-msg-image-thumb');
+    const dlBtn = row.querySelector('.chat-image-download-btn');
     if (thumb) {
       thumb.addEventListener('click', () => {
         const cap = msg.caption || (msg.text !== 'Shared a photo 📷' ? msg.text : '');
         openChatImageLightbox(thumb.src, cap);
+      });
+    }
+    if (dlBtn && thumb) {
+      dlBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const cap = msg.caption || (msg.text !== 'Shared a photo 📷' ? msg.text : '');
+        downloadPhotoFile(thumb.src, `OurStory_Chat_${Date.now()}.jpg`, cap);
       });
     }
   } else if (msg.type === 'audio') {
@@ -6990,15 +7173,37 @@ function openPhotoLightbox(src, title = 'Our Memory 📸', caption = '', subText
   const titleEl = document.getElementById('photoLightboxTitle');
   const subEl = document.getElementById('photoLightboxSub');
   const downloadBtn = document.getElementById('photoLightboxDownloadBtn');
+  const footerDownloadBtn = document.getElementById('lightboxFooterDownloadBtn');
+  const footerShareBtn = document.getElementById('lightboxFooterShareBtn');
 
   if (img) img.src = src;
   if (titleEl) titleEl.textContent = title;
   if (cap) cap.textContent = caption || '';
   if (subEl) subEl.textContent = subText || '';
+
+  const cleanFilename = `OurStory_${Date.now()}.jpg`;
+
   if (downloadBtn) {
-    downloadBtn.href = src;
-    downloadBtn.download = `OurStory_${Date.now()}.jpg`;
+    downloadBtn.onclick = (e) => {
+      e.preventDefault();
+      downloadPhotoFile(src, cleanFilename, caption);
+    };
   }
+
+  if (footerDownloadBtn) {
+    footerDownloadBtn.onclick = (e) => {
+      e.preventDefault();
+      downloadPhotoFile(src, cleanFilename, caption);
+    };
+  }
+
+  if (footerShareBtn) {
+    footerShareBtn.onclick = (e) => {
+      e.preventDefault();
+      sharePhotoFile(src, cleanFilename, caption);
+    };
+  }
+
   if (modal) {
     modal.classList.remove('is-hidden');
     modal.classList.add('open');
