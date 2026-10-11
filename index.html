@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=38">
+  <link rel="stylesheet" href="styles.css?v=39">
 </head>
 <body>
 
@@ -65,6 +65,15 @@
               <span class="chip-avatar">🌸</span>
               <span class="chip-label">Gullu</span>
             </button>
+          </div>
+        </div>
+
+        <!-- App Paused Notice on Login Screen (Appears if app is paused) -->
+        <div class="login-paused-alert is-hidden" id="loginPausedAlert">
+          <span class="alert-icon">⏸️</span>
+          <div class="alert-info">
+            <strong class="alert-title">App is Temporarily Paused</strong>
+            <p class="alert-desc" id="loginPausedAlertDesc">Himanshu ne portal pause kiya hai. Sirf Himanshu login karke app unpause kar sakte hain.</p>
           </div>
         </div>
 
@@ -168,6 +177,12 @@
           <strong class="portal-badge-text" id="headerPortalBadgeText">Himanshu ☕</strong>
         </div>
         <div class="profile-switch-actions">
+          <!-- EXCLUSIVE HIMANSHU MASTER APP PAUSE/RESUME BUTTON -->
+          <button type="button" class="himanshu-pause-toggle-btn is-hidden" id="himanshuPauseToggleBtn" title="Emergency Pause / Resume App for Gullu ⏸️">
+            <span class="pause-btn-icon" id="himanshuPauseIcon">⏸️</span>
+            <span class="pause-btn-label" id="himanshuPauseLabel">Pause App</span>
+          </button>
+
           <div class="profile-toggle-pills">
             <button class="profile-pill active" id="pillHimanshu" data-user="himanshu" title="Himanshu's Portal">
               <span class="user-emoji">☕</span> Himanshu
@@ -201,6 +216,17 @@
         </div>
       </div>
     </header>
+
+    <!-- HIMANSHU MASTER PAUSE BANNER (Shown only to Himanshu when app is paused for Gullu) -->
+    <div class="himanshu-pause-banner is-hidden" id="himanshuPauseBanner">
+      <div class="pause-banner-content">
+        <span class="banner-pulse-dot"></span>
+        <span class="banner-text"><strong>⏸️ App is Paused for Gullu</strong> • Gullu's device is currently locked.</span>
+      </div>
+      <button type="button" class="himanshu-resume-banner-btn" id="himanshuResumeBannerBtn" title="Reactivate App for Gullu">
+        ▶️ Reactivate App Now
+      </button>
+    </div>
 
     <!-- CONTENT TABS -->
     <main class="tabs-container">
@@ -1655,6 +1681,36 @@
     </div>
   </div>
 
+  <!-- GULLU FULL-SCREEN APP PAUSED OVERLAY (Active when Himanshu pauses app) -->
+  <div class="app-paused-screen is-hidden" id="gulluAppPausedScreen">
+    <div class="paused-screen-backdrop"></div>
+    <div class="paused-card-box">
+      <div class="paused-icon-wrap">
+        <span class="paused-main-emoji">⏸️</span>
+        <span class="paused-mini-heart">💕</span>
+      </div>
+      <h2 class="paused-title">Hamari App Abhi Paused Hai...</h2>
+      <p class="paused-message" id="gulluPausedMessage">
+        Himanshu ne app ko temporarily pause kiya hai. 🌸<br>
+        Jab Himanshu apne portal se app ko active karenge, tabhi ye open hogi!
+      </p>
+      <div class="paused-status-badge">
+        <span class="paused-dot"></span> Status: Locked by Himanshu ☕
+      </div>
+      <div class="paused-partner-note">
+        <span class="note-quote">"</span>
+        <span id="pausedCustomNoteText">Thoda intezaar karein baby... Himanshu will resume soon! 💕</span>
+        <span class="note-quote">"</span>
+      </div>
+      <div class="paused-waiting-loader">
+        <span class="waiting-dot"></span>
+        <span class="waiting-dot"></span>
+        <span class="waiting-dot"></span>
+        <span class="waiting-text">Checking for Himanshu's signal in real-time...</span>
+      </div>
+    </div>
+  </div>
+
   <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
   <audio id="globalAudioPlayer" preload="auto" playsinline></audio>
 
@@ -1664,6 +1720,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=38"></script>
+  <script src="script.js?v=39"></script>
 </body>
 </html>

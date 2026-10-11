@@ -347,7 +347,10 @@ const DEFAULT_APP_STATE = {
         emoji: "🎉"
       }
     ]
-  }
+  },
+  isAppPaused: false,
+  pausedBy: null,
+  pausedAt: null
 };
 
 // --- PERMANENT COUPLE DATA STORAGE (NEVER DELETED ON UPDATES) ---
@@ -551,6 +554,27 @@ function mergePreservingUserData(local, incoming) {
     } else {
       merged.pet = incPet || locPet || JSON.parse(JSON.stringify(DEFAULT_APP_STATE.pet));
     }
+  }
+
+  // 9. Preserve Emergency App Pause State (Himanshu Master Control)
+  if (incoming.pausedAt || local.pausedAt) {
+    if ((incoming.pausedAt || 0) >= (local.pausedAt || 0)) {
+      merged.isAppPaused = !!incoming.isAppPaused;
+      merged.pausedBy = incoming.pausedBy || 'himanshu';
+      merged.pausedAt = incoming.pausedAt;
+    } else {
+      merged.isAppPaused = !!local.isAppPaused;
+      merged.pausedBy = local.pausedBy || 'himanshu';
+      merged.pausedAt = local.pausedAt;
+    }
+  } else if (incoming.isAppPaused !== undefined) {
+    merged.isAppPaused = !!incoming.isAppPaused;
+    merged.pausedBy = incoming.pausedBy || 'himanshu';
+    merged.pausedAt = incoming.pausedAt || Date.now();
+  } else if (local.isAppPaused !== undefined) {
+    merged.isAppPaused = !!local.isAppPaused;
+    merged.pausedBy = local.pausedBy || 'himanshu';
+    merged.pausedAt = local.pausedAt;
   }
 
   return sanitizeAppStateArrays(merged);
@@ -859,6 +883,14 @@ function setupFirebaseRealtimeListeners() {
       renderPetState();
     }
   });
+
+  // 9. Emergency App Pause Realtime Sync (Himanshu Master Control)
+  firebaseDb.ref('our_story/appPause').on('value', (snapshot) => {
+    const pauseData = snapshot.val();
+    if (pauseData && typeof pauseData === 'object') {
+      handleIncomingAppPause(pauseData);
+    }
+  });
 }
 
 function syncInitialStateFromFirebase() {
@@ -1028,6 +1060,8 @@ function syncToFirebase(type, data) {
         firebaseDb.ref('our_story/webrtc_call/callMeta').set(data);
       } else if (type === 'PET_ACTION') {
         firebaseDb.ref('our_story/pet').set(appState.pet);
+      } else if (type === 'APP_PAUSE_STATUS') {
+        firebaseDb.ref('our_story/appPause').set(data);
       }
     } catch (e) {
       console.warn('Firebase SDK write error:', e);
@@ -1093,6 +1127,10 @@ function syncToFirebase(type, data) {
       endpoint += `/pet.json`;
       method = 'PUT';
       body = appState.pet;
+    } else if (type === 'APP_PAUSE_STATUS') {
+      endpoint += `/appPause.json`;
+      method = 'PUT';
+      body = data;
     }
 
     fetch(endpoint, {
@@ -1334,6 +1372,7 @@ function broadcastUpdate(type, data, retain = false) {
       else if (type === 'LOCATION_UPDATE') subTopic = 'location';
       else if (type === 'CHAT_MESSAGE' || type === 'CHAT_TYPING') subTopic = 'chat';
       else if (type === 'PET_ACTION') subTopic = 'pet';
+      else if (type === 'APP_PAUSE_STATUS') subTopic = 'pause';
 
       const msg = new Paho.MQTT.Message(JSON.stringify(payload));
       msg.destinationName = SYNC_TOPIC_PREFIX + subTopic;
@@ -1463,6 +1502,8 @@ function handleIncomingSyncMessage(payload) {
     handleIncomingVCHeart(payload.data);
   } else if (payload.type === 'PET_ACTION') {
     handleIncomingPetAction(payload.data);
+  } else if (payload.type === 'APP_PAUSE_STATUS') {
+    handleIncomingAppPause(payload.data);
   }
 }
 
@@ -2342,6 +2383,7 @@ function renderHeader() {
   }
 
   updatePulseIdentityUI();
+  enforceAppPauseUI();
 }
 
 function updatePulseIdentityUI() {
@@ -2357,6 +2399,202 @@ function updatePulseIdentityUI() {
 
 function updateProfileUI() {
   renderHeader();
+  enforceAppPauseUI();
+}
+
+// ==========================================================================
+// EXCLUSIVE HIMANSHU MASTER APP PAUSE & RESUME ENGINE ⏸️
+// Gives Himanshu master power to freeze the app for Gullu and reactivate anytime
+// ==========================================================================
+
+const APP_PAUSE_STORAGE_KEY = 'our_story_app_pause_state';
+
+function isAppCurrentlyPaused() {
+  if (appState && typeof appState.isAppPaused === 'boolean') {
+    return appState.isAppPaused;
+  }
+  try {
+    const raw = localStorage.getItem(APP_PAUSE_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return !!parsed.isPaused;
+    }
+  } catch (e) {}
+  return false;
+}
+
+function setAppPauseState(shouldPause, actor = 'himanshu') {
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  appState.isAppPaused = !!shouldPause;
+  appState.pausedBy = actor;
+  appState.pausedAt = Date.now();
+
+  const pausePayload = {
+    isPaused: !!shouldPause,
+    pausedBy: actor,
+    pausedAt: Date.now()
+  };
+
+  try {
+    localStorage.setItem(APP_PAUSE_STORAGE_KEY, JSON.stringify(pausePayload));
+  } catch (e) {}
+
+  saveAppState(appState);
+
+  // Broadcast in real-time to MQTT, Cross-Tab, and Firebase
+  broadcastUpdate('APP_PAUSE_STATUS', pausePayload, true);
+
+  if (firebaseDb) {
+    try {
+      firebaseDb.ref('our_story/appPause').set(pausePayload);
+    } catch (e) {}
+  }
+
+  // Update UI immediately
+  enforceAppPauseUI();
+
+  if (shouldPause) {
+    playTone(280, 0.35, 'sawtooth', 0.15);
+    showToast('⏸️ App Paused! Gullu ke device par app freeze ho gayi hai.');
+  } else {
+    playCelebrationChime();
+    showToast('✨ App Reactivated! Gullu ke liye app successfully unpause ho gayi hai. 💖');
+  }
+}
+
+function handleIncomingAppPause(data) {
+  if (!data || typeof data !== 'object') return;
+  const isPaused = !!data.isPaused;
+  const pausedAt = data.pausedAt || Date.now();
+
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  appState.isAppPaused = isPaused;
+  appState.pausedBy = data.pausedBy || 'himanshu';
+  appState.pausedAt = pausedAt;
+
+  try {
+    localStorage.setItem(APP_PAUSE_STORAGE_KEY, JSON.stringify({
+      isPaused,
+      pausedBy: data.pausedBy || 'himanshu',
+      pausedAt
+    }));
+  } catch (e) {}
+
+  saveAppState(appState);
+  enforceAppPauseUI();
+
+  if (isPaused) {
+    if (currentUser === 'gullu') {
+      endActiveCallSilently();
+      stopInAppMusic();
+    }
+  } else {
+    if (currentUser === 'gullu') {
+      showToast('💖 Himanshu ne app unpause kar di hai! Welcome back baby ✨');
+    }
+  }
+}
+
+function endActiveCallSilently() {
+  try {
+    if (typeof endActiveVideoCall === 'function') {
+      endActiveVideoCall();
+    }
+  } catch (e) {}
+}
+
+function enforceAppPauseUI() {
+  const paused = isAppCurrentlyPaused();
+  const isHimanshu = currentUser === 'himanshu';
+  const isGullu = currentUser === 'gullu';
+
+  // 1. Exclusive Himanshu Toggle Button in Profile Bar
+  const himanshuBtn = document.getElementById('himanshuPauseToggleBtn');
+  const himanshuIcon = document.getElementById('himanshuPauseIcon');
+  const himanshuLabel = document.getElementById('himanshuPauseLabel');
+
+  if (himanshuBtn) {
+    if (isHimanshu) {
+      himanshuBtn.classList.remove('is-hidden');
+      himanshuBtn.style.display = 'inline-flex';
+      if (paused) {
+        himanshuBtn.classList.add('is-paused');
+        if (himanshuIcon) himanshuIcon.textContent = '▶️';
+        if (himanshuLabel) himanshuLabel.textContent = 'Resume App';
+        himanshuBtn.title = 'App paused for Gullu. Tap to activate app.';
+      } else {
+        himanshuBtn.classList.remove('is-paused');
+        if (himanshuIcon) himanshuIcon.textContent = '⏸️';
+        if (himanshuLabel) himanshuLabel.textContent = 'Pause App';
+        himanshuBtn.title = 'Emergency Pause / Freeze App for Gullu ⏸️';
+      }
+    } else {
+      // STRICTLY HIDDEN FOR GULLU
+      himanshuBtn.classList.add('is-hidden');
+      himanshuBtn.style.display = 'none';
+    }
+  }
+
+  // 2. Himanshu Master Pause Banner
+  const himanshuBanner = document.getElementById('himanshuPauseBanner');
+  if (himanshuBanner) {
+    if (isHimanshu && paused) {
+      himanshuBanner.classList.remove('is-hidden');
+    } else {
+      himanshuBanner.classList.add('is-hidden');
+    }
+  }
+
+  // 3. Login Screen Paused Notice
+  const loginAlert = document.getElementById('loginPausedAlert');
+  if (loginAlert) {
+    if (paused) {
+      loginAlert.classList.remove('is-hidden');
+    } else {
+      loginAlert.classList.add('is-hidden');
+    }
+  }
+
+  // 4. Gullu Full-Screen Paused Lock Screen
+  const gulluScreen = document.getElementById('gulluAppPausedScreen');
+  if (gulluScreen) {
+    if (paused && isGullu) {
+      gulluScreen.classList.remove('is-hidden');
+      endActiveCallSilently();
+    } else {
+      gulluScreen.classList.add('is-hidden');
+    }
+  }
+}
+
+function setupHimanshuPauseControl() {
+  const himanshuBtn = document.getElementById('himanshuPauseToggleBtn');
+  if (himanshuBtn) {
+    himanshuBtn.addEventListener('click', () => {
+      const isPaused = isAppCurrentlyPaused();
+      if (!isPaused) {
+        const ok = confirm("⏸️ KYA AAP APP KO TEMPORARILY PAUSE KARNA CHAHTE HAIN?\n\nIske baad Gullu ke device par app freeze ho jayegi aur wo app open nahi kar payegi jab tak aap unpause nahi karte.");
+        if (ok) {
+          setAppPauseState(true, 'himanshu');
+        }
+      } else {
+        setAppPauseState(false, 'himanshu');
+      }
+    });
+  }
+
+  const resumeBannerBtn = document.getElementById('himanshuResumeBannerBtn');
+  if (resumeBannerBtn) {
+    resumeBannerBtn.addEventListener('click', () => {
+      setAppPauseState(false, 'himanshu');
+    });
+  }
+
+  // Periodic poll check every 4 seconds to guarantee state enforcement
+  setInterval(enforceAppPauseUI, 4000);
+
+  // Initial check
+  enforceAppPauseUI();
 }
 
 // ==========================================================================
@@ -2386,6 +2624,7 @@ function checkAuthGate() {
       appLayout.classList.remove('is-auth-locked');
     }
     updateProfileUI();
+    enforceAppPauseUI();
   }
 }
 
@@ -2522,6 +2761,12 @@ function handleLoginSubmit() {
       matchedUser = 'himanshu';
     }
   } else if (rawId === 'gullu') {
+    if (isAppCurrentlyPaused()) {
+      triggerLoginError('⏸️ App Abhi Paused Hai! Himanshu ne portal temporarily pause kar rakha hai. Please wait karein jab tak Himanshu unpause nahi karte. 💕');
+      const gulluScreen = document.getElementById('gulluAppPausedScreen');
+      if (gulluScreen) gulluScreen.classList.remove('is-hidden');
+      return;
+    }
     if (rawPass === AUTH_CREDENTIALS.gullu.pass) {
       matchedUser = 'gullu';
     }
@@ -2633,6 +2878,14 @@ function promptSwitchUser(targetUser) {
     showAppModal(
       '✨ Active Portal',
       `Aap already ${currentUser === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸'} ke portal me hain!`
+    );
+    return;
+  }
+
+  if (targetUser === 'gullu' && isAppCurrentlyPaused()) {
+    showAppModal(
+      '⏸️ App Paused Hai',
+      'Himanshu ne portal temporarily pause kar rakha hai. Gullu ke portal me enter karne ke liye pehle Himanshu portal se unpause karein.'
     );
     return;
   }
@@ -7624,6 +7877,7 @@ document.addEventListener('DOMContentLoaded', () => {
   safeInit('setupVideoCallEngine', setupVideoCallEngine);
   safeInit('setupUniversalPhotoFeatures', setupUniversalPhotoFeatures);
   safeInit('setupVirtualPet', setupVirtualPet);
+  safeInit('setupHimanshuPauseControl', setupHimanshuPauseControl);
   safeInit('fetchState', fetchState);
 
   // Check first-time identity selection

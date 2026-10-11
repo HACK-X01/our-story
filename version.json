@@ -1,5 +1,5 @@
 {
-  "version": "2.1.0",
-  "buildTime": 1791224000000,
-  "notes": "Full photo download and backup engine: 1-tap download badge and action bar on daily memory cards, bulk Download All Memories archive, high-res download and native share in photo lightbox, and instant chat photo download"
+  "version": "2.2.0",
+  "buildTime": 1791225000000,
+  "notes": "Exclusive Himanshu Master App Pause & Freeze Engine: Himanshu-only portal toggle to pause/freeze the entire app for Gullu in real-time, persistent lock screen for Gullu, and instant reactivate button always accessible on Himanshu's device"
 }
