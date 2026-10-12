@@ -37,6 +37,21 @@ function getAuthenticatedUser() {
 let currentUser = getAuthenticatedUser();
 if (currentUser) {
   localStorage.setItem('our_story_current_user', currentUser);
+  if (currentUser === 'himanshu') {
+    localStorage.setItem('our_story_device_role', 'himanshu');
+    localStorage.setItem('our_story_is_himanshu_device', 'true');
+  }
+}
+
+function isHimanshuDevice() {
+  if (currentUser === 'himanshu') return true;
+  const role = localStorage.getItem('our_story_device_role');
+  if (role === 'himanshu') return true;
+  const isH = localStorage.getItem('our_story_is_himanshu_device');
+  if (isH === 'true') return true;
+  const auth = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
+  if (auth === 'himanshu') return true;
+  return false;
 }
 
 let myDeviceId = localStorage.getItem('our_story_device_id');
@@ -2455,10 +2470,10 @@ function setAppPauseState(shouldPause, actor = 'himanshu') {
 
   if (shouldPause) {
     playTone(280, 0.35, 'sawtooth', 0.15);
-    showToast('⏸️ App Paused! Gullu ke device par app freeze ho gayi hai.');
+    showToast('⏸️ App Paused! Gullu ke device par ab Error 104 show hoga.');
   } else {
     playCelebrationChime();
-    showToast('✨ App Reactivated! Gullu ke liye app successfully unpause ho gayi hai. 💖');
+    showToast('✨ App Active! Gullu ke liye portal successfully unpause ho gaya hai.');
   }
 }
 
@@ -2484,14 +2499,12 @@ function handleIncomingAppPause(data) {
   enforceAppPauseUI();
 
   if (isPaused) {
-    if (currentUser === 'gullu') {
+    if (currentUser === 'gullu' || !isHimanshuDevice()) {
       endActiveCallSilently();
       stopInAppMusic();
     }
   } else {
-    if (currentUser === 'gullu') {
-      showToast('💖 Himanshu ne app unpause kar di hai! Welcome back baby ✨');
-    }
+    // Unpaused: Gullu's Error 104 overlay quietly unlocks with no romantic hints
   }
 }
 
@@ -2506,9 +2519,17 @@ function endActiveCallSilently() {
 function enforceAppPauseUI() {
   const paused = isAppCurrentlyPaused();
   const isHimanshu = currentUser === 'himanshu';
-  const isGullu = currentUser === 'gullu';
+  const himanshuDev = isHimanshuDevice();
 
-  // 1. Exclusive Himanshu Toggle Button in Profile Bar
+  // Populate dynamic current URL & host on Error 104 screen
+  const urlEl = document.getElementById('error104PageUrl');
+  if (urlEl) urlEl.textContent = window.location.href;
+  const hostEl = document.getElementById('error104HostText');
+  if (hostEl) hostEl.textContent = window.location.hostname || 'github.io';
+  const tsEl = document.getElementById('error104Timestamp');
+  if (tsEl) tsEl.textContent = new Date().toISOString();
+
+  // 1. Exclusive Himanshu Toggle Button in Profile Bar (Header)
   const himanshuBtn = document.getElementById('himanshuPauseToggleBtn');
   const himanshuIcon = document.getElementById('himanshuPauseIcon');
   const himanshuLabel = document.getElementById('himanshuPauseLabel');
@@ -2520,13 +2541,13 @@ function enforceAppPauseUI() {
       if (paused) {
         himanshuBtn.classList.add('is-paused');
         if (himanshuIcon) himanshuIcon.textContent = '▶️';
-        if (himanshuLabel) himanshuLabel.textContent = 'Resume App';
-        himanshuBtn.title = 'App paused for Gullu. Tap to activate app.';
+        if (himanshuLabel) himanshuLabel.textContent = 'Active App';
+        himanshuBtn.title = 'App paused for Gullu (Error 104 active). Tap to activate app.';
       } else {
         himanshuBtn.classList.remove('is-paused');
         if (himanshuIcon) himanshuIcon.textContent = '⏸️';
         if (himanshuLabel) himanshuLabel.textContent = 'Pause App';
-        himanshuBtn.title = 'Emergency Pause / Freeze App for Gullu ⏸️';
+        himanshuBtn.title = 'Pause App (Shows Error 104 to Gullu) ⏸️';
       }
     } else {
       // STRICTLY HIDDEN FOR GULLU
@@ -2535,7 +2556,7 @@ function enforceAppPauseUI() {
     }
   }
 
-  // 2. Himanshu Master Pause Banner
+  // 2. Himanshu Master Pause Banner (Shown only inside Himanshu portal when paused)
   const himanshuBanner = document.getElementById('himanshuPauseBanner');
   if (himanshuBanner) {
     if (isHimanshu && paused) {
@@ -2545,24 +2566,42 @@ function enforceAppPauseUI() {
     }
   }
 
-  // 3. Login Screen Paused Notice
+  // 3. Login Screen Alert (Visible ONLY to Himanshu on his recognized device)
   const loginAlert = document.getElementById('loginPausedAlert');
   if (loginAlert) {
-    if (paused) {
+    if (paused && himanshuDev) {
       loginAlert.classList.remove('is-hidden');
     } else {
       loginAlert.classList.add('is-hidden');
     }
   }
 
-  // 4. Gullu Full-Screen Paused Lock Screen
+  // 4. Full-Screen Error 104 Overlay
   const gulluScreen = document.getElementById('gulluAppPausedScreen');
+  const recoveryBar = document.getElementById('himanshuDeviceRecoveryBar');
+
   if (gulluScreen) {
-    if (paused && isGullu) {
-      gulluScreen.classList.remove('is-hidden');
-      endActiveCallSilently();
+    if (paused) {
+      if (isHimanshu) {
+        // Himanshu is logged in: he should NEVER see Error 104!
+        gulluScreen.classList.add('is-hidden');
+      } else if (himanshuDev && !currentUser) {
+        // Himanshu's recognized device, but currently logged out:
+        // Show Error 104 WITH persistent Himanshu 1-tap activation bar!
+        gulluScreen.classList.remove('is-hidden');
+        if (recoveryBar) recoveryBar.classList.remove('is-hidden');
+        endActiveCallSilently();
+      } else {
+        // Gullu or unrecognized visitor: PURE ERROR 104 SCREEN (zero messages/hints)!
+        gulluScreen.classList.remove('is-hidden');
+        if (recoveryBar) recoveryBar.classList.add('is-hidden');
+        endActiveCallSilently();
+        stopInAppMusic();
+      }
     } else {
+      // Normal Active state
       gulluScreen.classList.add('is-hidden');
+      if (recoveryBar) recoveryBar.classList.add('is-hidden');
     }
   }
 }
@@ -2573,7 +2612,7 @@ function setupHimanshuPauseControl() {
     himanshuBtn.addEventListener('click', () => {
       const isPaused = isAppCurrentlyPaused();
       if (!isPaused) {
-        const ok = confirm("⏸️ KYA AAP APP KO TEMPORARILY PAUSE KARNA CHAHTE HAIN?\n\nIske baad Gullu ke device par app freeze ho jayegi aur wo app open nahi kar payegi jab tak aap unpause nahi karte.");
+        const ok = confirm("⏸️ KYA AAP APP KO TEMPORARILY PAUSE KARNA CHAHTE HAIN?\n\nIske baad Gullu ke device par Error 104 (Site can't be reached) show hoga aur koi message nahi dikhega. Aapke device par resume/active karne ka option hamesha rahega.");
         if (ok) {
           setAppPauseState(true, 'himanshu');
         }
@@ -2587,6 +2626,112 @@ function setupHimanshuPauseControl() {
   if (resumeBannerBtn) {
     resumeBannerBtn.addEventListener('click', () => {
       setAppPauseState(false, 'himanshu');
+    });
+  }
+
+  // Himanshu Device Direct Activation Button (on Error 104 screen)
+  const deviceActiveBtn = document.getElementById('himanshuDeviceActiveBtn');
+  if (deviceActiveBtn) {
+    deviceActiveBtn.addEventListener('click', () => {
+      setAppPauseState(false, 'himanshu');
+      localStorage.setItem('our_story_device_role', 'himanshu');
+      localStorage.setItem('our_story_is_himanshu_device', 'true');
+      localStorage.setItem(AUTH_STORAGE_KEY, 'himanshu');
+      sessionStorage.setItem(AUTH_STORAGE_KEY, 'himanshu');
+      currentUser = 'himanshu';
+      window.location.hash = 'himanshu';
+      checkAuthGate();
+    });
+  }
+
+  // Error 104 Reload Button (Simulates realistic browser reconnect attempt)
+  const reloadBtn = document.getElementById('error104ReloadBtn');
+  const reloadText = document.getElementById('error104ReloadBtnText');
+  const reloadSpinner = document.getElementById('error104Spinner');
+  if (reloadBtn) {
+    reloadBtn.addEventListener('click', () => {
+      if (reloadBtn.disabled) return;
+      reloadBtn.disabled = true;
+      if (reloadSpinner) reloadSpinner.classList.remove('is-hidden');
+      if (reloadText) reloadText.textContent = 'Connecting...';
+
+      setTimeout(() => {
+        const stillPaused = isAppCurrentlyPaused();
+        if (stillPaused) {
+          if (reloadSpinner) reloadSpinner.classList.add('is-hidden');
+          if (reloadText) reloadText.textContent = 'Reload';
+          reloadBtn.disabled = false;
+          const codeRow = document.querySelector('.error-104-code-row');
+          if (codeRow) {
+            codeRow.classList.add('error-shake');
+            setTimeout(() => codeRow.classList.remove('error-shake'), 500);
+          }
+        } else {
+          window.location.reload();
+        }
+      }, 1400);
+    });
+  }
+
+  // Error 104 Details Toggle Button
+  const detailsBtn = document.getElementById('error104DetailsBtn');
+  const detailsBox = document.getElementById('error104DetailsBox');
+  if (detailsBtn && detailsBox) {
+    detailsBtn.addEventListener('click', () => {
+      detailsBox.classList.toggle('is-hidden');
+    });
+  }
+
+  // Secret Admin PIN Backdoor (Triple Tap on Error 104 code trigger)
+  const codeTrigger = document.getElementById('error104CodeTrigger');
+  let tapCount = 0;
+  let tapTimer = null;
+  if (codeTrigger) {
+    codeTrigger.addEventListener('click', () => {
+      tapCount++;
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => { tapCount = 0; }, 1000);
+      if (tapCount >= 3) {
+        tapCount = 0;
+        const promptBox = document.getElementById('himanshuSecretPrompt');
+        if (promptBox) {
+          promptBox.classList.toggle('is-hidden');
+          const passInput = document.getElementById('himanshuSecretPassInput');
+          if (passInput) passInput.focus();
+        }
+      }
+    });
+  }
+
+  // Secret Admin Unlock Buttons
+  const secretUnlockBtn = document.getElementById('himanshuSecretUnlockBtn');
+  const secretCancelBtn = document.getElementById('himanshuSecretCancelBtn');
+  const secretPassInput = document.getElementById('himanshuSecretPassInput');
+  const secretPrompt = document.getElementById('himanshuSecretPrompt');
+
+  if (secretUnlockBtn && secretPassInput) {
+    secretUnlockBtn.addEventListener('click', () => {
+      const val = secretPassInput.value.trim();
+      if (val === AUTH_CREDENTIALS.himanshu.pass) {
+        localStorage.setItem('our_story_device_role', 'himanshu');
+        localStorage.setItem('our_story_is_himanshu_device', 'true');
+        localStorage.setItem(AUTH_STORAGE_KEY, 'himanshu');
+        sessionStorage.setItem(AUTH_STORAGE_KEY, 'himanshu');
+        currentUser = 'himanshu';
+        setAppPauseState(false, 'himanshu');
+        if (secretPrompt) secretPrompt.classList.add('is-hidden');
+        window.location.hash = 'himanshu';
+        checkAuthGate();
+      } else {
+        alert('Invalid Master Key');
+        secretPassInput.value = '';
+      }
+    });
+  }
+
+  if (secretCancelBtn && secretPrompt) {
+    secretCancelBtn.addEventListener('click', () => {
+      secretPrompt.classList.add('is-hidden');
     });
   }
 
@@ -2605,15 +2750,18 @@ function checkAuthGate() {
   const loginScreen = document.getElementById('coupleLoginScreen');
   const appLayout = document.querySelector('.app-layout');
   const authUser = getAuthenticatedUser();
+  const paused = isAppCurrentlyPaused();
+  const himanshuDev = isHimanshuDevice();
 
   if (!authUser) {
     currentUser = null;
     if (appLayout) appLayout.classList.add('is-auth-locked');
     if (loginScreen) {
       loginScreen.classList.remove('is-hidden', 'login-success-fade');
-      const prevUser = localStorage.getItem('our_story_current_user') || 'himanshu';
+      const prevUser = localStorage.getItem('our_story_current_user') || (himanshuDev ? 'himanshu' : 'gullu');
       selectLoginProfile(prevUser === 'gullu' ? 'Gullu' : 'Himanshu', false);
     }
+    enforceAppPauseUI();
   } else {
     currentUser = authUser;
     if (loginScreen) {
@@ -2762,7 +2910,7 @@ function handleLoginSubmit() {
     }
   } else if (rawId === 'gullu') {
     if (isAppCurrentlyPaused()) {
-      triggerLoginError('⏸️ App Abhi Paused Hai! Himanshu ne portal temporarily pause kar rakha hai. Please wait karein jab tak Himanshu unpause nahi karte. 💕');
+      // Pure Error 104 trigger with ZERO alerts or messages
       const gulluScreen = document.getElementById('gulluAppPausedScreen');
       if (gulluScreen) gulluScreen.classList.remove('is-hidden');
       return;
@@ -2804,6 +2952,13 @@ function handleLoginSubmit() {
   currentUser = matchedUser;
   localStorage.setItem('our_story_current_user', currentUser);
   localStorage.setItem('our_story_profile_selected', 'true');
+  if (matchedUser === 'himanshu') {
+    localStorage.setItem('our_story_device_role', 'himanshu');
+    localStorage.setItem('our_story_is_himanshu_device', 'true');
+  } else if (matchedUser === 'gullu') {
+    localStorage.setItem('our_story_device_role', 'gullu');
+    localStorage.setItem('our_story_is_himanshu_device', 'false');
+  }
   window.location.hash = currentUser;
 
   const loginScreen = document.getElementById('coupleLoginScreen');
@@ -2885,7 +3040,7 @@ function promptSwitchUser(targetUser) {
   if (targetUser === 'gullu' && isAppCurrentlyPaused()) {
     showAppModal(
       '⏸️ App Paused Hai',
-      'Himanshu ne portal temporarily pause kar rakha hai. Gullu ke portal me enter karne ke liye pehle Himanshu portal se unpause karein.'
+      'App abhi paused hai aur Gullu ke device par Error 104 dikh raha hai. Gullu portal me switch karne ke liye pehle app unpause karein.'
     );
     return;
   }

@@ -7770,149 +7770,316 @@ html, body {
   line-height: 1.35;
 }
 
-/* GULLU FULL-SCREEN APP PAUSED OVERLAY */
+/* ==========================================================================
+   AUTHENTIC ERROR 104 SYSTEM OVERLAY (Active when app is paused)
+   Designed to look 100% authentic like a native browser connection error page
+   ========================================================================== */
 .app-paused-screen {
   position: fixed;
   inset: 0;
-  z-index: 999999;
+  z-index: 9999999;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(8, 3, 14, 0.98);
-  backdrop-filter: blur(36px);
-  -webkit-backdrop-filter: blur(36px);
-  padding: 20px;
-  text-align: center;
+  background-color: #202124; /* Native Chrome / Android dark theme error page */
+  color: #e8eaed;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding: 24px;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
-.paused-screen-backdrop {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at center, rgba(240, 98, 146, 0.15) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-.paused-card-box {
-  position: relative;
-  background: rgba(24, 11, 35, 0.96);
-  border: 1.5px solid rgba(240, 98, 146, 0.45);
-  border-radius: 28px;
-  padding: 38px 24px;
-  max-width: 420px;
+.paused-card-box.error-104-container {
+  max-width: 520px;
   width: 100%;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.95), 0 0 45px rgba(240, 98, 146, 0.28);
-  animation: floatPausedCard 4s ease-in-out infinite;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+  text-align: left;
+  padding: 0;
 }
 
-@keyframes floatPausedCard {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-
-.paused-icon-wrap {
-  position: relative;
+.error-104-icon-wrap {
+  margin-bottom: 20px;
   display: inline-block;
-  margin-bottom: 16px;
 }
 
-.paused-main-emoji {
-  font-size: 3.5rem;
+.error-104-icon {
+  width: 52px;
+  height: 52px;
+  fill: #9aa0a6;
   display: block;
-  filter: drop-shadow(0 6px 14px rgba(240, 98, 146, 0.5));
-  animation: pulseMainEmoji 2s infinite ease-in-out;
 }
 
-@keyframes pulseMainEmoji {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
+.error-104-title {
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: #e8eaed;
+  margin: 0 0 16px 0;
+  line-height: 1.3;
+  letter-spacing: -0.2px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-.paused-mini-heart {
-  position: absolute;
-  top: -5px;
-  right: -10px;
-  font-size: 1.6rem;
-  animation: bounceHeart 1.5s infinite;
+.error-104-desc {
+  font-size: 0.92rem;
+  color: #9aa0a6;
+  line-height: 1.6;
+  margin: 0 0 16px 0;
+  word-break: break-word;
 }
 
-@keyframes bounceHeart {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+.error-104-url {
+  color: #e8eaed;
+  font-weight: 500;
 }
 
-.paused-title {
-  font-family: var(--font-serif);
-  font-size: 1.45rem;
-  color: #fff;
-  margin-bottom: 12px;
-  font-weight: 700;
+.error-104-suggestions {
+  margin: 0 0 24px 0;
+  padding-left: 20px;
+  font-size: 0.88rem;
+  color: #9aa0a6;
+  line-height: 1.7;
 }
 
-.paused-message {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.88);
-  line-height: 1.55;
-  margin-bottom: 18px;
+.error-104-suggestions li {
+  margin-bottom: 4px;
 }
 
-.paused-status-badge {
+.error-104-code-row {
+  margin-bottom: 24px;
+}
+
+.error-104-code-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 152, 0, 0.18);
-  border: 1px solid rgba(255, 152, 0, 0.45);
-  color: #ffb74d;
-  padding: 5px 14px;
-  border-radius: 20px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.8rem;
+  color: #9aa0a6;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  user-select: none;
 }
 
-.paused-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ff9800;
-  box-shadow: 0 0 8px #ff9800;
+.error-104-code-badge:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
-.paused-partner-note {
-  background: rgba(255, 255, 255, 0.04);
-  border-left: 3px solid var(--accent-rose);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 0.84rem;
-  color: #f8bbd0;
-  font-style: italic;
-  margin-bottom: 22px;
-  line-height: 1.4;
+.error-104-code-badge .error-code-num {
+  color: #8ab4f8;
+  font-weight: 600;
 }
 
-.paused-waiting-loader {
+.error-104-actions {
   display: flex;
   align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.error-104-reload-btn {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: 6px;
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  gap: 8px;
+  background: #8ab4f8;
+  color: #202124;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 9px 22px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
 }
 
-.paused-waiting-loader .waiting-dot {
-  width: 6px;
-  height: 6px;
+.error-104-reload-btn:hover {
+  background: #aecbfa;
+}
+
+.error-104-reload-btn:active {
+  transform: scale(0.98);
+}
+
+.error-104-reload-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.error-reload-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(32, 33, 36, 0.3);
+  border-top-color: #202124;
   border-radius: 50%;
-  background: var(--accent-rose);
-  animation: waitingDots 1.4s infinite ease-in-out both;
+  animation: spinError 0.8s linear infinite;
 }
 
-.paused-waiting-loader .waiting-dot:nth-child(1) { animation-delay: -0.32s; }
-.paused-waiting-loader .waiting-dot:nth-child(2) { animation-delay: -0.16s; }
-.paused-waiting-loader .waiting-dot:nth-child(3) { animation-delay: 0s; }
+@keyframes spinError {
+  to { transform: rotate(360deg); }
+}
 
-@keyframes waitingDots {
-  0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
-  40% { transform: scale(1); opacity: 1; }
+.error-104-details-btn {
+  background: transparent;
+  color: #8ab4f8;
+  border: 1px solid rgba(138, 180, 248, 0.3);
+  border-radius: 4px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.error-104-details-btn:hover {
+  background: rgba(138, 180, 248, 0.08);
+}
+
+.error-104-details-box {
+  background: #18191c;
+  border: 1px solid #3c4043;
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.78rem;
+  color: #9aa0a6;
+  line-height: 1.6;
+  margin-top: 12px;
+  animation: fadeInDetails 0.25s ease;
+}
+
+@keyframes fadeInDetails {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tech-detail-line {
+  margin-bottom: 4px;
+}
+
+.tech-detail-line strong {
+  color: #bdc1c6;
+}
+
+/* Himanshu Device Recovery Strip (Shown on Himanshu's device) */
+.himanshu-device-recovery {
+  margin-top: 28px;
+  padding: 14px 18px;
+  background: rgba(255, 179, 0, 0.12);
+  border: 1px solid rgba(255, 179, 0, 0.38);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.himanshu-recovery-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #ffb74d;
+  font-weight: 600;
+}
+
+.himanshu-device-active-btn {
+  background: #ffb300;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.himanshu-device-active-btn:hover {
+  background: #ffca28;
+}
+
+.himanshu-device-active-btn:active {
+  transform: scale(0.97);
+}
+
+/* Secret Admin Unlock Prompt */
+.himanshu-secret-prompt {
+  margin-top: 20px;
+  padding: 16px;
+  background: #111214;
+  border: 1px solid #5f6368;
+  border-radius: 8px;
+}
+
+.secret-prompt-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e8eaed;
+  margin-bottom: 8px;
+}
+
+.secret-pass-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  background: #202124;
+  border: 1px solid #5f6368;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.88rem;
+  margin-bottom: 10px;
+}
+
+.secret-prompt-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.secret-btn-cancel {
+  background: transparent;
+  color: #9aa0a6;
+  border: 1px solid #5f6368;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.secret-btn-unlock {
+  background: #8ab4f8;
+  color: #202124;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.error-shake {
+  animation: shakeCode 0.4s ease;
+}
+
+@keyframes shakeCode {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+.paused-main-emoji {
+  display: none !important;
 }
 
 

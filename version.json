@@ -1,5 +1,5 @@
 {
-  "version": "2.2.0",
-  "buildTime": 1791225000000,
-  "notes": "Exclusive Himanshu Master App Pause & Freeze Engine: Himanshu-only portal toggle to pause/freeze the entire app for Gullu in real-time, persistent lock screen for Gullu, and instant reactivate button always accessible on Himanshu's device"
+  "version": "2.3.0",
+  "buildTime": 1791230000000,
+  "notes": "Stealth Error 104 Pause System: When Himanshu pauses the app, Gullu and unauthenticated visitors see a pure, authentic Error 104 (Site can't be reached) screen with zero messages or couple hints. Himanshu's device maintains persistent 1-tap activation and master unlock controls."
 }
