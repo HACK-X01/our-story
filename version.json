@@ -1,5 +1,5 @@
 {
-  "version": "2.3.0",
-  "buildTime": 1791230000000,
-  "notes": "Stealth Error 104 Pause System: When Himanshu pauses the app, Gullu and unauthenticated visitors see a pure, authentic Error 104 (Site can't be reached) screen with zero messages or couple hints. Himanshu's device maintains persistent 1-tap activation and master unlock controls."
+  "version": "2.4.0",
+  "buildTime": 1791240000000,
+  "notes": "Completely removed virtual pet module (Mochi panda) from HTML, CSS, JavaScript, and real-time cloud sync as per user request. Restored clean Tab 5 'Aaj Ka Mood' check-in."
 }

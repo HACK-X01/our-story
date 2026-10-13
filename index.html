@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=41">
 </head>
 <body>
 
@@ -159,9 +159,6 @@
           </span>
           <button class="install-pwa-btn is-hidden" id="installPwaBtn" title="Install to Home Screen">
             📲 Install App
-          </button>
-          <button class="pet-status-pill" id="headerPetPill" title="Our Couple Pet Mochi 🐼">
-            <span class="pet-pill-emoji">🐼</span> <span id="headerPetStatusText">Lvl 1 • Mochi</span>
           </button>
           <div class="counter-badge" id="daysCounter">
             <span class="heart-pulse-icon">❤️</span> Day <strong id="streakDays">1</strong>
@@ -741,133 +738,6 @@
           </div>
         </div>
 
-        <!-- ============================================================
-             VIRTUAL COUPLE PET: MOCHI THE LOVE PANDA 🐾
-             ============================================================ -->
-        <div class="card couple-pet-card" id="virtualPetCard">
-          <div class="pet-card-header">
-            <div class="pet-title-group">
-              <span class="pet-badge-tag">🐾 Co-Parenting Sanctuary</span>
-              <h3 class="pet-main-title">Mochi The Love Panda 🐼</h3>
-              <p class="pet-tagline">Himanshu &amp; Gullu's Little Bundle of Joy</p>
-            </div>
-            <div class="pet-header-badges">
-              <span class="pet-level-badge" id="petLevelBadge">⭐ Lvl 1</span>
-              <span class="pet-streak-badge" id="petStreakBadge">💖 Day 1</span>
-            </div>
-          </div>
-
-          <!-- Pet Interactive Stage -->
-          <div class="pet-stage-container" id="petStageContainer">
-            <div class="pet-stage-sky" id="petStageSky">
-              <span class="pet-sky-star s1">✨</span>
-              <span class="pet-sky-star s2">💫</span>
-              <span class="pet-sky-star s3">⭐</span>
-            </div>
-
-            <!-- Pet Speech Bubble -->
-            <div class="pet-speech-wrapper">
-              <div class="pet-speech-bubble" id="petSpeechBubble">
-                <span class="speech-quote">"</span><span id="petSpeechText">Yay! Gullu is here! Mochi wants cuddles and strawberry treats! 🍓</span><span class="speech-quote">"</span>
-              </div>
-            </div>
-
-            <!-- Interactive Pet Avatar Stage -->
-            <div class="pet-avatar-stage" id="petAvatarStage" role="button" tabindex="0" title="Tap to tickle and love Mochi!">
-              <div class="pet-glow-aura" id="petGlowAura"></div>
-              <div class="pet-character-avatar" id="petAvatarEmoji">🐼</div>
-              <div class="pet-floating-emotes" id="petFloatingEmotes"></div>
-            </div>
-
-            <!-- Pet Mood Pill & Last Interacted -->
-            <div class="pet-status-bar">
-              <span class="pet-mood-pill" id="petMoodPill">
-                <span class="pet-mood-dot"></span> <span id="petMoodStatusText">Super Happy &amp; Loved 🥰</span>
-              </span>
-              <span class="pet-interaction-time" id="petLastInteractedText">Last loved: Just now</span>
-            </div>
-          </div>
-
-          <!-- Pet Vital Stats (Progress Bars) -->
-          <div class="pet-vitals-container">
-            <!-- Hunger / Treats -->
-            <div class="vital-row">
-              <div class="vital-info">
-                <span class="vital-label">🍓 Tummy (Hunger)</span>
-                <span class="vital-val" id="petHungerVal">85%</span>
-              </div>
-              <div class="vital-bar-track">
-                <div class="vital-bar-fill fill-hunger" id="petHungerFill" style="width: 85%;"></div>
-              </div>
-            </div>
-
-            <!-- Happiness / Pyar -->
-            <div class="vital-row">
-              <div class="vital-info">
-                <span class="vital-label">💖 Happiness (Pyar)</span>
-                <span class="vital-val" id="petHappyVal">95%</span>
-              </div>
-              <div class="vital-bar-track">
-                <div class="vital-bar-fill fill-happy" id="petHappyFill" style="width: 95%;"></div>
-              </div>
-            </div>
-
-            <!-- Energy / Dhadkan -->
-            <div class="vital-row">
-              <div class="vital-info">
-                <span class="vital-label">⚡ Energy (Masti)</span>
-                <span class="vital-val" id="petEnergyVal">80%</span>
-              </div>
-              <div class="vital-bar-track">
-                <div class="vital-bar-fill fill-energy" id="petEnergyFill" style="width: 80%;"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Pet Interactive Actions Grid (Co-Care) -->
-          <div class="pet-actions-section">
-            <span class="pet-actions-heading">Care for Mochi Together:</span>
-            <div class="pet-actions-grid">
-              <button type="button" class="pet-action-btn btn-feed" id="petFeedBtn" title="Feed Mochi sweet strawberries">
-                <span class="action-btn-emoji">🍓</span>
-                <span class="action-btn-title">Feed Snack</span>
-                <span class="action-btn-sub">+20 Tummy</span>
-              </button>
-              <button type="button" class="pet-action-btn btn-cuddle" id="petCuddleBtn" title="Give Mochi a warm cuddle & hug">
-                <span class="action-btn-emoji">💖</span>
-                <span class="action-btn-title">Cuddle &amp; Pet</span>
-                <span class="action-btn-sub">+25 Pyar</span>
-              </button>
-              <button type="button" class="pet-action-btn btn-bath" id="petBathBtn" title="Give Mochi a warm bubble bath">
-                <span class="action-btn-emoji">🛁</span>
-                <span class="action-btn-title">Bubble Bath</span>
-                <span class="action-btn-sub">+15 Sparkle</span>
-              </button>
-              <button type="button" class="pet-action-btn btn-sleep" id="petSleepBtn" title="Tuck Mochi into cozy bed">
-                <span class="action-btn-emoji">🌙</span>
-                <span class="action-btn-title">Tuck in Bed</span>
-                <span class="action-btn-sub">+30 Energy</span>
-              </button>
-              <button type="button" class="pet-action-btn btn-play" id="petPlayBtn" title="Play fetch & yarn ball with Mochi">
-                <span class="action-btn-emoji">🎾</span>
-                <span class="action-btn-title">Play Ball</span>
-                <span class="action-btn-sub">+20 Fun</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Pet Activity Diary / Partner Feed -->
-          <div class="pet-activity-section">
-            <div class="pet-activity-header">
-              <h4 class="pet-activity-title">📖 Pet Care Diary</h4>
-              <span class="pet-diary-sub">Real-Time Sync with Partner</span>
-            </div>
-            <div class="pet-activity-list" id="petActivityList">
-              <!-- Dynamically populated via script.js -->
-            </div>
-          </div>
-        </div>
-
       </section>
 
       <!-- ============================================================
@@ -1024,8 +894,8 @@
         <span class="dock-pulse-badge is-hidden" id="dockPulseBadge">!</span>
       </button>
       <button class="dock-item" data-tab="paneMood" id="dockBtnMood">
-        <span class="dock-icon">🐾</span>
-        <span class="dock-label">Pet &amp; Mood</span>
+        <span class="dock-icon">🎭</span>
+        <span class="dock-label">Mood</span>
       </button>
       <button class="dock-item" data-tab="paneChat" id="dockBtnChat">
         <span class="dock-icon">💬</span>
@@ -1767,6 +1637,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=40"></script>
+  <script src="script.js?v=41"></script>
 </body>
 </html>

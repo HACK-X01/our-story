@@ -272,24 +272,7 @@ function playCelebrationChime() {
   setTimeout(() => playTone(1046.50, 0.8), 300); // C6
 }
 
-function playPetHappySound() {
-  playTone(440, 0.15, 'sine', 0.15);
-  setTimeout(() => playTone(554.37, 0.18, 'sine', 0.18), 80);
-  setTimeout(() => playTone(659.25, 0.25, 'sine', 0.22), 160);
-  setTimeout(() => playTone(880, 0.35, 'triangle', 0.2), 240);
-}
 
-function playPetEatSound() {
-  playTone(330, 0.1, 'triangle', 0.2);
-  setTimeout(() => playTone(392, 0.12, 'triangle', 0.22), 90);
-  setTimeout(() => playTone(523.25, 0.18, 'sine', 0.25), 180);
-}
-
-function playPetPurrSound() {
-  playTone(130, 0.25, 'sine', 0.2);
-  setTimeout(() => playTone(120, 0.3, 'sine', 0.2), 150);
-  setTimeout(() => playTone(135, 0.35, 'sine', 0.22), 320);
-}
 
 // --- DEFAULT FRESH STATE (Fallback for GitHub Pages & Offline) ---
 const DEFAULT_APP_STATE = {
@@ -342,27 +325,7 @@ const DEFAULT_APP_STATE = {
       type: "text"
     }
   ],
-  pet: {
-    name: "Mochi",
-    emoji: "🐼",
-    species: "Love Panda",
-    happiness: 95,
-    hunger: 80,
-    energy: 90,
-    level: 1,
-    streak: 1,
-    lastInteraction: Date.now(),
-    state: "happy",
-    activities: [
-      {
-        id: "act_init",
-        author: "Himanshu & Gullu",
-        actionText: "adopted Mochi the Love Panda! 🐼💖",
-        timestamp: Date.now() - 3600000,
-        emoji: "🎉"
-      }
-    ]
-  },
+
   isAppPaused: false,
   pausedBy: null,
   pausedAt: null
@@ -410,11 +373,7 @@ function sanitizeAppStateArrays(state) {
   state.pulses = normalizeArray(state.pulses);
   state.chatMessages = normalizeArray(state.chatMessages || state.chat_messages);
   state.pastQAs = normalizeArray(state.pastQAs);
-  if (state.pet && state.pet.activities) {
-    state.pet.activities = normalizeArray(state.pet.activities);
-  } else if (!state.pet) {
-    state.pet = JSON.parse(JSON.stringify(DEFAULT_APP_STATE.pet));
-  }
+
   return state;
 }
 
@@ -553,23 +512,7 @@ function mergePreservingUserData(local, incoming) {
   localMsgs.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
   merged.chatMessages = Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).slice(-200);
 
-  // 8. Preserve Virtual Pet (Freshest interaction wins, keep union of activities)
-  if (incoming.pet || local.pet) {
-    const incPet = incoming.pet;
-    const locPet = local.pet;
-    if (incPet && locPet) {
-      const winner = ((incPet.lastInteraction || 0) >= (locPet.lastInteraction || 0)) ? incPet : locPet;
-      merged.pet = { ...winner };
-      const actMap = new Map();
-      (incPet.activities || []).forEach(a => { if (a && a.id) actMap.set(a.id, a); });
-      (locPet.activities || []).forEach(a => { if (a && a.id) actMap.set(a.id, a); });
-      merged.pet.activities = Array.from(actMap.values())
-        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-        .slice(0, 30);
-    } else {
-      merged.pet = incPet || locPet || JSON.parse(JSON.stringify(DEFAULT_APP_STATE.pet));
-    }
-  }
+
 
   // 9. Preserve Emergency App Pause State (Himanshu Master Control)
   if (incoming.pausedAt || local.pausedAt) {
@@ -633,7 +576,7 @@ function renderAll() {
   try { renderMoods(); } catch (e) { console.error('renderMoods failed:', e); }
   try { updateCoupleLocationsUI(); } catch (e) { console.error('updateCoupleLocationsUI failed:', e); }
   try { renderChatUI(); } catch (e) { console.error('renderChatUI failed:', e); }
-  try { renderPetState(); } catch (e) { console.error('renderPetState failed:', e); }
+
 }
 
 // ==========================================================================
@@ -888,16 +831,7 @@ function setupFirebaseRealtimeListeners() {
     }
   });
 
-  // 8. Virtual Couple Pet Realtime Sync
-  firebaseDb.ref('our_story/pet').on('value', (snapshot) => {
-    const petData = snapshot.val();
-    if (petData && petData.name) {
-      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-      appState.pet = petData;
-      saveAppState(appState);
-      renderPetState();
-    }
-  });
+
 
   // 9. Emergency App Pause Realtime Sync (Himanshu Master Control)
   firebaseDb.ref('our_story/appPause').on('value', (snapshot) => {
@@ -1073,8 +1007,7 @@ function syncToFirebase(type, data) {
         firebaseDb.ref('our_story/chat_typing/' + currentUser).set(data);
       } else if (type === 'VC_SIGNAL' || type === 'VC_CALL') {
         firebaseDb.ref('our_story/webrtc_call/callMeta').set(data);
-      } else if (type === 'PET_ACTION') {
-        firebaseDb.ref('our_story/pet').set(appState.pet);
+
       } else if (type === 'APP_PAUSE_STATUS') {
         firebaseDb.ref('our_story/appPause').set(data);
       }
@@ -1138,10 +1071,7 @@ function syncToFirebase(type, data) {
       endpoint += `/webrtc_call/callMeta.json`;
       method = 'PUT';
       body = data;
-    } else if (type === 'PET_ACTION') {
-      endpoint += `/pet.json`;
-      method = 'PUT';
-      body = appState.pet;
+
     } else if (type === 'APP_PAUSE_STATUS') {
       endpoint += `/appPause.json`;
       method = 'PUT';
@@ -1386,7 +1316,6 @@ function broadcastUpdate(type, data, retain = false) {
       else if (type === 'MEMORY_ADD') subTopic = 'memory';
       else if (type === 'LOCATION_UPDATE') subTopic = 'location';
       else if (type === 'CHAT_MESSAGE' || type === 'CHAT_TYPING') subTopic = 'chat';
-      else if (type === 'PET_ACTION') subTopic = 'pet';
       else if (type === 'APP_PAUSE_STATUS') subTopic = 'pause';
 
       const msg = new Paho.MQTT.Message(JSON.stringify(payload));
@@ -1469,14 +1398,7 @@ function broadcastUpdate(type, data, retain = false) {
         tags: isAudio ? ['telephone_receiver', 'phone'] : ['video_camera', 'phone'],
         priority: 5
       });
-    } else if (type === 'PET_ACTION') {
-      sendClosedAppPushNotification(partnerUser, {
-        title: `🐾 Mochi Pet Update from ${myName}!`,
-        message: `${myName} ${data.actionText || 'did something cute with Mochi! 🐼'}`,
-        click: getAppNavUrl('#paneMood'),
-        tags: ['panda_face', 'sparkles'],
-        priority: 4
-      });
+
     }
   } catch (err) {
     console.warn('Closed-app push notification trigger failed:', err);
@@ -1515,8 +1437,7 @@ function handleIncomingSyncMessage(payload) {
     handleIncomingVCSignal(payload.data);
   } else if (payload.type === 'VC_HEART') {
     handleIncomingVCHeart(payload.data);
-  } else if (payload.type === 'PET_ACTION') {
-    handleIncomingPetAction(payload.data);
+
   } else if (payload.type === 'APP_PAUSE_STATUS') {
     handleIncomingAppPause(payload.data);
   }
@@ -7667,343 +7588,6 @@ function setupUniversalPhotoFeatures() {
 }
 
 // ==========================================================================
-// VIRTUAL COUPLE PET: MOCHI THE LOVE PANDA 🐾
-// Co-Parenting Sanctuary for Himanshu & Gullu
-// ==========================================================================
-
-function getPetState() {
-  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-  if (!appState.pet) {
-    appState.pet = JSON.parse(JSON.stringify(DEFAULT_APP_STATE.pet));
-  }
-  return appState.pet;
-}
-
-function renderPetState() {
-  const pet = getPetState();
-  if (!pet) return;
-
-  // Header status pill
-  const headerPetStatusText = document.getElementById('headerPetStatusText');
-  if (headerPetStatusText) {
-    headerPetStatusText.textContent = `Lvl ${pet.level || 1} • ${pet.name || 'Mochi'}`;
-  }
-
-  // Level & streak badges
-  const petLevelBadge = document.getElementById('petLevelBadge');
-  if (petLevelBadge) petLevelBadge.textContent = `⭐ Lvl ${pet.level || 1}`;
-
-  const petStreakBadge = document.getElementById('petStreakBadge');
-  if (petStreakBadge) petStreakBadge.textContent = `💖 Day ${pet.streak || 1}`;
-
-  // Vitals
-  const hunger = Math.max(0, Math.min(100, pet.hunger ?? 80));
-  const happy = Math.max(0, Math.min(100, pet.happiness ?? 95));
-  const energy = Math.max(0, Math.min(100, pet.energy ?? 90));
-
-  const petHungerVal = document.getElementById('petHungerVal');
-  const petHungerFill = document.getElementById('petHungerFill');
-  if (petHungerVal) petHungerVal.textContent = `${hunger}%`;
-  if (petHungerFill) petHungerFill.style.width = `${hunger}%`;
-
-  const petHappyVal = document.getElementById('petHappyVal');
-  const petHappyFill = document.getElementById('petHappyFill');
-  if (petHappyVal) petHappyVal.textContent = `${happy}%`;
-  if (petHappyFill) petHappyFill.style.width = `${happy}%`;
-
-  const petEnergyVal = document.getElementById('petEnergyVal');
-  const petEnergyFill = document.getElementById('petEnergyFill');
-  if (petEnergyVal) petEnergyVal.textContent = `${energy}%`;
-  if (petEnergyFill) petEnergyFill.style.width = `${energy}%`;
-
-  // Speech bubble & pet mood text
-  const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
-  const partnerName = currentUser === 'himanshu' ? 'Gullu' : 'Himanshu';
-  const petSpeechText = document.getElementById('petSpeechText');
-  const petMoodStatusText = document.getElementById('petMoodStatusText');
-
-  let speech = '';
-  let moodStatus = '';
-
-  if (pet.state === 'eating') {
-    speech = `Nom nom nom! 🍓 Tasty treats! ${myName} gives the best snacks! 😋`;
-    moodStatus = 'Eating Yummy Treats 🍓';
-  } else if (pet.state === 'cuddling') {
-    speech = `Purrrr... So cozy in ${myName}'s arms! Mochi loves you both forever! 💖`;
-    moodStatus = 'Feeling Extra Loved 🥰';
-  } else if (pet.state === 'bathing') {
-    speech = `Splish splash! 🫧 Mochi is sparkling clean and smells like baby lavender! ✨`;
-    moodStatus = 'Fresh & Clean 🛁';
-  } else if (pet.state === 'sleeping') {
-    speech = `Zzz... Shhh, Mochi is dreaming about Himanshu & Gullu's coffee dates... 🌙`;
-    moodStatus = 'Sleeping Peacefully 😴';
-  } else if (pet.state === 'playing') {
-    speech = `Yay! Catch the ball! Look how high Mochi can jump! 🎾🐾`;
-    moodStatus = 'Super Playful & Energetic 🎾';
-  } else {
-    // Dynamic default dialogues
-    if (hunger < 40) {
-      speech = `Panda tummy is rumbling! ${myName}, can I have some strawberries please? 🥺🍓`;
-      moodStatus = 'A Little Hungry 🍓';
-    } else if (happy < 50) {
-      speech = `Missing warm cuddles from ${partnerName} & ${myName}... Come snuggle me! 🥺`;
-      moodStatus = 'Needs Cuddles 💖';
-    } else if (energy < 40) {
-      speech = `Yawn... Panda eyelids are getting heavy. Tuck Mochi into bed? 😴`;
-      moodStatus = 'Sleepy Baby 🌙';
-    } else {
-      speech = `Yay! ${myName} is here! Mochi is the happiest panda in the world with Himanshu & Gullu! ✨`;
-      moodStatus = 'Super Happy & Loved 🥰';
-    }
-  }
-
-  if (petSpeechText) petSpeechText.textContent = speech;
-  if (petMoodStatusText) petMoodStatusText.textContent = moodStatus;
-
-  // Last interacted time
-  const petLastInteractedText = document.getElementById('petLastInteractedText');
-  if (petLastInteractedText) {
-    if (pet.lastInteraction) {
-      const diffMin = Math.floor((Date.now() - pet.lastInteraction) / 60000);
-      if (diffMin < 1) petLastInteractedText.textContent = 'Last loved: Just now';
-      else if (diffMin < 60) petLastInteractedText.textContent = `Last loved: ${diffMin}m ago`;
-      else petLastInteractedText.textContent = `Last loved: ${Math.floor(diffMin / 60)}h ago`;
-    } else {
-      petLastInteractedText.textContent = 'Last loved: Today';
-    }
-  }
-
-  // Render activity diary
-  renderPetActivityDiary();
-}
-
-function renderPetActivityDiary() {
-  const pet = getPetState();
-  const petActivityList = document.getElementById('petActivityList');
-  if (!petActivityList) return;
-
-  const acts = normalizeArray(pet.activities);
-  if (acts.length === 0) {
-    petActivityList.innerHTML = `
-      <div class="pet-activity-item" style="justify-content: center; opacity: 0.7;">
-        <span class="pet-activity-text">No pet care logged yet. Feed or cuddle Mochi to start! 🐾</span>
-      </div>`;
-    return;
-  }
-
-  petActivityList.innerHTML = acts.map(act => {
-    let timeStr = 'Just now';
-    if (act.timestamp) {
-      const diffMin = Math.floor((Date.now() - act.timestamp) / 60000);
-      if (diffMin < 1) timeStr = 'Just now';
-      else if (diffMin < 60) timeStr = `${diffMin}m ago`;
-      else timeStr = `${Math.floor(diffMin / 60)}h ago`;
-    }
-
-    return `
-      <div class="pet-activity-item">
-        <span class="pet-activity-emoji">${act.emoji || '🐾'}</span>
-        <div class="pet-activity-info">
-          <div class="pet-activity-actor-row">
-            <span class="pet-activity-author">${escapeHtml(act.author || 'Couple')}</span>
-            <span class="pet-activity-time">${timeStr}</span>
-          </div>
-          <span class="pet-activity-text">${escapeHtml(act.actionText || '')}</span>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function spawnPetFloatingEmote(emoji, xSpread = 0) {
-  const container = document.getElementById('petFloatingEmotes');
-  if (!container) return;
-
-  const el = document.createElement('span');
-  el.className = 'floating-pet-emote';
-  el.textContent = emoji;
-  const randX = xSpread || ((Math.random() - 0.5) * 80);
-  el.style.setProperty('--x', `${randX}px`);
-  el.style.left = `calc(50% + ${randX}px)`;
-  container.appendChild(el);
-
-  setTimeout(() => {
-    if (el && el.parentNode) el.parentNode.removeChild(el);
-  }, 1500);
-}
-
-function interactWithPet(actionType, isRemote = false, remoteData = null) {
-  const pet = getPetState();
-  const authorName = isRemote
-    ? (remoteData?.author || (currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕'))
-    : (currentUser === 'himanshu' ? 'Himanshu ☕' : 'Gullu 🌸');
-
-  let actionText = '';
-  let emoji = '🐾';
-  let floatEmojis = ['💖', '✨'];
-
-  if (actionType === 'feed') {
-    pet.hunger = Math.min(100, (pet.hunger || 0) + 20);
-    pet.happiness = Math.min(100, (pet.happiness || 0) + 10);
-    pet.state = 'eating';
-    actionText = `fed Mochi juicy strawberries & sweet treats! 🍓 (+20 Tummy, +10 Pyar)`;
-    emoji = '🍓';
-    floatEmojis = ['🍓', '😋', '✨'];
-    playPetEatSound();
-  } else if (actionType === 'cuddle') {
-    pet.happiness = Math.min(100, (pet.happiness || 0) + 25);
-    pet.state = 'cuddling';
-    actionText = `gave Mochi warm tight cuddles & kisses! 💖 (+25 Pyar)`;
-    emoji = '💖';
-    floatEmojis = ['💖', '🥰', '💕', '✨'];
-    playPetPurrSound();
-  } else if (actionType === 'bath') {
-    pet.energy = Math.min(100, (pet.energy || 0) + 15);
-    pet.happiness = Math.min(100, (pet.happiness || 0) + 15);
-    pet.state = 'bathing';
-    actionText = `gave Mochi a gentle lavender bubble bath! 🛁 (+15 Masti, +15 Pyar)`;
-    emoji = '🛁';
-    floatEmojis = ['🫧', '🧼', '✨', '🛁'];
-    playTone(587.33, 0.2, 'sine', 0.2);
-    setTimeout(() => playTone(880, 0.3, 'sine', 0.18), 100);
-  } else if (actionType === 'sleep') {
-    pet.energy = Math.min(100, (pet.energy || 0) + 30);
-    pet.state = 'sleeping';
-    actionText = `tucked Mochi into soft warm blankets under the stars! 🌙 (+30 Energy)`;
-    emoji = '🌙';
-    floatEmojis = ['💤', '🌙', '⭐', '😴'];
-    playTone(261.63, 0.4, 'sine', 0.15);
-    setTimeout(() => playTone(329.63, 0.5, 'sine', 0.12), 200);
-  } else if (actionType === 'play') {
-    pet.happiness = Math.min(100, (pet.happiness || 0) + 20);
-    pet.hunger = Math.max(0, (pet.hunger || 0) - 10);
-    pet.energy = Math.max(0, (pet.energy || 0) - 15);
-    pet.state = 'playing';
-    actionText = `played fetch and bouncy yarn ball with Mochi! 🎾 (+20 Pyar, -10 Tummy)`;
-    emoji = '🎾';
-    floatEmojis = ['🎾', '🏃‍♂️', '⭐', '🐾'];
-    playPetHappySound();
-  } else if (actionType === 'tickle') {
-    pet.happiness = Math.min(100, (pet.happiness || 0) + 5);
-    actionText = `tickled Mochi's tummy! Giggles everywhere! 🥰`;
-    emoji = '🥰';
-    floatEmojis = ['💖', '✨'];
-    playTone(659.25, 0.15, 'triangle', 0.2);
-    setTimeout(() => playTone(880, 0.25, 'triangle', 0.2), 90);
-  }
-
-  // Level up calculation
-  pet.lastInteraction = Date.now();
-  const totalStats = (pet.hunger || 0) + (pet.happiness || 0) + (pet.energy || 0);
-  if (totalStats >= 270 && pet.level < 10) {
-    pet.level = Math.max(pet.level || 1, Math.min(10, Math.floor(totalStats / 90)));
-  }
-
-  // Add activity log
-  if (!pet.activities) pet.activities = [];
-  pet.activities.unshift({
-    id: 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-    author: authorName,
-    actionText: actionText,
-    timestamp: Date.now(),
-    emoji: emoji
-  });
-  pet.activities = pet.activities.slice(0, 30);
-
-  // Avatar visual animation class
-  const petAvatar = document.getElementById('petAvatarEmoji');
-  if (petAvatar) {
-    petAvatar.className = 'pet-character-avatar ' + (pet.state || 'bounce');
-    setTimeout(() => {
-      if (petAvatar) petAvatar.className = 'pet-character-avatar';
-    }, 3500);
-  }
-
-  // Floating emotes
-  floatEmojis.forEach((em, idx) => {
-    setTimeout(() => spawnPetFloatingEmote(em, (idx - 1) * 35), idx * 180);
-  });
-
-  saveAppState(appState);
-  renderPetState();
-
-  // Broadcast to partner if local action
-  if (!isRemote) {
-    const payload = {
-      actionType,
-      author: authorName,
-      actionText,
-      emoji,
-      pet: pet,
-      sender: currentUser,
-      timestamp: Date.now()
-    };
-    broadcastUpdate('PET_ACTION', payload, true);
-    showToast(`🐾 ${actionText}`);
-  }
-}
-
-function handleIncomingPetAction(data) {
-  if (!data) return;
-  const pet = getPetState();
-
-  if (data.pet) {
-    appState.pet = data.pet;
-  } else {
-    pet.lastInteraction = data.timestamp || Date.now();
-  }
-
-  saveAppState(appState);
-  renderPetState();
-
-  // Audio & visual feedback on partner action
-  playPetHappySound();
-  spawnPetFloatingEmote(data.emoji || '🐾', 0);
-  spawnPetFloatingEmote('💖', 30);
-
-  const actor = data.author || (currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕');
-  showToast(`🐾 ${actor} ${data.actionText || 'cared for Mochi!'}`);
-}
-
-function setupVirtualPet() {
-  // 1. Header Pet Pill Click -> Switch to Tab 5 (Pet & Mood) and scroll to Pet Card
-  const headerPetPill = document.getElementById('headerPetPill');
-  if (headerPetPill) {
-    headerPetPill.addEventListener('click', () => {
-      switchTab('paneMood');
-      setTimeout(() => {
-        const petCard = document.getElementById('virtualPetCard');
-        if (petCard) petCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 100);
-    });
-  }
-
-  // 2. Pet Stage Avatar Click (Tickle)
-  const petAvatarStage = document.getElementById('petAvatarStage');
-  if (petAvatarStage) {
-    petAvatarStage.addEventListener('click', () => interactWithPet('tickle'));
-  }
-
-  // 3. Action Buttons
-  const feedBtn = document.getElementById('petFeedBtn');
-  if (feedBtn) feedBtn.addEventListener('click', () => interactWithPet('feed'));
-
-  const cuddleBtn = document.getElementById('petCuddleBtn');
-  if (cuddleBtn) cuddleBtn.addEventListener('click', () => interactWithPet('cuddle'));
-
-  const bathBtn = document.getElementById('petBathBtn');
-  if (bathBtn) bathBtn.addEventListener('click', () => interactWithPet('bath'));
-
-  const sleepBtn = document.getElementById('petSleepBtn');
-  if (sleepBtn) sleepBtn.addEventListener('click', () => interactWithPet('sleep'));
-
-  const playBtn = document.getElementById('petPlayBtn');
-  if (playBtn) playBtn.addEventListener('click', () => interactWithPet('play'));
-
-  // Initial render
-  renderPetState();
-}
-
 // --- INITIALIZE EVERYTHING ON LOAD ---
 document.addEventListener('DOMContentLoaded', () => {
   const safeInit = (name, fn) => {
@@ -8031,7 +7615,6 @@ document.addEventListener('DOMContentLoaded', () => {
   safeInit('setupChatUI', setupChatUI);
   safeInit('setupVideoCallEngine', setupVideoCallEngine);
   safeInit('setupUniversalPhotoFeatures', setupUniversalPhotoFeatures);
-  safeInit('setupVirtualPet', setupVirtualPet);
   safeInit('setupHimanshuPauseControl', setupHimanshuPauseControl);
   safeInit('fetchState', fetchState);
 
