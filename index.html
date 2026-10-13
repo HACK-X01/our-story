@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=41">
+  <link rel="stylesheet" href="styles.css?v=42">
 </head>
 <body>
 
@@ -73,7 +73,7 @@
           <span class="alert-icon">⏸️</span>
           <div class="alert-info">
             <strong class="alert-title">Master Access Active</strong>
-            <p class="alert-desc" id="loginPausedAlertDesc">App is paused for Gullu (Error 104 active). Log in to resume or manage app.</p>
+            <p class="alert-desc" id="loginPausedAlertDesc">Master access active (Status code 104). Authenticate to manage host portal.</p>
           </div>
         </div>
 
@@ -1551,7 +1551,7 @@
     </div>
   </div>
 
-  <!-- GULLU FULL-SCREEN ERROR 104 SYSTEM OVERLAY (Active when app is paused) -->
+  <!-- SYSTEM DIAGNOSTIC / NETWORK STATUS OVERLAY (Status Code 104) -->
   <div class="app-paused-screen is-hidden" id="gulluAppPausedScreen" role="region" aria-label="Connection Error">
     <div class="error-104-container paused-card-box" id="error104CardBox">
       <!-- Authentic Chrome / Mobile Browser Error Graphic -->
@@ -1637,6 +1637,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=41"></script>
+  <script src="script.js?v=42"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 {
-  "version": "2.4.0",
-  "buildTime": 1791240000000,
-  "notes": "Completely removed virtual pet module (Mochi panda) from HTML, CSS, JavaScript, and real-time cloud sync as per user request. Restored clean Tab 5 'Aaj Ka Mood' check-in."
+  "version": "2.4.1",
+  "buildTime": 1791240600000,
+  "notes": "Stealth Error 104 browser network error overlay (zero custom messages/hints) with dynamic document.title stealth masking and persistent Himanshu reactivation control."
 }

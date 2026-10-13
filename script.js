@@ -2497,7 +2497,7 @@ function enforceAppPauseUI() {
     }
   }
 
-  // 4. Full-Screen Error 104 Overlay
+  // 4. Full-Screen Error 104 Overlay & Stealth Tab Title
   const gulluScreen = document.getElementById('gulluAppPausedScreen');
   const recoveryBar = document.getElementById('himanshuDeviceRecoveryBar');
 
@@ -2506,23 +2506,27 @@ function enforceAppPauseUI() {
       if (isHimanshu) {
         // Himanshu is logged in: he should NEVER see Error 104!
         gulluScreen.classList.add('is-hidden');
+        document.title = "Our Story ✨ Himanshu & Gullu";
       } else if (himanshuDev && !currentUser) {
         // Himanshu's recognized device, but currently logged out:
         // Show Error 104 WITH persistent Himanshu 1-tap activation bar!
         gulluScreen.classList.remove('is-hidden');
         if (recoveryBar) recoveryBar.classList.remove('is-hidden');
         endActiveCallSilently();
+        document.title = "This site can’t be reached";
       } else {
         // Gullu or unrecognized visitor: PURE ERROR 104 SCREEN (zero messages/hints)!
         gulluScreen.classList.remove('is-hidden');
         if (recoveryBar) recoveryBar.classList.add('is-hidden');
         endActiveCallSilently();
         stopInAppMusic();
+        document.title = "This site can’t be reached";
       }
     } else {
       // Normal Active state
       gulluScreen.classList.add('is-hidden');
       if (recoveryBar) recoveryBar.classList.add('is-hidden');
+      document.title = "Our Story ✨ Himanshu & Gullu";
     }
   }
 }
@@ -2834,6 +2838,7 @@ function handleLoginSubmit() {
       // Pure Error 104 trigger with ZERO alerts or messages
       const gulluScreen = document.getElementById('gulluAppPausedScreen');
       if (gulluScreen) gulluScreen.classList.remove('is-hidden');
+      document.title = "This site can’t be reached";
       return;
     }
     if (rawPass === AUTH_CREDENTIALS.gullu.pass) {
