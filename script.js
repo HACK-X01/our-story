@@ -814,6 +814,13 @@ function setupFirebaseRealtimeListeners() {
     }
   });
 
+  firebaseDb.ref('our_story/chat_messages').limitToLast(50).on('child_changed', (snapshot) => {
+    const msg = snapshot.val();
+    if (msg && msg.id) {
+      handleIncomingChatMessage(msg, false);
+    }
+  });
+
   // 6. Chat Typing Indicator Realtime Listener
   const partnerKey = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
   firebaseDb.ref('our_story/chat_typing/' + partnerKey).on('value', (snapshot) => {
@@ -1003,6 +1010,16 @@ function syncToFirebase(type, data) {
         firebaseDb.ref('our_story/memories').set(appState.memories);
       } else if (type === 'CHAT_MESSAGE') {
         firebaseDb.ref('our_story/chat_messages/' + data.id).set(data);
+      } else if (type === 'CHAT_RECEIPT_DELIVERED' || type === 'CHAT_RECEIPT_READ') {
+        const newStatus = type === 'CHAT_RECEIPT_READ' ? 'read' : 'delivered';
+        const timestampKey = newStatus + 'At';
+        const msgIds = data.msgIds || (data.msgId ? [data.msgId] : []);
+        msgIds.forEach(id => {
+          firebaseDb.ref('our_story/chat_messages/' + id).update({
+            status: newStatus,
+            [timestampKey]: data[timestampKey] || Date.now()
+          });
+        });
       } else if (type === 'CHAT_TYPING') {
         firebaseDb.ref('our_story/chat_typing/' + currentUser).set(data);
       } else if (type === 'VC_SIGNAL' || type === 'VC_CALL') {
@@ -1063,6 +1080,18 @@ function syncToFirebase(type, data) {
       endpoint += `/chat_messages/${data.id}.json`;
       method = 'PUT';
       body = data;
+    } else if (type === 'CHAT_RECEIPT_DELIVERED' || type === 'CHAT_RECEIPT_READ') {
+      const newStatus = type === 'CHAT_RECEIPT_READ' ? 'read' : 'delivered';
+      const timestampKey = newStatus + 'At';
+      const msgIds = data.msgIds || (data.msgId ? [data.msgId] : []);
+      msgIds.forEach(id => {
+        fetch(`${dbUrl}/our_story/chat_messages/${id}.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus, [timestampKey]: data[timestampKey] || Date.now() })
+        }).catch(() => {});
+      });
+      return;
     } else if (type === 'CHAT_TYPING') {
       endpoint += `/chat_typing/${currentUser}.json`;
       method = 'PUT';
@@ -1429,6 +1458,10 @@ function handleIncomingSyncMessage(payload) {
     handleIncomingLocationClear(payload.data);
   } else if (payload.type === 'CHAT_MESSAGE') {
     handleIncomingChatMessage(payload.data, true);
+  } else if (payload.type === 'CHAT_RECEIPT_DELIVERED') {
+    handleIncomingChatReceipt(payload.data, 'delivered');
+  } else if (payload.type === 'CHAT_RECEIPT_READ') {
+    handleIncomingChatReceipt(payload.data, 'read');
   } else if (payload.type === 'CHAT_TYPING') {
     if (typeof setPartnerTypingUI === 'function') {
       setPartnerTypingUI(payload.data);
@@ -3057,6 +3090,7 @@ function setupTabNavigation() {
       if (badge) badge.classList.add('is-hidden');
       renderChatUI();
       fetchLatestCloudSync();
+      markIncomingChatMessagesAsRead();
       if ('Notification' in window && Notification.permission === 'default') {
         try { Notification.requestPermission().catch(() => {}); } catch (e) {}
       }
@@ -5487,6 +5521,10 @@ function setupPWAandUpdates() {
           if (currentUser) {
             try { startAutoLocationSync(); } catch (e) {}
           }
+          const chatPane = document.getElementById('paneChat');
+          if (chatPane && chatPane.classList.contains('active')) {
+            markIncomingChatMessagesAsRead();
+          }
         }
       });
 
@@ -5497,6 +5535,10 @@ function setupPWAandUpdates() {
         fetchLatestCloudSync();
         if (currentUser) {
           try { startAutoLocationSync(); } catch (e) {}
+        }
+        const chatPane = document.getElementById('paneChat');
+        if (chatPane && chatPane.classList.contains('active')) {
+          markIncomingChatMessagesAsRead();
         }
       });
     }).catch((err) => {
@@ -6374,6 +6416,97 @@ function renderChatUI() {
   listEl.scrollTop = listEl.scrollHeight;
 }
 
+// WhatsApp Message Tick Helpers (Single Grey Tick -> Double Grey Tick -> Double Blue Tick)
+function getMessageStatus(msg) {
+  if (msg && msg.status) return msg.status;
+  // For older historical messages with no status, if older than 2 minutes, treat as read
+  if (msg && msg.timestamp && (Date.now() - msg.timestamp > 120000)) {
+    return 'read';
+  }
+  return 'sent';
+}
+
+function renderChatTicksHtml(msg, isMe) {
+  if (!isMe) return '';
+  const status = getMessageStatus(msg);
+  if (status === 'read') {
+    return `<span class="chat-msg-ticks tick-read" data-msg-id="${msg.id}" title="Read (Seen)">✓✓</span>`;
+  } else if (status === 'delivered') {
+    return `<span class="chat-msg-ticks tick-delivered" data-msg-id="${msg.id}" title="Delivered">✓✓</span>`;
+  } else {
+    return `<span class="chat-msg-ticks tick-sent" data-msg-id="${msg.id}" title="Sent">✓</span>`;
+  }
+}
+
+function updateMessageTickDOM(msgId, newStatus) {
+  const tickEl = document.querySelector(`.chat-msg-ticks[data-msg-id="${msgId}"]`);
+  if (!tickEl) return;
+  if (newStatus === 'read') {
+    tickEl.className = 'chat-msg-ticks tick-read';
+    tickEl.textContent = '✓✓';
+    tickEl.title = 'Read (Seen)';
+  } else if (newStatus === 'delivered' && !tickEl.classList.contains('tick-read')) {
+    tickEl.className = 'chat-msg-ticks tick-delivered';
+    tickEl.textContent = '✓✓';
+    tickEl.title = 'Delivered';
+  }
+}
+
+function handleIncomingChatReceipt(data, targetStatus) {
+  if (!data || !appState || !appState.chatMessages) return;
+  const msgIds = data.msgIds || (data.msgId ? [data.msgId] : []);
+  if (!msgIds.length) return;
+
+  let stateChanged = false;
+  msgIds.forEach(id => {
+    const msg = appState.chatMessages.find(m => m.id === id);
+    if (msg) {
+      if (targetStatus === 'read') {
+        if (msg.status !== 'read') {
+          msg.status = 'read';
+          msg.readAt = data.readAt || Date.now();
+          stateChanged = true;
+          updateMessageTickDOM(id, 'read');
+        }
+      } else if (targetStatus === 'delivered') {
+        if (!msg.status || msg.status === 'sent') {
+          msg.status = 'delivered';
+          msg.deliveredAt = data.deliveredAt || Date.now();
+          stateChanged = true;
+          updateMessageTickDOM(id, 'delivered');
+        }
+      }
+    }
+  });
+
+  if (stateChanged) {
+    saveAppState(appState);
+  }
+}
+
+function markIncomingChatMessagesAsRead() {
+  if (!appState || !appState.chatMessages) return;
+  const unreadMsgIds = [];
+  const now = Date.now();
+
+  appState.chatMessages.forEach(m => {
+    if (m && m.sender !== currentUser && m.status !== 'read') {
+      m.status = 'read';
+      m.readAt = now;
+      unreadMsgIds.push(m.id);
+    }
+  });
+
+  if (unreadMsgIds.length > 0) {
+    saveAppState(appState);
+    broadcastUpdate('CHAT_RECEIPT_READ', {
+      msgIds: unreadMsgIds,
+      readBy: currentUser,
+      readAt: now
+    }, false);
+  }
+}
+
 function appendChatMessageDOM(msg, shouldScroll = true) {
   const listEl = document.getElementById('chatMessagesList');
   if (!listEl) return;
@@ -6434,7 +6567,7 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
         </div>
         <div class="chat-msg-footer">
           <span class="chat-msg-time">${timeStr}</span>
-          ${isMe ? '<span class="chat-msg-ticks">✓✓</span>' : ''}
+          ${renderChatTicksHtml(msg, isMe)}
         </div>
       </div>
     `;
@@ -6463,7 +6596,7 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
         </div>
         <div class="chat-msg-footer">
           <span class="chat-msg-time">${timeStr}</span>
-          ${isMe ? '<span class="chat-msg-ticks">✓✓</span>' : ''}
+          ${renderChatTicksHtml(msg, isMe)}
         </div>
       </div>
     `;
@@ -6501,7 +6634,7 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
         </div>
         <div class="chat-msg-footer">
           <span class="chat-msg-time">${timeStr}</span>
-          ${isMe ? '<span class="chat-msg-ticks">✓✓</span>' : ''}
+          ${renderChatTicksHtml(msg, isMe)}
         </div>
       </div>
     `;
@@ -6520,7 +6653,7 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
         <p class="chat-msg-text">${escapeChatHtml(msg.text)}</p>
         <div class="chat-msg-footer">
           <span class="chat-msg-time">${timeStr}</span>
-          ${isMe ? '<span class="chat-msg-ticks">✓✓</span>' : ''}
+          ${renderChatTicksHtml(msg, isMe)}
         </div>
       </div>
     `;
@@ -6643,6 +6776,7 @@ function sendChatMessage(text, type = 'text', extraData = {}) {
     text: text.trim(),
     timestamp: Date.now(),
     type: type,
+    status: 'sent', // Single grey tick initially
     ...(replyData ? { replyTo: replyData } : {}),
     ...extraData
   };
@@ -6671,22 +6805,67 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
   if (!appState.chatMessages) appState.chatMessages = [];
 
-  const isAlreadyStored = appState.chatMessages.some(m => m.id === msg.id);
+  const existingMsg = appState.chatMessages.find(m => m.id === msg.id);
   const now = Date.now();
   const isFresh = msg.timestamp ? (Math.abs(now - msg.timestamp) < 15000) : false;
 
-  if (!isAlreadyStored) {
+  if (existingMsg) {
+    let tickChanged = false;
+    if (msg.status === 'read' && existingMsg.status !== 'read') {
+      existingMsg.status = 'read';
+      existingMsg.readAt = msg.readAt || now;
+      tickChanged = true;
+      updateMessageTickDOM(msg.id, 'read');
+    } else if (msg.status === 'delivered' && (!existingMsg.status || existingMsg.status === 'sent')) {
+      existingMsg.status = 'delivered';
+      existingMsg.deliveredAt = msg.deliveredAt || now;
+      tickChanged = true;
+      updateMessageTickDOM(msg.id, 'delivered');
+    }
+    if (tickChanged) saveAppState(appState);
+  } else {
     appState.chatMessages.push(msg);
     appState.chatMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     if (appState.chatMessages.length > 250) {
       appState.chatMessages = appState.chatMessages.slice(-250);
     }
     saveAppState(appState);
+    appendChatMessageDOM(msg, isFresh);
   }
 
-  appendChatMessageDOM(msg, isFresh);
+  // Delivery & Read Receipt tracking when recipient receives partner's message
+  if (msg.sender !== currentUser && !isLocalBroadcast) {
+    const chatPane = document.getElementById('paneChat');
+    const isChatActive = chatPane && chatPane.classList.contains('active') && !document.hidden;
 
-  if (isAlreadyStored || !isFresh) {
+    if (isChatActive) {
+      // Partner is currently looking at the chat pane! -> Seen / Read (Double blue tick)
+      if (msg.status !== 'read') {
+        msg.status = 'read';
+        msg.readAt = now;
+        saveAppState(appState);
+        broadcastUpdate('CHAT_RECEIPT_READ', {
+          msgIds: [msg.id],
+          readBy: currentUser,
+          readAt: now
+        }, false);
+      }
+    } else {
+      // Partner device received message, net is ON -> Delivered (Double grey tick)
+      if (!msg.status || msg.status === 'sent') {
+        msg.status = 'delivered';
+        msg.deliveredAt = now;
+        saveAppState(appState);
+        broadcastUpdate('CHAT_RECEIPT_DELIVERED', {
+          msgIds: [msg.id],
+          deliveredTo: currentUser,
+          deliveredAt: now
+        }, false);
+      }
+    }
+  }
+
+  if (existingMsg || !isFresh) {
     if (msg.type === 'burst') {
       processedBurstMsgIds.add(msg.id);
     }

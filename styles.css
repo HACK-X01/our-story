@@ -4269,10 +4269,24 @@ body {
 }
 
 .chat-msg-ticks {
-  color: #53bdeb;
   font-weight: 800;
   font-size: 0.72rem;
   letter-spacing: -1px;
+  display: inline-block;
+  line-height: 1;
+  transition: color 0.2s ease, transform 0.15s ease;
+}
+
+.chat-msg-ticks.tick-sent {
+  color: #8696a0; /* Single grey tick */
+}
+
+.chat-msg-ticks.tick-delivered {
+  color: #8696a0; /* Double grey tick */
+}
+
+.chat-msg-ticks.tick-read {
+  color: #53bdeb; /* Double blue tick */
 }
 
 /* Shared Image Message Bubble */
