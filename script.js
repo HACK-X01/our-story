@@ -5545,10 +5545,14 @@ function setupPWAandUpdates() {
       console.warn('PWA Service Worker registration skipped:', err);
     });
 
-    // When the new worker takes control, save data silently
+    // When the new worker takes control, save data and seamlessly refresh to new version
+    let isRefreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (isRefreshing) return;
+      isRefreshing = true;
       if (appState) saveAppState(appState);
       console.log('App auto-updated silently in the background ✨');
+      window.location.reload();
     });
   }
 
