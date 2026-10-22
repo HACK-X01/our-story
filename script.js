@@ -5594,6 +5594,37 @@ function setupPWAandUpdates() {
   });
 }
 
+// Automatic Cache Purge & Live Version Verifier
+async function checkAndApplyForcedAppUpdate() {
+  try {
+    const res = await fetch('./version.json?nocache=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const cloudData = await res.json();
+    const storedVersion = localStorage.getItem('our_story_app_version');
+    if (cloudData && cloudData.version) {
+      if (storedVersion && storedVersion !== cloudData.version) {
+        console.log(`[PWA Auto-Update] Updating app from ${storedVersion} -> ${cloudData.version}`);
+        localStorage.setItem('our_story_app_version', cloudData.version);
+        if ('caches' in window) {
+          const cacheKeys = await caches.keys();
+          await Promise.all(cacheKeys.map(k => caches.delete(k)));
+        }
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const reg of regs) {
+            await reg.unregister();
+          }
+        }
+        window.location.reload(true);
+      } else {
+        localStorage.setItem('our_story_app_version', cloudData.version);
+      }
+    }
+  } catch (e) {
+    console.warn('Auto version check skipped:', e);
+  }
+}
+
 // First-Time User Identity Setup Check (Superseded by Private Couple Login Gate)
 function checkFirstTimeIdentity() {
   const modal = document.getElementById('identitySetupModal');
@@ -6121,6 +6152,30 @@ function setupChatUI() {
         renderChatUI();
         showToast('Chat history cleared 🗑️');
       }
+    });
+  }
+
+  // Menu Action: Reload & Update App (Instant PWA Cache Purge)
+  const menuRefreshBtn = document.getElementById('chatMenuRefreshBtn');
+  if (menuRefreshBtn) {
+    menuRefreshBtn.addEventListener('click', async () => {
+      if (menuDropdown) menuDropdown.classList.add('is-hidden');
+      showVcToast('Updating app... 🔄');
+      try {
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const reg of regs) {
+            await reg.unregister();
+          }
+        }
+      } catch (e) {}
+      setTimeout(() => {
+        window.location.reload(true);
+      }, 350);
     });
   }
 
@@ -8572,6 +8627,7 @@ document.addEventListener('DOMContentLoaded', () => {
   safeInit('setupNotificationPermissions', setupNotificationPermissions);
   safeInit('setupInAppMusicPlayer', setupInAppMusicPlayer);
   safeInit('setupPWAandUpdates', setupPWAandUpdates);
+  safeInit('checkAndApplyForcedAppUpdate', checkAndApplyForcedAppUpdate);
   safeInit('setupChatUI', setupChatUI);
   safeInit('setupVideoCallEngine', setupVideoCallEngine);
   safeInit('setupUniversalPhotoFeatures', setupUniversalPhotoFeatures);

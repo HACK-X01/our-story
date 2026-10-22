@@ -1,5 +1,5 @@
 {
-  "version": "2.5.1",
-  "buildTime": 1792681000000,
-  "notes": "Added authentic WhatsApp tick delivery & read receipt engine: single grey tick (✓) for sent, double grey ticks (✓✓) when recipient's net is on and message delivered, and double blue ticks (✓✓) when recipient opens and sees the chat."
+  "version": "2.5.2",
+  "buildTime": 1792682000000,
+  "notes": "Added automatic forced cache invalidator, auto-reload on Service Worker update, and 1-tap 'Reload & Update App' in WhatsApp three-dots menu."
 }
