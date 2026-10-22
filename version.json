@@ -1,5 +1,5 @@
 {
-  "version": "2.5.3",
-  "buildTime": 1792683000000,
-  "notes": "Added self-reply support for outgoing messages ('You' green style, reply buttons on all bubbles, bi-directional swipe, long-press) and strict chronological message sequence sorting."
+  "version": "2.6.0",
+  "buildTime": 1792686000000,
+  "notes": "Full WhatsApp Chat Overhaul: Dynamic date separators (Today, Yesterday, 21 October 2026), 12h time with inline ticks (sent, delivered, read), speech bubble tails and consecutive grouping, long-press context menu with emoji reaction bar, message edit (15m limit), delete for everyone / me, starred messages modal, disappearing messages (24h/7d/90d), emoji drawer, attach menu with GPS location card and docs, voice note 1x/1.5x/2x speed toggle, floating scroll-to-bottom with unread badge, and WebRTC 30s missed call handling."
 }

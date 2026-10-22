@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=47">
+  <link rel="stylesheet" href="styles.css?v=48">
 </head>
 <body>
 
@@ -817,6 +817,14 @@
                 <span class="menu-item-icon">📌</span>
                 <span class="menu-item-label">Pinned message</span>
               </button>
+              <button type="button" class="chat-menu-item" id="chatMenuStarredBtn">
+                <span class="menu-item-icon">⭐</span>
+                <span class="menu-item-label">Starred messages</span>
+              </button>
+              <button type="button" class="chat-menu-item" id="chatMenuDisappearingBtn">
+                <span class="menu-item-icon">⏳</span>
+                <span class="menu-item-label">Disappearing messages</span>
+              </button>
               <button type="button" class="chat-menu-item" id="chatMenuRefreshBtn">
                 <span class="menu-item-icon">🔄</span>
                 <span class="menu-item-label">Reload &amp; Update App</span>
@@ -928,10 +936,12 @@
 
           <!-- WhatsApp Input Bar -->
           <div class="chat-input-bar whatsapp-input-bar">
-            <!-- Hidden Image/Photo File Inputs for Camera vs Gallery -->
+            <!-- Hidden Image/Photo/Doc/Audio File Inputs -->
             <input type="file" id="chatImageInputCamera" accept="image/*" capture="environment" style="display: none;">
-            <input type="file" id="chatImageInputGallery" accept="image/*" style="display: none;">
+            <input type="file" id="chatImageInputGallery" accept="image/*,video/*" style="display: none;">
             <input type="file" id="chatImageInput" accept="image/*" class="is-hidden" style="display: none;">
+            <input type="file" id="chatDocInput" accept=".pdf,.doc,.docx,.txt,.zip,.xlsx,.ppt,.pptx" style="display: none;">
+            <input type="file" id="chatAudioInput" accept="audio/*" style="display: none;">
             
             <!-- Hidden compatibility quick heart button -->
             <button class="is-hidden" id="chatQuickHeartBtn" style="display:none;" aria-hidden="true">❤️</button>
@@ -951,7 +961,7 @@
               </div>
 
               <!-- Attachment Paperclip Button -->
-              <button type="button" class="whatsapp-icon-btn attach-btn" id="chatAttachBtn" title="Attach Document / Photo">
+              <button type="button" class="whatsapp-icon-btn attach-btn" id="chatAttachBtn" title="Attach Document / Photo / Location">
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                   <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5V6H9v9.5a3 3 0 0 0 6 0V5a4 4 0 0 0-8 0v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/>
                 </svg>
@@ -979,6 +989,164 @@
                 </svg>
               </span>
             </button>
+          </div>
+
+          <!-- Floating Scroll-To-Bottom Button (WhatsApp Style) -->
+          <button type="button" class="chat-scroll-bottom-btn is-hidden" id="chatScrollBottomBtn" title="Scroll to latest">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+              <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/>
+            </svg>
+            <span class="scroll-unread-badge is-hidden" id="chatScrollUnreadBadge">0</span>
+          </button>
+
+          <!-- WhatsApp Attachment Popup Sheet -->
+          <div class="chat-attach-popup is-hidden" id="chatAttachMenu">
+            <div class="attach-grid">
+              <button type="button" class="attach-item" id="attachCameraBtn">
+                <div class="attach-icon-circle attach-cam">📷</div>
+                <span class="attach-label">Camera</span>
+              </button>
+              <button type="button" class="attach-item" id="attachGalleryBtn">
+                <div class="attach-icon-circle attach-gal">🖼️</div>
+                <span class="attach-label">Gallery</span>
+              </button>
+              <button type="button" class="attach-item" id="attachDocumentBtn">
+                <div class="attach-icon-circle attach-doc">📄</div>
+                <span class="attach-label">Document</span>
+              </button>
+              <button type="button" class="attach-item" id="attachLocationBtn">
+                <div class="attach-icon-circle attach-loc">📍</div>
+                <span class="attach-label">Location</span>
+              </button>
+              <button type="button" class="attach-item" id="attachAudioBtn">
+                <div class="attach-icon-circle attach-aud">🎵</div>
+                <span class="attach-label">Audio</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- WhatsApp Emoji Picker Drawer -->
+          <div class="chat-emoji-drawer is-hidden" id="chatEmojiDrawer">
+            <div class="emoji-tabs">
+              <button type="button" class="emoji-tab-btn active" data-cat="smileys">😊 Smileys</button>
+              <button type="button" class="emoji-tab-btn" data-cat="love">❤️ Love</button>
+              <button type="button" class="emoji-tab-btn" data-cat="hands">👍 Hands</button>
+              <button type="button" class="emoji-tab-btn" data-cat="fun">✨ Fun</button>
+            </div>
+            <div class="emoji-grid" id="chatEmojiGrid"></div>
+          </div>
+
+          <!-- WhatsApp Message Long-Press Context Menu Overlay -->
+          <div class="chat-context-overlay is-hidden" id="chatContextOverlay">
+            <div class="chat-context-menu" id="chatContextMenu">
+              <!-- Top Quick Reaction Bar -->
+              <div class="context-reactions-bar" id="contextReactionsBar">
+                <button type="button" class="context-react-btn" data-emoji="❤️">❤️</button>
+                <button type="button" class="context-react-btn" data-emoji="😂">😂</button>
+                <button type="button" class="context-react-btn" data-emoji="😮">😮</button>
+                <button type="button" class="context-react-btn" data-emoji="😢">😢</button>
+                <button type="button" class="context-react-btn" data-emoji="👍">👍</button>
+                <button type="button" class="context-react-btn" data-emoji="🙏">🙏</button>
+                <button type="button" class="context-react-btn more" id="contextMoreEmojiBtn" title="More reactions">➕</button>
+              </div>
+              <!-- Action Options List -->
+              <div class="context-action-list">
+                <button type="button" class="context-action-item" id="contextReplyBtn">
+                  <span class="action-icon">↩️</span>
+                  <span class="action-label">Reply</span>
+                </button>
+                <button type="button" class="context-action-item" id="contextCopyBtn">
+                  <span class="action-icon">📋</span>
+                  <span class="action-label">Copy</span>
+                </button>
+                <button type="button" class="context-action-item" id="contextStarBtn">
+                  <span class="action-icon">⭐</span>
+                  <span class="action-label" id="contextStarLabel">Star</span>
+                </button>
+                <button type="button" class="context-action-item" id="contextEditBtn">
+                  <span class="action-icon">✏️</span>
+                  <span class="action-label">Edit message</span>
+                </button>
+                <button type="button" class="context-action-item" id="contextPinBtn">
+                  <span class="action-icon">📌</span>
+                  <span class="action-label">Pin</span>
+                </button>
+                <button type="button" class="context-action-item danger" id="contextDeleteBtn">
+                  <span class="action-icon">🗑️</span>
+                  <span class="action-label">Delete message</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- WhatsApp Message Edit Dialog -->
+          <div class="chat-edit-modal-overlay is-hidden" id="chatEditModal">
+            <div class="chat-edit-dialog">
+              <h4 class="edit-dialog-title">Edit message ✏️</h4>
+              <p class="edit-dialog-subtitle">15 minutes ke andar bheje hue message edit kar sakte hain</p>
+              <textarea class="edit-dialog-textarea" id="chatEditTextInput" rows="3" placeholder="Edit your message..."></textarea>
+              <div class="edit-dialog-actions">
+                <button type="button" class="edit-btn-cancel" id="chatEditCancelBtn">Cancel</button>
+                <button type="button" class="edit-btn-save" id="chatEditSaveBtn">Save</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- WhatsApp Delete Message Dialog -->
+          <div class="chat-delete-modal-overlay is-hidden" id="chatDeleteModal">
+            <div class="chat-delete-dialog">
+              <h4 class="delete-dialog-title">Delete message? 🗑️</h4>
+              <p class="delete-dialog-desc" id="chatDeleteDesc">Is message ko delete karna chahte hain?</p>
+              <div class="delete-dialog-actions">
+                <button type="button" class="delete-action-btn danger" id="deleteForEveryoneBtn">Delete for everyone</button>
+                <button type="button" class="delete-action-btn secondary" id="deleteForMeBtn">Delete for me</button>
+                <button type="button" class="delete-action-btn cancel" id="deleteCancelBtn">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- WhatsApp Starred Messages Modal -->
+          <div class="chat-starred-modal is-hidden" id="chatStarredModal">
+            <div class="starred-modal-header">
+              <button type="button" class="starred-back-btn" id="chatStarredCloseBtn">✕</button>
+              <h3>Starred Messages ⭐</h3>
+              <span class="starred-count-pill" id="starredCountPill">0</span>
+            </div>
+            <div class="starred-messages-list" id="chatStarredList">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- WhatsApp Disappearing Messages Modal -->
+          <div class="chat-disappearing-modal is-hidden" id="chatDisappearingModal">
+            <div class="disappearing-modal-card">
+              <div class="disappearing-modal-header">
+                <span class="disappearing-timer-icon">⏳</span>
+                <h4>Disappearing Messages</h4>
+                <p>Naye messages selected time ke baad automatically gayab ho jayenge.</p>
+              </div>
+              <div class="disappearing-options">
+                <label class="disappearing-option">
+                  <input type="radio" name="disappearingTimer" value="0" checked>
+                  <span>Off</span>
+                </label>
+                <label class="disappearing-option">
+                  <input type="radio" name="disappearingTimer" value="86400000">
+                  <span>24 hours</span>
+                </label>
+                <label class="disappearing-option">
+                  <input type="radio" name="disappearingTimer" value="604800000">
+                  <span>7 days</span>
+                </label>
+                <label class="disappearing-option">
+                  <input type="radio" name="disappearingTimer" value="7776000000">
+                  <span>90 days</span>
+                </label>
+              </div>
+              <div class="disappearing-modal-actions">
+                <button type="button" class="disappearing-btn-done" id="disappearingDoneBtn">Done</button>
+              </div>
+            </div>
           </div>
 
         </div>
@@ -1815,6 +1983,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=47"></script>
+  <script src="script.js?v=48"></script>
 </body>
 </html>
