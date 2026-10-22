@@ -22,7 +22,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=42">
+  <link rel="stylesheet" href="styles.css?v=43">
 </head>
 <body>
 
@@ -744,40 +744,114 @@
            TAB 6: 💬 DIL KI BAATEIN • PRIVATE REAL-TIME CHAT
            ============================================================ -->
       <section class="tab-pane" id="paneChat">
-        <div class="chat-container">
+        <div class="chat-container whatsapp-chat-container">
           
-          <!-- Messaging App Header Bar (WhatsApp / Telegram style) -->
-          <div class="chat-header-bar">
-            <div class="chat-partner-avatar-box">
+          <!-- Authentic WhatsApp Chat Top Bar -->
+          <div class="chat-header-bar whatsapp-header-bar">
+            <!-- Back Arrow (Mobile Navigation) -->
+            <button type="button" class="chat-header-back-btn" id="chatBackBtn" title="Back">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+              </svg>
+            </button>
+
+            <!-- Partner Avatar & Online Dot -->
+            <div class="chat-partner-avatar-box" id="chatPartnerAvatarBox">
               <span class="chat-partner-avatar" id="chatPartnerAvatar">🌸</span>
               <span class="chat-status-dot pulse" id="chatStatusDot" title="Online"></span>
             </div>
-            <div class="chat-partner-meta">
+
+            <!-- Partner Name & Online / Typing / Muted Status -->
+            <div class="chat-partner-meta" id="chatPartnerMeta">
               <div class="chat-partner-title-row">
                 <h3 class="chat-partner-heading" id="chatPartnerName">Gullu 🌸</h3>
-                <span class="chat-private-tag">🔒 Couple Space</span>
+                <span class="chat-mute-badge is-hidden" id="chatMutedIndicator" title="Notifications Muted">🔕</span>
               </div>
               <p class="chat-partner-sub" id="chatPartnerSub">
-                <span class="chat-online-badge">🟢 Online</span>
+                <span class="chat-online-badge">online</span>
               </p>
             </div>
+
+            <!-- WhatsApp Header Action Icons -->
             <div class="chat-header-actions">
-              <!-- Audio Call Button -->
-              <button class="chat-header-btn audio" id="chatStartAudioBtn" title="Start Audio Call (Voice Call)">
-                <span class="header-btn-icon">📞</span>
+              <!-- Video Call Button -->
+              <button type="button" class="chat-header-action-btn" id="chatStartVcBtn" title="Video Call">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                  <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                </svg>
               </button>
-              <!-- Video Call (VC) Button -->
-              <button class="chat-header-btn video" id="chatStartVcBtn" title="Start Video Call (VC)">
-                <span class="header-btn-icon">📹</span>
+              
+              <!-- Voice / Audio Call Button -->
+              <button type="button" class="chat-header-action-btn" id="chatStartAudioBtn" title="Voice Call">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-2.2 2.2a15.045 15.045 0 0 1-6.59-6.59l2.2-2.21a.96.96 0 0 0 .25-1A11.36 11.36 0 0 1 8.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.5c0-.55-.45-1-1-1z"/>
+                </svg>
               </button>
-              <!-- Love Burst Button -->
-              <button class="chat-header-btn burst" id="chatLoveBurstBtn" title="Send Love Burst">
-                <span class="header-btn-icon">💖</span>
+
+              <!-- Three Dots Menu Button (WhatsApp Style) -->
+              <button type="button" class="chat-header-action-btn" id="chatThreeDotsBtn" title="More options" aria-haspopup="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                </svg>
+              </button>
+
+              <!-- Compatibility hidden burst button -->
+              <button class="is-hidden" id="chatLoveBurstBtn" style="display:none;" aria-hidden="true"></button>
+            </div>
+
+            <!-- WhatsApp Three Dots Dropdown Menu -->
+            <div class="chat-menu-dropdown is-hidden" id="chatMenuDropdown">
+              <button type="button" class="chat-menu-item" id="chatMenuSearchBtn">
+                <span class="menu-item-icon">🔍</span>
+                <span class="menu-item-label">Search</span>
+              </button>
+              <button type="button" class="chat-menu-item" id="chatMenuMediaBtn">
+                <span class="menu-item-icon">📁</span>
+                <span class="menu-item-label">Media, links, and docs</span>
+              </button>
+              <button type="button" class="chat-menu-item" id="chatMenuMuteBtn">
+                <span class="menu-item-icon" id="chatMenuMuteIcon">🔕</span>
+                <span class="menu-item-label" id="chatMenuMuteLabel">Mute notifications</span>
+              </button>
+              <button type="button" class="chat-menu-item" id="chatMenuPinBtn">
+                <span class="menu-item-icon">📌</span>
+                <span class="menu-item-label">Pinned message</span>
+              </button>
+              <button type="button" class="chat-menu-item danger" id="chatMenuClearBtn">
+                <span class="menu-item-icon">🗑️</span>
+                <span class="menu-item-label">Clear chat</span>
               </button>
             </div>
           </div>
 
-          <!-- Quick Romantic Reaction Chips -->
+          <!-- In-Chat Search Bar (WhatsApp Search UI) -->
+          <div class="chat-search-bar is-hidden" id="chatSearchBar">
+            <button type="button" class="chat-search-back-btn" id="chatSearchCloseBtn" title="Close search">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+              </svg>
+            </button>
+            <div class="chat-search-input-wrap">
+              <input type="text" id="chatSearchInput" class="chat-search-input" placeholder="Search in chat..." autocomplete="off">
+              <button type="button" class="chat-search-clear-btn is-hidden" id="chatSearchClearBtn">✕</button>
+            </div>
+            <div class="chat-search-nav">
+              <span class="chat-search-counter" id="chatSearchCounter">0 of 0</span>
+              <button type="button" class="chat-search-arrow-btn" id="chatSearchPrevBtn" title="Previous match">▲</button>
+              <button type="button" class="chat-search-arrow-btn" id="chatSearchNextBtn" title="Next match">▼</button>
+            </div>
+          </div>
+
+          <!-- WhatsApp Pinned Message Banner -->
+          <div class="chat-pinned-banner is-hidden" id="chatPinnedBanner">
+            <span class="pinned-icon">📌</span>
+            <div class="pinned-body" id="chatPinnedBody">
+              <span class="pinned-text" id="chatPinnedText">Pinned message</span>
+            </div>
+            <button type="button" class="pinned-close-btn" id="chatPinnedCloseBtn" title="Unpin message">✕</button>
+          </div>
+
+          <!-- Quick Romantic Reaction Chips (Collapsible / Sleek) -->
           <div class="chat-quick-chips" id="chatQuickChips">
             <button class="quick-chip-btn" data-text="Miss you so much ❤️">Miss you ❤️</button>
             <button class="quick-chip-btn" data-text="I love you baby 💖">Love you 💖</button>
@@ -789,16 +863,16 @@
             <button class="quick-chip-btn" data-text="Gussa ho kya mere se? 🥺">Gussa ho? 🥺</button>
           </div>
 
-          <!-- Message History List (with WhatsApp / Telegram Style Wallpaper) -->
-          <div class="chat-messages-wrap" id="chatMessagesList">
+          <!-- Message History List (Authentic WhatsApp Dark Doodle Wallpaper) -->
+          <div class="chat-messages-wrap whatsapp-wallpaper" id="chatMessagesList">
             <div class="chat-date-divider" id="chatDateDivider">
               <span>TODAY</span>
             </div>
 
             <div class="chat-empty-state" id="chatEmptyState">
-              <span class="chat-empty-icon">💌</span>
-              <h4>Dil Ki Baatein Shuru Karein!</h4>
-              <p>Aapka aur partner ka 100% private couple chat space. Text, audio call, video call, photos aur voice notes sab realtime sync honge! ❤️</p>
+              <span class="chat-empty-icon">💬</span>
+              <h4>WhatsApp Couple Chat</h4>
+              <p>End-to-end encrypted private space. Messages, voice notes, photos & calls connect instantly! 🔒</p>
             </div>
 
             <!-- Typing indicator bubble (Dynamic) -->
@@ -813,7 +887,19 @@
             </div>
           </div>
 
-          <!-- Voice Recording Bar (Appears when recording audio note) -->
+          <!-- Swipe-To-Reply Preview Banner (WhatsApp Quoted Reply Preview) -->
+          <div class="chat-reply-preview-bar is-hidden" id="chatReplyPreviewBar">
+            <div class="reply-preview-border"></div>
+            <div class="reply-preview-content">
+              <div class="reply-preview-header">
+                <span class="reply-preview-author" id="replyPreviewAuthor">You</span>
+                <button type="button" class="reply-preview-close" id="chatReplyCloseBtn" aria-label="Cancel reply">✕</button>
+              </div>
+              <p class="reply-preview-text" id="replyPreviewText">Original message snippet...</p>
+            </div>
+          </div>
+
+          <!-- Voice Recording Bar (WhatsApp Voice Note Flow) -->
           <div class="chat-voice-record-bar is-hidden" id="chatVoiceRecordBar">
             <div class="recording-pulse-indicator">
               <span class="rec-red-dot"></span>
@@ -832,40 +918,62 @@
               <img id="chatPreviewImage" src="" alt="Selected Preview">
               <button class="preview-remove-btn" id="chatPreviewRemoveBtn">✕</button>
             </div>
-            <input type="text" class="preview-caption-input" id="chatImageCaption" placeholder="Add a romantic caption... ✍️">
+            <input type="text" class="preview-caption-input" id="chatImageCaption" placeholder="Add a caption... ✍️">
             <button class="preview-send-btn" id="chatImageSendBtn">Send Photo ➤</button>
           </div>
 
-          <!-- Messaging App Input Bar -->
-          <div class="chat-input-bar">
+          <!-- WhatsApp Input Bar -->
+          <div class="chat-input-bar whatsapp-input-bar">
             <!-- Hidden Image/Photo File Inputs for Camera vs Gallery -->
             <input type="file" id="chatImageInputCamera" accept="image/*" capture="environment" style="display: none;">
             <input type="file" id="chatImageInputGallery" accept="image/*" style="display: none;">
             <input type="file" id="chatImageInput" accept="image/*" class="is-hidden" style="display: none;">
             
-            <!-- Attachment Button (Photo share) -->
-            <button class="chat-bar-btn attach-btn" id="chatAttachBtn" title="Send Photo / Memory">
-              📷
-            </button>
+            <!-- Hidden compatibility quick heart button -->
+            <button class="is-hidden" id="chatQuickHeartBtn" style="display:none;" aria-hidden="true">❤️</button>
 
-            <!-- Quick Heart Button -->
-            <button class="chat-bar-btn heart-btn" id="chatQuickHeartBtn" title="Send Heart">
-              ❤️
-            </button>
+            <!-- WhatsApp Input Pill -->
+            <div class="whatsapp-input-pill">
+              <!-- Emoji Picker Toggle Button -->
+              <button type="button" class="whatsapp-icon-btn emoji-btn" id="chatEmojiToggleBtn" title="Emoji">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-3.5-9c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm7 0c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
+                </svg>
+              </button>
 
-            <!-- Auto-expanding Textarea Field -->
-            <div class="chat-input-field-wrap">
-              <textarea class="chat-input-field" id="chatTextInput" rows="1" placeholder="Message likhein... ✍️"></textarea>
+              <!-- Auto-expanding Textarea Field -->
+              <div class="chat-input-field-wrap">
+                <textarea class="chat-input-field" id="chatTextInput" rows="1" placeholder="Message" autocomplete="off"></textarea>
+              </div>
+
+              <!-- Attachment Paperclip Button -->
+              <button type="button" class="whatsapp-icon-btn attach-btn" id="chatAttachBtn" title="Attach Document / Photo">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                  <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5V6H9v9.5a3 3 0 0 0 6 0V5a4 4 0 0 0-8 0v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/>
+                </svg>
+              </button>
+
+              <!-- Direct Camera Button -->
+              <button type="button" class="whatsapp-icon-btn camera-btn" id="chatDirectCameraBtn" title="Camera">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                  <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/>
+                  <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                </svg>
+              </button>
             </div>
 
-            <!-- Voice Note Record Button -->
-            <button class="chat-bar-btn voice-btn" id="chatVoiceNoteBtn" title="Record Voice Note">
+            <!-- Voice Note Record Button (compatibility retained) -->
+            <button class="chat-bar-btn voice-btn is-hidden" id="chatVoiceNoteBtn" title="Record Voice Note" style="display:none;">
               🎙️
             </button>
 
-            <!-- Send Button -->
-            <button class="chat-send-btn" id="chatSendBtn" title="Send Message">
-              <span class="send-icon">➤</span>
+            <!-- WhatsApp Green Circular Action Button (Dynamic: Mic when empty, Send when typed) -->
+            <button class="whatsapp-send-circle-btn" id="chatSendBtn" title="Send message or hold for voice note">
+              <span class="send-action-icon mic-mode" id="chatActionIcon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                  <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+              </span>
             </button>
           </div>
 
@@ -1628,8 +1736,74 @@
     </div>
   </div>
 
-  <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW -->
+  <!-- ============================================================
+       WHATSAPP "MEDIA, LINKS, AND DOCS" MODAL
+       ============================================================ -->
+  <div class="modal-overlay is-hidden" id="chatMediaDocsModal" role="dialog" aria-modal="true" aria-label="Media, links, and docs">
+    <div class="chat-media-modal-card">
+      <div class="chat-media-modal-header">
+        <button type="button" class="chat-media-modal-back" id="chatMediaModalCloseBtn" title="Back">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+        </button>
+        <div class="chat-media-modal-title-col">
+          <h3 class="chat-media-modal-title" id="chatMediaModalTitle">Himanshu &amp; Gullu</h3>
+          <span class="chat-media-modal-sub">Media, links, and docs</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="chat-media-tabs" role="tablist">
+        <button type="button" class="chat-media-tab-btn active" data-tab="media" role="tab" id="tabBtnMedia">
+          <span>MEDIA</span>
+          <span class="chat-media-badge" id="mediaCount">0</span>
+        </button>
+        <button type="button" class="chat-media-tab-btn" data-tab="links" role="tab" id="tabBtnLinks">
+          <span>LINKS</span>
+          <span class="chat-media-badge" id="linksCount">0</span>
+        </button>
+        <button type="button" class="chat-media-tab-btn" data-tab="docs" role="tab" id="tabBtnDocs">
+          <span>DOCS &amp; AUDIO</span>
+          <span class="chat-media-badge" id="docsCount">0</span>
+        </button>
+      </div>
+
+      <!-- Tab Content Area -->
+      <div class="chat-media-modal-body">
+        <!-- Media (Photos Grid) -->
+        <div class="chat-media-pane active" id="chatMediaPanePhotos">
+          <div class="chat-media-grid" id="chatMediaGrid"></div>
+          <div class="chat-media-empty is-hidden" id="chatMediaEmpty">
+            <span class="media-empty-icon">🖼️</span>
+            <p>Koi photos share nahi hui hain abhi</p>
+          </div>
+        </div>
+
+        <!-- Links (URL List) -->
+        <div class="chat-media-pane is-hidden" id="chatMediaPaneLinks">
+          <div class="chat-links-list" id="chatLinksList"></div>
+          <div class="chat-media-empty is-hidden" id="chatLinksEmpty">
+            <span class="media-empty-icon">🔗</span>
+            <p>Chat me koi links share nahi hue hain</p>
+          </div>
+        </div>
+
+        <!-- Docs (Voice Notes & Files) -->
+        <div class="chat-media-pane is-hidden" id="chatMediaPaneDocs">
+          <div class="chat-docs-list" id="chatDocsList"></div>
+          <div class="chat-media-empty is-hidden" id="chatDocsEmpty">
+            <span class="media-empty-icon">🎙️</span>
+            <p>Koi voice notes ya docs nahi hain</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HIDDEN AUDIO ELEMENTS FOR SMART MUSIC PREVIEW & WEBRTC CALLS -->
   <audio id="globalAudioPlayer" preload="auto" playsinline></audio>
+  <audio id="remoteAudioStream" autoplay playsinline></audio>
 
   <!-- LEAFLET MAP & CLOUD DATABASE SDKS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1637,6 +1811,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=42"></script>
+  <script src="script.js?v=43"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 {
-  "version": "2.4.1",
-  "buildTime": 1791240600000,
-  "notes": "Stealth Error 104 browser network error overlay (zero custom messages/hints) with dynamic document.title stealth masking and persistent Himanshu reactivation control."
+  "version": "2.5.0",
+  "buildTime": 1792680000000,
+  "notes": "Full authentic WhatsApp chatbox overhaul: auto-scroll directly to last message, viewport screen fit, swipe-to-reply gesture with quoted message previews and jump-to-quote, 3-dots menu with search chat and Media/Links/Docs modal, chat mute toggle with push suppression, and WebRTC calling fix with OpenRelay TURN servers, dedicated audio stream, and candidate queueing."
 }
