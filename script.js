@@ -366,12 +366,53 @@ function normalizeArray(val) {
   return [];
 }
 
+function getMessageTimestamp(m) {
+  if (!m) return 0;
+  if (typeof m.timestamp === 'number' && !isNaN(m.timestamp)) return m.timestamp;
+  if (typeof m.timestamp === 'string') {
+    const num = Number(m.timestamp);
+    if (!isNaN(num) && num > 0) return num;
+    const parsed = Date.parse(m.timestamp);
+    if (!isNaN(parsed)) return parsed;
+  }
+  if (m.id && typeof m.id === 'string') {
+    const match = m.id.match(/^msg_(\d+)/);
+    if (match && match[1]) {
+      const idTime = Number(match[1]);
+      if (!isNaN(idTime)) return idTime;
+    }
+  }
+  return 0;
+}
+
+function sortChatMessagesAscending(messages) {
+  if (!Array.isArray(messages)) return [];
+  const seenIds = new Set();
+  const deduped = [];
+  messages.forEach(m => {
+    if (!m) return;
+    const id = m.id || ('msg_' + getMessageTimestamp(m) + '_' + Math.random().toString(36).substr(2, 4));
+    m.id = id;
+    if (!seenIds.has(id)) {
+      seenIds.add(id);
+      deduped.push(m);
+    }
+  });
+
+  return deduped.sort((a, b) => {
+    const tA = getMessageTimestamp(a);
+    const tB = getMessageTimestamp(b);
+    if (tA !== tB) return tA - tB;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
+}
+
 function sanitizeAppStateArrays(state) {
   if (!state || typeof state !== 'object') return state;
   state.memories = normalizeArray(state.memories);
   state.coupons = normalizeArray(state.coupons);
   state.pulses = normalizeArray(state.pulses);
-  state.chatMessages = normalizeArray(state.chatMessages || state.chat_messages);
+  state.chatMessages = sortChatMessagesAscending(normalizeArray(state.chatMessages || state.chat_messages));
   state.pastQAs = normalizeArray(state.pastQAs);
 
   return state;
@@ -504,13 +545,13 @@ function mergePreservingUserData(local, incoming) {
   localPulses.forEach(p => { if (p) pulseMap.set(p.id || (p.timestamp + '_' + p.from), p); });
   merged.pulses = Array.from(pulseMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 50);
 
-  // 7. Preserve Chat Messages (Union by id, sorted by timestamp)
+  // 7. Preserve Chat Messages (Union by id, sorted strictly ascending by timestamp)
   const localMsgs = normalizeArray(local.chatMessages || local.chat_messages);
   const incMsgs = normalizeArray(incoming.chatMessages || incoming.chat_messages);
   const msgMap = new Map();
   incMsgs.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
   localMsgs.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
-  merged.chatMessages = Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).slice(-200);
+  merged.chatMessages = sortChatMessagesAscending(Array.from(msgMap.values())).slice(-250);
 
 
 
@@ -895,8 +936,7 @@ function fetchLatestCloudSync() {
     .then(r => r.ok ? r.json() : null)
     .then(msgs => {
       if (!msgs) return;
-      const msgList = Object.values(msgs);
-      msgList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      const msgList = sortChatMessagesAscending(Object.values(msgs));
       msgList.forEach(m => handleIncomingChatMessage(m, false));
     })
     .catch(() => {});
@@ -964,8 +1004,7 @@ function initFirebaseRestSync(dbUrl) {
       .then(r => r.ok ? r.json() : null)
       .then(msgs => {
         if (!msgs) return;
-        const msgList = Object.values(msgs);
-        msgList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        const msgList = sortChatMessagesAscending(Object.values(msgs));
         msgList.forEach(m => handleIncomingChatMessage(m, false));
       })
       .catch(() => {});
@@ -6392,9 +6431,15 @@ function setReplyTarget(msg) {
   const inputEl = document.getElementById('chatTextInput');
 
   if (replyBar && authorEl && textEl) {
-    authorEl.textContent = msg.sender === currentUser ? 'You' : (msg.senderName || 'Partner');
+    const isMe = msg.sender === currentUser;
+    authorEl.textContent = isMe ? 'You' : (msg.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'));
+    authorEl.style.color = isMe ? '#25d366' : '#53bdeb';
+    const borderEl = replyBar.querySelector('.reply-preview-border');
+    if (borderEl) {
+      borderEl.style.background = isMe ? '#25d366' : '#53bdeb';
+    }
     let preview = msg.text || '';
-    if (msg.type === 'image') preview = '📷 Photo';
+    if (msg.type === 'image') preview = msg.caption ? ('📷 ' + msg.caption) : '📷 Photo';
     else if (msg.type === 'audio') preview = '🎙️ Voice note';
     else if (msg.type === 'call') preview = '📞 Call log';
     textEl.textContent = preview;
@@ -6446,7 +6491,10 @@ function renderChatUI() {
   const listEl = document.getElementById('chatMessagesList');
   if (!listEl) return;
 
-  const msgs = normalizeArray(appState?.chatMessages || appState?.chat_messages);
+  const rawMsgs = normalizeArray(appState?.chatMessages || appState?.chat_messages);
+  // Ensure strict chronological sequence (oldest first at top, newest last at bottom)
+  const msgs = sortChatMessagesAscending(rawMsgs);
+  if (appState) appState.chatMessages = msgs;
 
   // Seed processedBurstMsgIds
   msgs.forEach(m => {
@@ -6471,7 +6519,7 @@ function renderChatUI() {
     appendChatMessageDOM(msg, false);
   });
 
-  // Immediate jump to last message
+  // Immediate jump to newest message at bottom
   listEl.scrollTop = listEl.scrollHeight;
 }
 
@@ -6580,17 +6628,19 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
   const partnerAvatar = currentUser === 'himanshu' ? '🌸' : '☕';
 
   const row = document.createElement('div');
+  const msgTime = getMessageTimestamp(msg);
   row.setAttribute('data-msg-id', msg.id || ('msg_' + Date.now()));
+  row.setAttribute('data-timestamp', String(msgTime));
 
   const timeStr = msg.timestamp ? formatChatTime(msg.timestamp) : 'Just now';
 
   // Quoted reply markup (if message is a reply to another message)
   let quoteHtml = '';
   if (msg.replyTo && (msg.replyTo.text || msg.replyTo.id)) {
-    const isReplyMe = msg.replyTo.sender === currentUser;
-    const authorName = isReplyMe ? 'You' : (msg.replyTo.senderName || 'Partner');
+    const isReplyMe = msg.replyTo.sender === currentUser || msg.replyTo.senderName === 'You';
+    const authorName = isReplyMe ? 'You' : (msg.replyTo.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'));
     quoteHtml = `
-      <div class="chat-reply-quote" data-reply-target="${msg.replyTo.id || ''}">
+      <div class="chat-reply-quote ${isReplyMe ? 'quote-self' : 'quote-partner'}" data-reply-target="${msg.replyTo.id || ''}">
         <div class="reply-quote-content">
           <span class="reply-quote-author">${escapeChatHtml(authorName)}</span>
           <p class="reply-quote-text">${escapeChatHtml(msg.replyTo.text || 'Media')}</p>
@@ -6615,6 +6665,7 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
     row.innerHTML = `
       ${!isMe ? `<div class="chat-msg-avatar" title="${escapeChatHtml(msg.senderName || 'Partner')}">${partnerAvatar}</div>` : ''}
       <div class="chat-msg-bubble chat-call-bubble">
+        <button type="button" class="bubble-reply-action-btn" title="Reply ↩">↩</button>
         ${quoteHtml}
         <div class="chat-call-card ${isAudio ? 'audio' : 'video'}">
           <div class="chat-call-icon">${isAudio ? '📞' : '📹'}</div>
@@ -6646,6 +6697,7 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
     row.innerHTML = `
       ${!isMe ? `<div class="chat-msg-avatar" title="${escapeChatHtml(msg.senderName || 'Partner')}">${partnerAvatar}</div>` : ''}
       <div class="chat-msg-bubble">
+        <button type="button" class="bubble-reply-action-btn" title="Reply ↩">↩</button>
         ${quoteHtml}
         ${!isMe ? `<span class="chat-msg-sender-name">${escapeChatHtml(msg.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'))}</span>` : ''}
         <div class="chat-image-msg-bubble">
@@ -6679,6 +6731,7 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
     row.innerHTML = `
       ${!isMe ? `<div class="chat-msg-avatar" title="${escapeChatHtml(msg.senderName || 'Partner')}">${partnerAvatar}</div>` : ''}
       <div class="chat-msg-bubble">
+        <button type="button" class="bubble-reply-action-btn" title="Reply ↩">↩</button>
         ${quoteHtml}
         ${!isMe ? `<span class="chat-msg-sender-name">${escapeChatHtml(msg.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'))}</span>` : ''}
         <div class="chat-voice-bubble">
@@ -6707,6 +6760,7 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
     row.innerHTML = `
       ${!isMe ? `<div class="chat-msg-avatar" title="${escapeChatHtml(msg.senderName || 'Partner')}">${partnerAvatar}</div>` : ''}
       <div class="chat-msg-bubble">
+        <button type="button" class="bubble-reply-action-btn" title="Reply ↩">↩</button>
         ${quoteHtml}
         ${!isMe ? `<span class="chat-msg-sender-name">${escapeChatHtml(msg.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu'))}</span>` : ''}
         <p class="chat-msg-text">${escapeChatHtml(msg.text)}</p>
@@ -6728,6 +6782,19 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
     });
   }
 
+  // Reply Button on Bubble (Desktop & Mobile)
+  const replyActionBtn = row.querySelector('.bubble-reply-action-btn');
+  if (replyActionBtn) {
+    replyActionBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setReplyTarget(msg);
+      if (navigator.vibrate) {
+        try { navigator.vibrate(20); } catch (err) {}
+      }
+      playTone(800, 0.05);
+    });
+  }
+
   // Reaction Badge on Bubble
   if (msg.reaction) {
     const reactionBadge = document.createElement('span');
@@ -6745,16 +6812,53 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
     });
   }
 
-  // Swipe-To-Reply Gesture Support (Touch & Mouse Drag)
+  // Swipe Reply Icon Indicator
+  const replyIcon = document.createElement('div');
+  replyIcon.className = 'swipe-reply-icon';
+  replyIcon.innerHTML = '↩';
+  if (isMe) {
+    replyIcon.style.left = 'auto';
+    replyIcon.style.right = '-38px';
+  } else {
+    replyIcon.style.left = '-38px';
+    replyIcon.style.right = 'auto';
+  }
+  row.appendChild(replyIcon);
+
+  // Long-press and Bi-directional Swipe Support
   let touchStartX = 0;
   let touchStartY = 0;
   let isSwiping = false;
+  let longPressTimer = null;
+  let didLongPress = false;
+
+  const startLongPress = () => {
+    didLongPress = false;
+    longPressTimer = setTimeout(() => {
+      didLongPress = true;
+      setReplyTarget(msg);
+      row.classList.add('show-reply-btn');
+      setTimeout(() => row.classList.remove('show-reply-btn'), 2500);
+      if (navigator.vibrate) {
+        try { navigator.vibrate(25); } catch (err) {}
+      }
+      playTone(750, 0.06);
+    }, 450);
+  };
+
+  const cancelLongPress = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  };
 
   row.addEventListener('touchstart', (e) => {
     if (e.touches && e.touches[0]) {
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
       isSwiping = false;
+      startLongPress();
     }
   }, { passive: true });
 
@@ -6765,24 +6869,36 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
     const dx = currentX - touchStartX;
     const dy = currentY - touchStartY;
 
-    if (dx > 10 && Math.abs(dx) > Math.abs(dy)) {
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      cancelLongPress();
+    }
+
+    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
       isSwiping = true;
-      const moveX = Math.min(dx * 0.65, 70);
+      if (dx > 0) {
+        replyIcon.style.left = '-38px';
+        replyIcon.style.right = 'auto';
+      } else {
+        replyIcon.style.left = 'auto';
+        replyIcon.style.right = '-38px';
+      }
+      const moveX = dx > 0 ? Math.min(dx * 0.65, 65) : Math.max(dx * 0.65, -65);
       row.style.transform = `translateX(${moveX}px)`;
       row.classList.add('swiping');
     }
   }, { passive: true });
 
   row.addEventListener('touchend', (e) => {
+    cancelLongPress();
     if (isSwiping) {
       const endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : touchStartX;
       const dx = endX - touchStartX;
       row.style.transform = 'translateX(0px)';
       row.classList.remove('swiping');
-      if (dx > 45) {
+      if (Math.abs(dx) > 35 && !didLongPress) {
         setReplyTarget(msg);
         if (navigator.vibrate) {
-          try { navigator.vibrate(15); } catch (err) {}
+          try { navigator.vibrate(20); } catch (err) {}
         }
         playTone(800, 0.05);
       }
@@ -6790,18 +6906,32 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
     }
   });
 
-  // Swipe reply icon indicator
-  const replyIcon = document.createElement('div');
-  replyIcon.className = 'swipe-reply-icon';
-  replyIcon.innerHTML = '↩';
-  row.appendChild(replyIcon);
+  row.addEventListener('touchcancel', () => {
+    cancelLongPress();
+    row.style.transform = 'translateX(0px)';
+    row.classList.remove('swiping');
+    isSwiping = false;
+  });
 
-  // Insert before typing bubble if typing bubble is in the DOM
-  const typingBubble = document.getElementById('chatTypingBubble');
-  if (typingBubble && typingBubble.parentNode === listEl) {
-    listEl.insertBefore(row, typingBubble);
-  } else {
-    listEl.appendChild(row);
+  // Strict chronological insertion in DOM (oldest near top, newest near bottom)
+  const existingRows = Array.from(listEl.querySelectorAll('.chat-msg-row'));
+  let inserted = false;
+  for (let i = 0; i < existingRows.length; i++) {
+    const rTime = Number(existingRows[i].getAttribute('data-timestamp')) || 0;
+    if (rTime > msgTime) {
+      listEl.insertBefore(row, existingRows[i]);
+      inserted = true;
+      break;
+    }
+  }
+
+  if (!inserted) {
+    const typingBubble = document.getElementById('chatTypingBubble');
+    if (typingBubble && typingBubble.parentNode === listEl) {
+      listEl.insertBefore(row, typingBubble);
+    } else {
+      listEl.appendChild(row);
+    }
   }
 
   if (shouldScroll) {
@@ -6819,11 +6949,17 @@ function sendChatMessage(text, type = 'text', extraData = {}) {
 
   let replyData = null;
   if (activeReplyTarget) {
+    const isTargetMe = activeReplyTarget.sender === currentUser;
+    let snippet = activeReplyTarget.text || '';
+    if (activeReplyTarget.type === 'image') snippet = activeReplyTarget.caption ? ('📷 ' + activeReplyTarget.caption) : '📷 Photo';
+    else if (activeReplyTarget.type === 'audio') snippet = '🎙️ Voice note';
+    else if (activeReplyTarget.type === 'call') snippet = '📞 Call log';
+
     replyData = {
       id: activeReplyTarget.id,
       sender: activeReplyTarget.sender,
-      senderName: activeReplyTarget.senderName || (activeReplyTarget.sender === currentUser ? 'You' : 'Partner'),
-      text: activeReplyTarget.text || (activeReplyTarget.type === 'image' ? '📷 Photo' : 'Voice note')
+      senderName: isTargetMe ? 'You' : (activeReplyTarget.senderName || (currentUser === 'himanshu' ? 'Gullu' : 'Himanshu')),
+      text: snippet
     };
     clearReplyTarget();
   }
@@ -6841,6 +6977,7 @@ function sendChatMessage(text, type = 'text', extraData = {}) {
   };
 
   appState.chatMessages.push(msg);
+  appState.chatMessages = sortChatMessagesAscending(appState.chatMessages);
   if (appState.chatMessages.length > 250) {
     appState.chatMessages = appState.chatMessages.slice(-250);
   }
@@ -6884,7 +7021,7 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
     if (tickChanged) saveAppState(appState);
   } else {
     appState.chatMessages.push(msg);
-    appState.chatMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    appState.chatMessages = sortChatMessagesAscending(appState.chatMessages);
     if (appState.chatMessages.length > 250) {
       appState.chatMessages = appState.chatMessages.slice(-250);
     }

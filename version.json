@@ -1,5 +1,5 @@
 {
-  "version": "2.5.2",
-  "buildTime": 1792682000000,
-  "notes": "Added automatic forced cache invalidator, auto-reload on Service Worker update, and 1-tap 'Reload & Update App' in WhatsApp three-dots menu."
+  "version": "2.5.3",
+  "buildTime": 1792683000000,
+  "notes": "Added self-reply support for outgoing messages ('You' green style, reply buttons on all bubbles, bi-directional swipe, long-press) and strict chronological message sequence sorting."
 }
