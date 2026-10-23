@@ -6446,49 +6446,48 @@ function sendSelectedChatImage() {
 let currentActiveVoicePlayer = null;
 let currentActiveVoiceBtn = null;
 
-function setupVoicePlayListener(btn) {
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const rawAudioSrc = btn.getAttribute('data-audio-src');
-    if (!rawAudioSrc) return;
+function handleVoicePlayClick(btn) {
+  if (!btn) return;
+  const rawAudioSrc = btn.getAttribute('data-audio-src');
+  if (!rawAudioSrc) return;
 
-    resolveMediaUrl(rawAudioSrc).then(audioSrc => {
-      if (!audioSrc) return;
+  resolveMediaUrl(rawAudioSrc).then(audioSrc => {
+    if (!audioSrc) return;
 
-      const bubble = btn.closest('.chat-voice-bubble');
-      const speedPill = bubble ? bubble.querySelector('.voice-speed-pill') : null;
-      const speedRate = speedPill ? (parseFloat(speedPill.getAttribute('data-speed')) || 1.0) : 1.0;
+    const bubble = btn.closest('.chat-voice-bubble');
+    const speedPill = bubble ? bubble.querySelector('.voice-speed-pill') : null;
+    const speedRate = speedPill ? (parseFloat(speedPill.getAttribute('data-speed')) || 1.0) : 1.0;
 
-      btn.classList.add('listened');
+    btn.classList.add('listened');
 
-      if (currentActiveVoiceBtn === btn && currentActiveVoicePlayer) {
-        if (currentActiveVoicePlayer.paused) {
-          currentActiveVoicePlayer.playbackRate = speedRate;
-          currentActiveVoicePlayer.play().then(() => {
-            btn.textContent = '⏸';
-            if (bubble) bubble.classList.add('playing');
-          }).catch(() => {});
-        } else {
-          currentActiveVoicePlayer.pause();
-          btn.textContent = '▶';
-          if (bubble) bubble.classList.remove('playing');
-        }
-        return;
-      }
-
-      if (currentActiveVoicePlayer) {
+    if (currentActiveVoiceBtn === btn && currentActiveVoicePlayer) {
+      if (currentActiveVoicePlayer.paused) {
+        currentActiveVoicePlayer.playbackRate = speedRate;
+        currentActiveVoicePlayer.play().then(() => {
+          btn.textContent = '⏸';
+          if (bubble) bubble.classList.add('playing');
+        }).catch(() => {});
+      } else {
         currentActiveVoicePlayer.pause();
-        if (currentActiveVoiceBtn) {
-          currentActiveVoiceBtn.textContent = '▶';
-          const prevBubble = currentActiveVoiceBtn.closest('.chat-voice-bubble');
-          if (prevBubble) prevBubble.classList.remove('playing');
-        }
+        btn.textContent = '▶';
+        if (bubble) bubble.classList.remove('playing');
       }
+      return;
+    }
 
-      const player = new Audio(audioSrc);
-      player.playbackRate = speedRate;
-      currentActiveVoicePlayer = player;
-      currentActiveVoiceBtn = btn;
+    if (currentActiveVoicePlayer) {
+      currentActiveVoicePlayer.pause();
+      if (currentActiveVoiceBtn) {
+        currentActiveVoiceBtn.textContent = '▶';
+        const prevBubble = currentActiveVoiceBtn.closest('.chat-voice-bubble');
+        if (prevBubble) prevBubble.classList.remove('playing');
+      }
+    }
+
+    const player = new Audio(audioSrc);
+    player.playbackRate = speedRate;
+    currentActiveVoicePlayer = player;
+    currentActiveVoiceBtn = btn;
 
     btn.textContent = '⏸';
     if (bubble) bubble.classList.add('playing');
@@ -6512,8 +6511,365 @@ function setupVoicePlayListener(btn) {
       btn.textContent = '▶';
       if (bubble) bubble.classList.remove('playing');
     });
-    });
   });
+}
+
+function handleVoiceSpeedPillClick(speedPill) {
+  if (!speedPill) return;
+  const currentRate = parseFloat(speedPill.getAttribute('data-speed')) || 1.0;
+  let nextRate = 1.5;
+  if (currentRate === 1.5) nextRate = 2.0;
+  else if (currentRate === 2.0) nextRate = 1.0;
+  speedPill.setAttribute('data-speed', String(nextRate));
+  speedPill.textContent = `${nextRate}x`;
+  speedPill.classList.toggle('active', nextRate > 1.0);
+  const bubble = speedPill.closest('.chat-voice-bubble');
+  const playBtn = bubble ? bubble.querySelector('.voice-play-btn') : null;
+  if (currentActiveVoicePlayer && currentActiveVoiceBtn === playBtn) {
+    currentActiveVoicePlayer.playbackRate = nextRate;
+  }
+}
+
+function setupVoicePlayListener(btn) {
+  if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handleVoicePlayClick(btn);
+  });
+}
+
+// ==========================================================================
+// DELEGATED CHAT CONTAINER STATE & GESTURES (CONTAINER-LEVEL, ZERO PER-ROW CLOSURES)
+// ==========================================================================
+let chatTouchActiveRow = null;
+let chatTouchActiveMsg = null;
+let chatTouchReplyIcon = null;
+let chatTouchStartX = 0;
+let chatTouchStartY = 0;
+let chatIsSwiping = false;
+let chatDidLongPress = false;
+let chatLongPressTimer = null;
+let chatLastTapTime = 0;
+let chatLastTapRow = null;
+
+function handleChatBubbleDoubleTap(row) {
+  if (!row) return;
+  const isMe = row.classList.contains('me');
+  const msgId = row.getAttribute('data-msg-id');
+  if (!msgId) return;
+  const reactionEmoji = isMe ? '❤️' : '😂';
+  toggleMessageReaction(msgId, reactionEmoji);
+  if (navigator.vibrate) {
+    try { navigator.vibrate(30); } catch (e) {}
+  }
+}
+
+function handleChatTouchStart(e) {
+  if (!e.touches || !e.touches[0]) return;
+  const target = e.target;
+
+  // Ignore interactive controls to let direct clicks execute
+  if (target.closest('button, a, input, .voice-speed-pill, .voice-play-btn, .chat-reaction-chip')) {
+    return;
+  }
+
+  const row = target.closest('.chat-msg-row');
+  if (!row) return;
+
+  const msgId = row.getAttribute('data-msg-id');
+  const msg = appState?.chatMessages?.find(m => m && m.id === msgId);
+  if (!msg) return;
+
+  // Quick consecutive double-tap reaction detection
+  const now = Date.now();
+  if (now - chatLastTapTime < 320 && chatLastTapRow === row) {
+    if (chatLongPressTimer) {
+      clearTimeout(chatLongPressTimer);
+      chatLongPressTimer = null;
+    }
+    handleChatBubbleDoubleTap(row);
+    chatLastTapTime = 0;
+    chatLastTapRow = null;
+    return;
+  }
+  chatLastTapTime = now;
+  chatLastTapRow = row;
+
+  chatTouchActiveRow = row;
+  chatTouchActiveMsg = msg;
+  chatTouchReplyIcon = row.querySelector('.swipe-reply-icon');
+  chatTouchStartX = e.touches[0].clientX;
+  chatTouchStartY = e.touches[0].clientY;
+  chatIsSwiping = false;
+  chatDidLongPress = false;
+
+  if (chatLongPressTimer) {
+    clearTimeout(chatLongPressTimer);
+    chatLongPressTimer = null;
+  }
+
+  chatLongPressTimer = setTimeout(() => {
+    chatDidLongPress = true;
+    if (navigator.vibrate) {
+      try { navigator.vibrate(35); } catch (err) {}
+    }
+    playTone(750, 0.06);
+    openChatContextMenu(chatTouchActiveMsg, chatTouchActiveRow);
+  }, 350);
+}
+
+function handleChatTouchMove(e) {
+  if (!chatTouchActiveRow || !e.touches || !e.touches[0]) return;
+  const currentX = e.touches[0].clientX;
+  const currentY = e.touches[0].clientY;
+  const dx = currentX - chatTouchStartX;
+  const dy = currentY - chatTouchStartY;
+
+  // Vertical scroll detection: immediately allow native list scroll without locking
+  if (Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx)) {
+    if (chatLongPressTimer) {
+      clearTimeout(chatLongPressTimer);
+      chatLongPressTimer = null;
+    }
+    if (chatIsSwiping) {
+      chatTouchActiveRow.style.transform = 'translateX(0px)';
+      chatTouchActiveRow.classList.remove('swiping');
+      if (chatTouchReplyIcon) {
+        chatTouchReplyIcon.style.opacity = '';
+        chatTouchReplyIcon.style.transform = '';
+      }
+      chatIsSwiping = false;
+    }
+    return;
+  }
+
+  // Cancel long-press on genuine movement
+  if (Math.abs(dx) > 18 || Math.abs(dy) > 14) {
+    if (chatLongPressTimer) {
+      clearTimeout(chatLongPressTimer);
+      chatLongPressTimer = null;
+    }
+  }
+
+  // Horizontal slide-to-reply: swipe right on message bubble
+  if (dx > 16 && dx > Math.abs(dy) * 1.15 && !chatDidLongPress) {
+    chatIsSwiping = true;
+    const moveX = Math.min(dx * 0.7, 72);
+    chatTouchActiveRow.style.transform = `translateX(${moveX}px)`;
+    chatTouchActiveRow.classList.add('swiping');
+    if (chatTouchReplyIcon) {
+      const progress = Math.min(dx / 50, 1);
+      chatTouchReplyIcon.style.opacity = String(progress);
+      chatTouchReplyIcon.style.transform = `translateY(-50%) scale(${0.6 + 0.4 * progress})`;
+    }
+  }
+}
+
+function handleChatTouchEnd(e) {
+  if (chatLongPressTimer) {
+    clearTimeout(chatLongPressTimer);
+    chatLongPressTimer = null;
+  }
+
+  if (!chatTouchActiveRow) return;
+
+  if (chatTouchReplyIcon) {
+    chatTouchReplyIcon.style.opacity = '';
+    chatTouchReplyIcon.style.transform = '';
+  }
+
+  if (chatDidLongPress) {
+    chatTouchActiveRow.style.transform = 'translateX(0px)';
+    chatTouchActiveRow.classList.remove('swiping');
+    chatIsSwiping = false;
+    chatTouchActiveRow = null;
+    chatTouchActiveMsg = null;
+    chatTouchReplyIcon = null;
+    return;
+  }
+
+  if (chatIsSwiping) {
+    const endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : chatTouchStartX;
+    const finalDx = endX - chatTouchStartX;
+    chatTouchActiveRow.style.transform = 'translateX(0px)';
+    chatTouchActiveRow.classList.remove('swiping');
+    if (finalDx > 35 && chatTouchActiveMsg) {
+      setReplyTarget(chatTouchActiveMsg);
+      if (navigator.vibrate) {
+        try { navigator.vibrate(25); } catch (err) {}
+      }
+      playTone(850, 0.05);
+    }
+    chatIsSwiping = false;
+  }
+
+  chatTouchActiveRow = null;
+  chatTouchActiveMsg = null;
+  chatTouchReplyIcon = null;
+}
+
+function handleChatTouchCancel() {
+  if (chatLongPressTimer) {
+    clearTimeout(chatLongPressTimer);
+    chatLongPressTimer = null;
+  }
+  if (chatTouchReplyIcon) {
+    chatTouchReplyIcon.style.opacity = '';
+    chatTouchReplyIcon.style.transform = '';
+  }
+  if (chatTouchActiveRow) {
+    chatTouchActiveRow.style.transform = 'translateX(0px)';
+    chatTouchActiveRow.classList.remove('swiping');
+  }
+  chatIsSwiping = false;
+  chatDidLongPress = false;
+  chatTouchActiveRow = null;
+  chatTouchActiveMsg = null;
+  chatTouchReplyIcon = null;
+}
+
+function handleChatListClick(e) {
+  const target = e.target;
+
+  // 1. Reaction chip click
+  const reactionChip = target.closest('.chat-reaction-chip');
+  if (reactionChip) {
+    e.stopPropagation();
+    const msgId = reactionChip.getAttribute('data-msg-id');
+    const emoji = reactionChip.textContent.trim();
+    if (msgId) toggleMessageReaction(msgId, emoji);
+    return;
+  }
+
+  // 2. Quoted reply click-to-scroll
+  const quoteEl = target.closest('.chat-reply-quote');
+  if (quoteEl) {
+    e.stopPropagation();
+    const targetId = quoteEl.getAttribute('data-reply-target');
+    if (targetId) scrollToChatMessage(targetId);
+    return;
+  }
+
+  // 3. Quick bubble reply button
+  const replyActionBtn = target.closest('.bubble-reply-action-btn');
+  if (replyActionBtn) {
+    e.stopPropagation();
+    const row = replyActionBtn.closest('.chat-msg-row');
+    const msgId = row?.getAttribute('data-msg-id');
+    const msg = appState?.chatMessages?.find(m => m.id === msgId);
+    if (msg) {
+      setReplyTarget(msg);
+      if (navigator.vibrate) {
+        try { navigator.vibrate(20); } catch (err) {}
+      }
+      playTone(800, 0.05);
+    }
+    return;
+  }
+
+  // 4. Quick bubble edit button
+  const editActionBtn = target.closest('.bubble-edit-action-btn');
+  if (editActionBtn) {
+    e.stopPropagation();
+    const row = editActionBtn.closest('.chat-msg-row');
+    const msgId = row?.getAttribute('data-msg-id');
+    const msg = appState?.chatMessages?.find(m => m.id === msgId);
+    if (msg) {
+      openEditMessageModal(msg);
+      if (navigator.vibrate) {
+        try { navigator.vibrate(20); } catch (err) {}
+      }
+      playTone(800, 0.05);
+    }
+    return;
+  }
+
+  // 5. Voice play button
+  const voicePlayBtn = target.closest('.voice-play-btn');
+  if (voicePlayBtn) {
+    e.stopPropagation();
+    handleVoicePlayClick(voicePlayBtn);
+    return;
+  }
+
+  // 6. Voice speed pill
+  const voiceSpeedPill = target.closest('.voice-speed-pill');
+  if (voiceSpeedPill) {
+    e.stopPropagation();
+    handleVoiceSpeedPillClick(voiceSpeedPill);
+    return;
+  }
+
+  // 7. Image download button
+  const dlBtn = target.closest('.chat-image-download-btn');
+  if (dlBtn) {
+    const row = dlBtn.closest('.chat-msg-row');
+    const thumb = row?.querySelector('.chat-msg-image-thumb');
+    if (thumb && thumb.src && dlBtn.tagName === 'BUTTON') {
+      e.stopPropagation();
+      const msgId = row.getAttribute('data-msg-id');
+      const msg = appState?.chatMessages?.find(m => m.id === msgId);
+      const cap = (msg && msg.caption) || ((msg && msg.text !== 'Shared a photo 📷') ? msg.text : '');
+      downloadPhotoFile(thumb.src, `OurStory_Chat_${Date.now()}.jpg`, cap);
+      return;
+    }
+    return;
+  }
+
+  // 8. Image thumbnail lightbox click
+  const thumb = target.closest('.chat-msg-image-thumb');
+  if (thumb) {
+    e.stopPropagation();
+    const row = thumb.closest('.chat-msg-row');
+    const msgId = row?.getAttribute('data-msg-id');
+    const msg = appState?.chatMessages?.find(m => m.id === msgId);
+    const cap = (msg && msg.caption) || ((msg && msg.text !== 'Shared a photo 📷') ? msg.text : '');
+    openChatImageLightbox(thumb.src, cap);
+    return;
+  }
+
+  // 9. Call back button
+  const callBackBtn = target.closest('.chat-call-back-btn');
+  if (callBackBtn) {
+    e.stopPropagation();
+    const ct = callBackBtn.getAttribute('data-call-type');
+    if (ct === 'video') startVideoCall('video');
+    else startAudioCall();
+    return;
+  }
+
+  // 10. Links inside messages (<a href="...">)
+  if (target.closest('a')) {
+    return;
+  }
+
+  // 11. Tap on row reveals quick action buttons (Reply & Edit)
+  const row = target.closest('.chat-msg-row');
+  if (row) {
+    row.classList.add('show-reply-btn');
+    setTimeout(() => {
+      row.classList.remove('show-reply-btn');
+    }, 3500);
+  }
+}
+
+function handleChatListDblClick(e) {
+  const bubble = e.target.closest('.chat-msg-bubble');
+  if (!bubble) return;
+  const row = bubble.closest('.chat-msg-row');
+  if (!row) return;
+
+  handleChatBubbleDoubleTap(row);
+}
+
+function handleChatListContextMenu(e) {
+  const row = e.target.closest('.chat-msg-row');
+  if (!row) return;
+
+  e.preventDefault();
+  const msgId = row.getAttribute('data-msg-id');
+  const msg = appState?.chatMessages?.find(m => m.id === msgId);
+  if (msg) openChatContextMenu(msg, row);
 }
 
 // --- Photo Lightbox Modal ---
@@ -6884,6 +7240,18 @@ function setupChatUI() {
       updateScrollBottomButtonVisibility();
       handleChatPaginationScroll();
     }, { passive: true });
+
+    // Delegated Container-Level Listeners for All Chat Rows (Click, DblClick, ContextMenu, Touch Gestures)
+    if (!chatList._delegatedListenersAttached) {
+      chatList._delegatedListenersAttached = true;
+      chatList.addEventListener('click', handleChatListClick);
+      chatList.addEventListener('dblclick', handleChatListDblClick);
+      chatList.addEventListener('contextmenu', handleChatListContextMenu);
+      chatList.addEventListener('touchstart', handleChatTouchStart, { passive: true });
+      chatList.addEventListener('touchmove', handleChatTouchMove, { passive: true });
+      chatList.addEventListener('touchend', handleChatTouchEnd);
+      chatList.addEventListener('touchcancel', handleChatTouchCancel);
+    }
   }
 
   // Context Menu Overlay & Actions
@@ -8032,89 +8400,22 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
     reactionBadge.className = 'chat-reaction-chip';
     reactionBadge.setAttribute('data-msg-id', msg.id);
     reactionBadge.textContent = msg.reaction;
-    reactionBadge.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleMessageReaction(msg.id, msg.reaction);
-    });
     row.querySelector('.chat-msg-bubble')?.appendChild(reactionBadge);
   }
 
-  // Quoted Reply Click-To-Scroll
-  const quoteEl = row.querySelector('.chat-reply-quote');
-  if (quoteEl) {
-    quoteEl.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const targetId = quoteEl.getAttribute('data-reply-target');
-      if (targetId) scrollToChatMessage(targetId);
-    });
-  }
-
-  // Bubble Reply Button
-  const replyActionBtn = row.querySelector('.bubble-reply-action-btn');
-  if (replyActionBtn) {
-    replyActionBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setReplyTarget(msg);
-      if (navigator.vibrate) {
-        try { navigator.vibrate(20); } catch (err) {}
-      }
-      playTone(800, 0.05);
-    });
-  }
-
-  // Edit Button on Bubble (Desktop & Mobile)
-  const editActionBtn = row.querySelector('.bubble-edit-action-btn');
-  if (editActionBtn) {
-    editActionBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openEditMessageModal(msg);
-      if (navigator.vibrate) {
-        try { navigator.vibrate(20); } catch (err) {}
-      }
-      playTone(800, 0.05);
-    });
-  }
-
-  // Voice Note Play & Speed Pill
-  const playBtn = row.querySelector('.voice-play-btn');
-  if (playBtn) {
-    setupVoicePlayListener(playBtn);
-  }
-  const speedPill = row.querySelector('.voice-speed-pill');
-  if (speedPill) {
-    speedPill.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const currentRate = parseFloat(speedPill.getAttribute('data-speed')) || 1.0;
-      let nextRate = 1.5;
-      if (currentRate === 1.5) nextRate = 2.0;
-      else if (currentRate === 2.0) nextRate = 1.0;
-      speedPill.setAttribute('data-speed', String(nextRate));
-      speedPill.textContent = `${nextRate}x`;
-      speedPill.classList.toggle('active', nextRate > 1.0);
-      if (currentActiveVoicePlayer && currentActiveVoiceBtn === playBtn) {
-        currentActiveVoicePlayer.playbackRate = nextRate;
-      }
-    });
-  }
-
-  // Image lightbox & download
-  const thumb = row.querySelector('.chat-msg-image-thumb');
-  const dlBtn = row.querySelector('.chat-image-download-btn');
-  if (thumb) {
-    thumb.addEventListener('click', () => {
-      const cap = msg.caption || (msg.text !== 'Shared a photo 📷' ? msg.text : '');
-      openChatImageLightbox(thumb.src, cap);
-    });
-  }
-  if (dlBtn && thumb) {
-    dlBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const cap = msg.caption || (msg.text !== 'Shared a photo 📷' ? msg.text : '');
-      downloadPhotoFile(thumb.src, `OurStory_Chat_${Date.now()}.jpg`, cap);
-    });
+  // Swipe Reply Icon Indicator (Mounted directly on bubble for authentic WhatsApp alignment)
+  const bubble = row.querySelector('.chat-msg-bubble');
+  const replyIcon = document.createElement('div');
+  replyIcon.className = 'swipe-reply-icon';
+  replyIcon.innerHTML = '↩';
+  if (bubble) {
+    bubble.appendChild(replyIcon);
+  } else {
+    row.appendChild(replyIcon);
   }
 
   // Asynchronous hydration for IndexedDB media references
+  const thumb = row.querySelector('.chat-msg-image-thumb');
   if (msg.type === 'image' && msg.imageData && msg.imageData.startsWith('[IDB]:')) {
     const key = msg.imageData.replace('[IDB]:', '');
     if (!mediaMemoryCache.has(key)) {
@@ -8134,149 +8435,6 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
       });
     }
   }
-
-  // Call Back Button
-  const callBackBtn = row.querySelector('.chat-call-back-btn');
-  if (callBackBtn) {
-    callBackBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const ct = callBackBtn.getAttribute('data-call-type');
-      if (ct === 'video') startVideoCall('video');
-      else startAudioCall();
-    });
-  }
-
-  // Double Click / Tap to react
-  const bubble = row.querySelector('.chat-msg-bubble');
-  if (bubble) {
-    bubble.addEventListener('dblclick', () => {
-      const reactionEmoji = isMe ? '❤️' : '😂';
-      toggleMessageReaction(msg.id, reactionEmoji);
-    });
-  }
-
-  // Right Click Context Menu (Desktop)
-  row.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    openChatContextMenu(msg, row);
-  });
-
-  // Swipe Reply Icon Indicator (Mounted directly on bubble for authentic WhatsApp alignment)
-  const replyIcon = document.createElement('div');
-  replyIcon.className = 'swipe-reply-icon';
-  replyIcon.innerHTML = '↩';
-  if (bubble) {
-    bubble.appendChild(replyIcon);
-  } else {
-    row.appendChild(replyIcon);
-  }
-
-  // Mobile Long Press & Slide-To-Reply Gesture
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let isSwiping = false;
-  let longPressTimer = null;
-  let didLongPress = false;
-
-  const startLongPress = () => {
-    didLongPress = false;
-    longPressTimer = setTimeout(() => {
-      didLongPress = true;
-      if (navigator.vibrate) {
-        try { navigator.vibrate(35); } catch (err) {}
-      }
-      playTone(750, 0.06);
-      openChatContextMenu(msg, row);
-    }, 350);
-  };
-
-  const cancelLongPress = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  };
-
-  row.addEventListener('touchstart', (e) => {
-    if (e.touches && e.touches[0]) {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-      isSwiping = false;
-      didLongPress = false;
-      startLongPress();
-    }
-  }, { passive: true });
-
-  row.addEventListener('touchmove', (e) => {
-    if (!e.touches || !e.touches[0]) return;
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
-    const dx = currentX - touchStartX;
-    const dy = currentY - touchStartY;
-
-    // Vertical scroll detection: immediately allow native list scroll without locking
-    if (Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx)) {
-      cancelLongPress();
-      if (isSwiping) {
-        row.style.transform = 'translateX(0px)';
-        row.classList.remove('swiping');
-        isSwiping = false;
-      }
-      return;
-    }
-
-    // Only cancel long-press if finger genuinely shifts beyond touch jitter
-    if (Math.abs(dx) > 18 || Math.abs(dy) > 14) {
-      cancelLongPress();
-    }
-
-    // Horizontal slide-to-reply: swipe right on message bubble
-    if (dx > 16 && dx > Math.abs(dy) * 1.15 && !didLongPress) {
-      isSwiping = true;
-      const moveX = Math.min(dx * 0.7, 72);
-      row.style.transform = `translateX(${moveX}px)`;
-      row.classList.add('swiping');
-      const progress = Math.min(dx / 50, 1);
-      replyIcon.style.opacity = String(progress);
-      replyIcon.style.transform = `translateY(-50%) scale(${0.6 + 0.4 * progress})`;
-    }
-  }, { passive: true });
-
-  row.addEventListener('touchend', (e) => {
-    cancelLongPress();
-    if (didLongPress) {
-      row.style.transform = 'translateX(0px)';
-      row.classList.remove('swiping');
-      isSwiping = false;
-      return;
-    }
-
-    if (isSwiping) {
-      const endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : touchStartX;
-      const finalDx = endX - touchStartX;
-      row.style.transform = 'translateX(0px)';
-      row.classList.remove('swiping');
-      if (finalDx > 35) {
-        setReplyTarget(msg);
-        if (navigator.vibrate) {
-          try { navigator.vibrate(25); } catch (err) {}
-        }
-        playTone(850, 0.05);
-      }
-      isSwiping = false;
-    } else {
-      // Tap on row reveals quick action buttons (Reply & Edit)
-      row.classList.add('show-reply-btn');
-      setTimeout(() => row.classList.remove('show-reply-btn'), 3500);
-    }
-  });
-
-  row.addEventListener('touchcancel', () => {
-    cancelLongPress();
-    row.style.transform = 'translateX(0px)';
-    row.classList.remove('swiping');
-    isSwiping = false;
-  });
 
   return row;
 }

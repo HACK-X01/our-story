@@ -1,5 +1,5 @@
 {
-  "version": "2.6.4",
-  "buildTime": 1792736000000,
-  "notes": "v2.6.4 (Phase 1 Step 2): Chat pagination with latest 30 messages on open, scroll position preserving prepend on scroll-to-top, non-intrusive auto-scroll with floating unread button, reply-quote/starred/search jump with older message loading, and smooth top loading spinner."
+  "version": "2.6.5",
+  "buildTime": 1792740000000,
+  "notes": "v2.6.5 (Phase 1 Step 3): Container-level event delegation for all chat messages (click, dblclick, contextmenu, touch swipe-to-reply, long-press menu, voice playback, lightbox). Removed per-row listeners for maximum performance and zero re-binding on pagination."
 }
