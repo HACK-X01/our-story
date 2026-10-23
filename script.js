@@ -741,10 +741,16 @@ if (typeof window !== 'undefined') {
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       flushPendingSaveAppState();
+      if (typeof detachAllNonCoreFirebaseListeners === 'function') {
+        detachAllNonCoreFirebaseListeners();
+      }
     }
   });
   window.addEventListener('pagehide', () => {
     flushPendingSaveAppState();
+    if (typeof detachAllNonCoreFirebaseListeners === 'function') {
+      detachAllNonCoreFirebaseListeners();
+    }
   });
   window.addEventListener('beforeunload', () => {
     flushPendingSaveAppState();
@@ -1020,10 +1026,150 @@ function applyCloudLocations(locs) {
   }
 }
 
+// ==========================================================================
+// FIREBASE REALTIME LISTENER REGISTRY & LIFECYCLE MANAGER (STEP 4)
+// ==========================================================================
+const firebaseListenerRegistry = new Map();
+
+function attachFirebaseListener(name, queryRef, eventType, callback, isCore = false) {
+  if (!queryRef || !eventType || typeof callback !== 'function') return false;
+  if (firebaseListenerRegistry.has(name)) {
+    // Duplicate listener prevented!
+    return false;
+  }
+  try {
+    queryRef.on(eventType, callback);
+    firebaseListenerRegistry.set(name, { ref: queryRef, eventType, callback, isCore });
+    return true;
+  } catch (err) {
+    console.warn(`[Firebase Registry] Error attaching ${name}:`, err);
+    return false;
+  }
+}
+
+function detachFirebaseListener(name) {
+  const entry = firebaseListenerRegistry.get(name);
+  if (entry) {
+    try {
+      entry.ref.off(entry.eventType, entry.callback);
+    } catch (e) {
+      console.warn(`[Firebase Registry] Error detaching ${name}:`, e);
+    }
+    firebaseListenerRegistry.delete(name);
+    return true;
+  }
+  return false;
+}
+
+function detachAllNonCoreFirebaseListeners() {
+  for (const [name, entry] of firebaseListenerRegistry.entries()) {
+    if (!entry.isCore) {
+      try {
+        entry.ref.off(entry.eventType, entry.callback);
+      } catch (e) {}
+      firebaseListenerRegistry.delete(name);
+    }
+  }
+}
+
+function detachAllFirebaseListeners() {
+  for (const [name, entry] of firebaseListenerRegistry.entries()) {
+    try {
+      entry.ref.off(entry.eventType, entry.callback);
+    } catch (e) {}
+  }
+  firebaseListenerRegistry.clear();
+}
+
+// --- Lazy / Tab-Scoped Listener Attachers ---
+function attachPulsesListener() {
+  if (!firebaseDb) return;
+  attachFirebaseListener('pulses', firebaseDb.ref('our_story/pulses').limitToLast(5), 'child_added', (snapshot) => {
+    const pulse = snapshot.val();
+    if (!pulse) return;
+    if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+    if (!Array.isArray(appState.pulses)) {
+      appState.pulses = normalizeArray(appState.pulses);
+    }
+    const pulseId = pulse.id || ('pulse_' + (pulse.timestamp || Date.now()));
+    const exists = appState.pulses.some(p => p.id === pulseId || (p.timestamp && p.timestamp === pulse.timestamp));
+    if (!exists) {
+      appState.pulses.unshift(pulse);
+      if (appState.pulses.length > 25) appState.pulses.pop();
+      saveAppState(appState);
+      renderPulseHistory();
+    }
+  }, false);
+}
+
+function attachLocationsListener() {
+  if (!firebaseDb) return;
+  attachFirebaseListener('locations', firebaseDb.ref('our_story/locations'), 'value', (snapshot) => {
+    applyCloudLocations(snapshot.val());
+  }, false);
+}
+
+function attachCurrentQAListener() {
+  if (!firebaseDb) return;
+  attachFirebaseListener('currentQA', firebaseDb.ref('our_story/currentQA'), 'value', (snapshot) => {
+    const qa = snapshot.val();
+    if (qa) {
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      appState.currentQA = qa;
+      saveAppState(appState);
+      renderQA();
+    }
+  }, false);
+}
+
+function attachCouponsListener() {
+  if (!firebaseDb) return;
+  attachFirebaseListener('coupons', firebaseDb.ref('our_story/coupons'), 'value', (snapshot) => {
+    const coupons = snapshot.val();
+    if (coupons && Array.isArray(coupons)) {
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      appState.coupons = coupons;
+      saveAppState(appState);
+      renderCoupons();
+    }
+  }, false);
+}
+
+function attachMemoriesListener() {
+  if (!firebaseDb) return;
+  attachFirebaseListener('memories', firebaseDb.ref('our_story/memories'), 'value', (snapshot) => {
+    const mems = snapshot.val();
+    if (mems) {
+      const arr = Array.isArray(mems) ? mems : Object.values(mems);
+      if (arr.length > 0) {
+        if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+        appState.memories = arr;
+        saveAppState(appState);
+        renderVaultFeed();
+      }
+    }
+  }, false);
+}
+
+function attachTabScopedFirebaseListeners(tabId) {
+  if (!tabId || !firebaseDb) return;
+  if (tabId === 'panePulse') {
+    attachLocationsListener();
+    attachPulsesListener();
+  } else if (tabId === 'paneVault') {
+    attachMemoriesListener();
+  } else if (tabId === 'paneCoupons') {
+    attachCouponsListener();
+  } else if (tabId === 'paneQA') {
+    attachCurrentQAListener();
+  }
+}
+
 function setupFirebaseRealtimeListeners() {
   if (!firebaseDb) return;
 
-  firebaseDb.ref('our_story/currentMoods').on('value', (snapshot) => {
+  // 1. Current Moods (Always-On Core: Header badge & fresh alert)
+  attachFirebaseListener('currentMoods', firebaseDb.ref('our_story/currentMoods'), 'value', (snapshot) => {
     const moods = snapshot.val();
     if (moods) {
       const partnerKey = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
@@ -1044,10 +1190,10 @@ function setupFirebaseRealtimeListeners() {
         }
       }
     }
-  });
+  }, true);
 
-  // 1. Dedicated Realtime Listener on our_story/latestPulse (Fires within 50ms for live heartbeats)
-  firebaseDb.ref('our_story/latestPulse').on('value', (snapshot) => {
+  // 2. Dedicated Realtime Listener on our_story/latestPulse (Always-On Core: Fires within 50ms for live heartbeats)
+  attachFirebaseListener('latestPulse', firebaseDb.ref('our_story/latestPulse'), 'value', (snapshot) => {
     const pulse = snapshot.val();
     if (!pulse) return;
     const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
@@ -1065,104 +1211,70 @@ function setupFirebaseRealtimeListeners() {
         }
       }
     }
-  });
+  }, true);
 
-  // 2. Listen for child_added in pulses list - ONLY silently update history list, never duplicate alerts!
-  firebaseDb.ref('our_story/pulses').limitToLast(5).on('child_added', (snapshot) => {
-    const pulse = snapshot.val();
-    if (!pulse) return;
-    if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-    if (!Array.isArray(appState.pulses)) {
-      appState.pulses = normalizeArray(appState.pulses);
-    }
-    const pulseId = pulse.id || ('pulse_' + (pulse.timestamp || Date.now()));
-    const exists = appState.pulses.some(p => p.id === pulseId || (p.timestamp && p.timestamp === pulse.timestamp));
-    if (!exists) {
-      appState.pulses.unshift(pulse);
-      if (appState.pulses.length > 25) appState.pulses.pop();
-      saveAppState(appState);
-      renderPulseHistory();
-    }
-  });
-
-  // 3. Realtime Listener on our_story/locations (Himanshu & Gullu GPS Radar)
-  firebaseDb.ref('our_story/locations').on('value', (snapshot) => {
-    applyCloudLocations(snapshot.val());
-  });
-
-  firebaseDb.ref('our_story/currentQA').on('value', (snapshot) => {
-    const qa = snapshot.val();
-    if (qa) {
-      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-      appState.currentQA = qa;
-      saveAppState(appState);
-      renderQA();
-    }
-  });
-
-  firebaseDb.ref('our_story/coupons').on('value', (snapshot) => {
-    const coupons = snapshot.val();
-    if (coupons && Array.isArray(coupons)) {
-      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-      appState.coupons = coupons;
-      saveAppState(appState);
-      renderCoupons();
-    }
-  });
-
-  firebaseDb.ref('our_story/memories').on('value', (snapshot) => {
-    const mems = snapshot.val();
-    if (mems) {
-      const arr = Array.isArray(mems) ? mems : Object.values(mems);
-      if (arr.length > 0) {
-        if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-        appState.memories = arr;
-        saveAppState(appState);
-        renderVaultFeed();
-      }
-    }
-  });
-
-  firebaseDb.ref('our_story/chat_messages').limitToLast(50).on('child_added', (snapshot) => {
+  // 3. Chat Messages - child_added (Always-On Core: incoming messages, photos, voice, docs)
+  attachFirebaseListener('chat_messages_added', firebaseDb.ref('our_story/chat_messages').limitToLast(50), 'child_added', (snapshot) => {
     const msg = snapshot.val();
     if (msg && msg.id) {
       handleIncomingChatMessage(msg, false);
     }
-  });
+  }, true);
 
-  firebaseDb.ref('our_story/chat_messages').limitToLast(50).on('child_changed', (snapshot) => {
+  // 4. Chat Messages - child_changed (Always-On Core: ticks, edits, reactions, soft delete)
+  attachFirebaseListener('chat_messages_changed', firebaseDb.ref('our_story/chat_messages').limitToLast(50), 'child_changed', (snapshot) => {
     const msg = snapshot.val();
     if (msg && msg.id) {
       handleIncomingChatMessage(msg, false);
     }
-  });
+  }, true);
 
-  // 6. Chat Typing Indicator Realtime Listener
+  // 5. Chat Messages - child_removed (Always-On Core: hard removal sync)
+  attachFirebaseListener('chat_messages_removed', firebaseDb.ref('our_story/chat_messages').limitToLast(50), 'child_removed', (snapshot) => {
+    const msg = snapshot.val();
+    const msgId = (msg && msg.id) || snapshot.key;
+    if (!msgId || !appState || !appState.chatMessages) return;
+    const idx = appState.chatMessages.findIndex(m => m && m.id === msgId);
+    if (idx !== -1) {
+      appState.chatMessages.splice(idx, 1);
+      saveAppState(appState);
+      renderChatUI(true);
+    }
+  }, true);
+
+  // 6. Chat Typing Indicator Realtime Listener (Always-On Core)
   const partnerKey = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
-  firebaseDb.ref('our_story/chat_typing/' + partnerKey).on('value', (snapshot) => {
+  const typingEntry = firebaseListenerRegistry.get('chat_typing');
+  if (typingEntry && typingEntry.ref.key !== partnerKey) {
+    detachFirebaseListener('chat_typing');
+  }
+  attachFirebaseListener('chat_typing', firebaseDb.ref('our_story/chat_typing/' + partnerKey), 'value', (snapshot) => {
     const typingData = snapshot.val();
     if (typeof setPartnerTypingUI === 'function') {
       setPartnerTypingUI(typingData);
     }
-  });
+  }, true);
 
-  // 7. Realtime WebRTC Private Video & Audio Call Signaling
-  firebaseDb.ref('our_story/webrtc_call/callMeta').on('value', (snapshot) => {
+  // 7. Realtime WebRTC Private Video & Audio Call Signaling (Always-On Core)
+  attachFirebaseListener('callMeta', firebaseDb.ref('our_story/webrtc_call/callMeta'), 'value', (snapshot) => {
     const callMeta = snapshot.val();
     if (callMeta) {
       handleIncomingVCSignal(callMeta);
     }
-  });
+  }, true);
 
-
-
-  // 9. Emergency App Pause Realtime Sync (Himanshu Master Control)
-  firebaseDb.ref('our_story/appPause').on('value', (snapshot) => {
+  // 8. Emergency App Pause Realtime Sync (Always-On Core)
+  attachFirebaseListener('appPause', firebaseDb.ref('our_story/appPause'), 'value', (snapshot) => {
     const pauseData = snapshot.val();
     if (pauseData && typeof pauseData === 'object') {
       handleIncomingAppPause(pauseData);
     }
-  });
+  }, true);
+
+  // Attach tab-scoped listeners for initially active tab
+  const activePane = document.querySelector('.tab-pane.active');
+  const activeTabId = activePane ? activePane.id : 'panePulse';
+  attachTabScopedFirebaseListeners(activeTabId);
 }
 
 function syncInitialStateFromFirebase() {
@@ -3372,6 +3484,7 @@ function handleLoginSubmit() {
     // Initialize & update all components for the authenticated user
     updateProfileUI();
     renderAll();
+    setupFirebaseRealtimeListeners();
     updatePulseIdentityUI();
     checkForIncomingPulseOnPortalSwitch();
     if (Notification.permission === 'granted') {
@@ -3396,6 +3509,9 @@ function handlePortalLogout() {
   localStorage.removeItem(AUTH_STORAGE_KEY);
   sessionStorage.removeItem(AUTH_STORAGE_KEY);
   currentUser = null;
+  if (typeof detachAllFirebaseListeners === 'function') {
+    detachAllFirebaseListeners();
+  }
 
   const loginScreen = document.getElementById('coupleLoginScreen');
   const appLayout = document.querySelector('.app-layout');
@@ -3506,6 +3622,9 @@ function setupTabNavigation() {
     const isChat = tabId === 'paneChat';
     document.documentElement.classList.toggle('chat-view-active', isChat);
     document.body.classList.toggle('chat-view-active', isChat);
+
+    // Lazy-attach Firebase listeners for this specific tab (Memories, Coupons, Radar, Q&A)
+    attachTabScopedFirebaseListeners(tabId);
 
     if (tabId === 'panePulse') {
       fetchLatestCloudSync();
@@ -5954,6 +6073,11 @@ function setupPWAandUpdates() {
           if (typeof firebaseDb !== 'undefined' && firebaseDb) {
             try { firebaseDb.goOnline(); } catch (e) {}
           }
+          if (typeof attachTabScopedFirebaseListeners === 'function') {
+            const activePane = document.querySelector('.tab-pane.active');
+            const activeTabId = activePane ? activePane.id : 'panePulse';
+            attachTabScopedFirebaseListeners(activeTabId);
+          }
           fetchLatestCloudSync();
           if (currentUser) {
             try { startAutoLocationSync(); } catch (e) {}
@@ -5962,12 +6086,21 @@ function setupPWAandUpdates() {
           if (chatPane && chatPane.classList.contains('active')) {
             markIncomingChatMessagesAsRead();
           }
+        } else if (document.visibilityState === 'hidden') {
+          if (typeof detachAllNonCoreFirebaseListeners === 'function') {
+            detachAllNonCoreFirebaseListeners();
+          }
         }
       });
 
       window.addEventListener('focus', () => {
         if (typeof firebaseDb !== 'undefined' && firebaseDb) {
           try { firebaseDb.goOnline(); } catch (e) {}
+        }
+        if (typeof attachTabScopedFirebaseListeners === 'function') {
+          const activePane = document.querySelector('.tab-pane.active');
+          const activeTabId = activePane ? activePane.id : 'panePulse';
+          attachTabScopedFirebaseListeners(activeTabId);
         }
         fetchLatestCloudSync();
         if (currentUser) {
@@ -9576,12 +9709,12 @@ async function startVideoCall(callType = 'video') {
 
     // Listen for Callee candidates
     if (firebaseDb) {
-      firebaseDb.ref('our_story/webrtc_call/calleeCandidates').on('child_added', (snapshot) => {
+      attachFirebaseListener('webrtc_callee_candidates', firebaseDb.ref('our_story/webrtc_call/calleeCandidates'), 'child_added', (snapshot) => {
         const candidateData = snapshot.val();
         if (candidateData) {
           addReceivedIceCandidate(candidateData);
         }
-      });
+      }, false);
     }
   } catch (err) {
     console.error('Error starting video/audio call:', err);
@@ -9771,12 +9904,12 @@ async function acceptIncomingCall() {
     }, false);
 
     if (firebaseDb) {
-      firebaseDb.ref('our_story/webrtc_call/callerCandidates').on('child_added', (snapshot) => {
+      attachFirebaseListener('webrtc_caller_candidates', firebaseDb.ref('our_story/webrtc_call/callerCandidates'), 'child_added', (snapshot) => {
         const candidateData = snapshot.val();
         if (candidateData) {
           addReceivedIceCandidate(candidateData);
         }
-      });
+      }, false);
     }
   } catch (err) {
     console.error('Error answering call:', err);
@@ -9921,6 +10054,9 @@ function declineIncomingCall() {
 }
 
 function cleanupCallState() {
+  detachFirebaseListener('webrtc_callee_candidates');
+  detachFirebaseListener('webrtc_caller_candidates');
+
   if (vcState.callTimeoutTimer) {
     clearTimeout(vcState.callTimeoutTimer);
     vcState.callTimeoutTimer = null;
