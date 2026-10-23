@@ -3,13 +3,13 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-const CACHE_NAME = 'our-story-v50';
+const CACHE_NAME = 'our-story-v51';
 
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './styles.css?v=54',
-  './script.js?v=54',
+  './styles.css?v=55',
+  './script.js?v=55',
   './paho-mqtt.min.js',
   './manifest.json',
   './version.json',
@@ -47,11 +47,24 @@ self.addEventListener('activate', (event) => {
 
 // 3. Fetch Strategy
 self.addEventListener('fetch', (event) => {
+  // Only handle GET requests
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   const url = new URL(event.request.url);
 
-  // Bypass service worker cache for API requests (keep live sync real-time)
-  if (url.pathname.startsWith('/api/')) {
-    return;
+  // Bypass service worker cache for Firebase, Realtime DB, WebSockets, & API endpoints
+  if (
+    url.hostname.includes('firebaseio.com') ||
+    url.hostname.includes('firebasedatabase.app') ||
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('emqx.io') ||
+    url.pathname.startsWith('/api/') ||
+    url.protocol === 'ws:' ||
+    url.protocol === 'wss:'
+  ) {
+    return; // Early return: Native browser network request, zero interception or caching
   }
 
   // HTML navigation: Network first, fallback to cached index.html

@@ -1,5 +1,5 @@
 {
-  "version": "2.6.6",
-  "buildTime": 1792750000000,
-  "notes": "v2.6.6 (Phase 1 Step 4): Firebase listener cleanup & scope reduction with centralized listener registry, always-on core listeners (chat, typing, calls, live heartbeat, mood, app pause), tab-scoped lazy listeners (memories, coupons, radar, Q&A), document visibility lifecycle off/on switching, and duplicate attachment prevention."
+  "version": "2.6.7",
+  "buildTime": 1792760000000,
+  "notes": "v2.6.7 (Phase 1 Step 5A): Service Worker fix: bypass Firebase, Realtime DB, and WebSockets from SW caching; delete bloated old caches in activate; stale-while-revalidate for static app shell only."
 }
