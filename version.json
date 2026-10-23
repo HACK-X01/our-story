@@ -1,5 +1,5 @@
 {
-  "version": "2.6.1",
-  "buildTime": 1792724400000,
-  "notes": "v2.6.1: Fixed viewport lock (zero screen vertical/horizontal scrolling on chat tab, fixed WhatsApp layout), strict monotonic sequence sorting (clock-skew immunity, exact chronological flow), and direct 1-tap message edit on sent bubbles anytime."
+  "version": "2.6.2",
+  "buildTime": 1792728000000,
+  "notes": "v2.6.2: Fixed typing lag (eliminated 10-15s background polling freezes & throttled typing events), restored smooth mobile touch scrolling with pan-y, enhanced 350ms long-press context menu for reply and edit, and added authentic WhatsApp slide-to-reply gesture."
 }

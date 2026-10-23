@@ -943,13 +943,37 @@ function fetchLatestCloudSync() {
     })
     .catch(() => {});
 
-  // 2. Fetch Latest Chat Messages (Clean JSON fetch without buggy limitToLast)
+  // 2. Fetch Latest Chat Messages (Batch process without freezing UI)
   fetch(`${dbUrl}/our_story/chat_messages.json?t=` + Date.now())
     .then(r => r.ok ? r.json() : null)
     .then(msgs => {
-      if (!msgs) return;
-      const msgList = sortChatMessagesAscending(Object.values(msgs));
-      msgList.forEach(m => handleIncomingChatMessage(m, false));
+      if (!msgs || typeof msgs !== 'object') return;
+      const incomingList = Object.values(msgs);
+      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+      if (!appState.chatMessages) appState.chatMessages = [];
+      const msgMap = new Map();
+      appState.chatMessages.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
+      let hasChange = false;
+      incomingList.forEach(m => {
+        if (!m || !m.id) return;
+        const existing = msgMap.get(m.id);
+        if (!existing) {
+          msgMap.set(m.id, m);
+          hasChange = true;
+        } else {
+          if (m.status === 'read' && existing.status !== 'read') { existing.status = 'read'; hasChange = true; }
+          if (m.status === 'delivered' && (!existing.status || existing.status === 'sent')) { existing.status = 'delivered'; hasChange = true; }
+          if (m.edited && !existing.edited) { existing.edited = true; existing.text = m.text; hasChange = true; }
+          if (m.reaction !== existing.reaction) { existing.reaction = m.reaction; hasChange = true; }
+          if (m.deleted && !existing.deleted) { existing.deleted = true; existing.text = 'This message was deleted'; hasChange = true; }
+        }
+      });
+      if (hasChange) {
+        appState.chatMessages = sortChatMessagesAscending(Array.from(msgMap.values())).slice(-250);
+        saveAppState(appState);
+        if (typeof scheduleRenderChatUI === 'function') scheduleRenderChatUI();
+        else renderChatUI();
+      }
     })
     .catch(() => {});
 }
@@ -1010,17 +1034,42 @@ function initFirebaseRestSync(dbUrl) {
       .catch(() => {});
   }, 3500);
 
-  // Background Chat messages poller (Every 2.5s - Fix: no limitToLast query error)
+  // Background Chat messages poller (Only active as fallback when Firebase WebSocket SDK is not connected)
   setInterval(() => {
+    if (isFirebaseConnected && firebaseDb) return; // SDK WebSocket already provides sub-50ms live updates
     fetch(`${dbUrl}/our_story/chat_messages.json?t=` + Date.now())
       .then(r => r.ok ? r.json() : null)
       .then(msgs => {
-        if (!msgs) return;
-        const msgList = sortChatMessagesAscending(Object.values(msgs));
-        msgList.forEach(m => handleIncomingChatMessage(m, false));
+        if (!msgs || typeof msgs !== 'object') return;
+        const incomingList = Object.values(msgs);
+        if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+        if (!appState.chatMessages) appState.chatMessages = [];
+        const msgMap = new Map();
+        appState.chatMessages.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
+        let hasChange = false;
+        incomingList.forEach(m => {
+          if (!m || !m.id) return;
+          const existing = msgMap.get(m.id);
+          if (!existing) {
+            msgMap.set(m.id, m);
+            hasChange = true;
+          } else {
+            if (m.status === 'read' && existing.status !== 'read') { existing.status = 'read'; hasChange = true; }
+            if (m.status === 'delivered' && (!existing.status || existing.status === 'sent')) { existing.status = 'delivered'; hasChange = true; }
+            if (m.edited && !existing.edited) { existing.edited = true; existing.text = m.text; hasChange = true; }
+            if (m.reaction !== existing.reaction) { existing.reaction = m.reaction; hasChange = true; }
+            if (m.deleted && !existing.deleted) { existing.deleted = true; existing.text = 'This message was deleted'; hasChange = true; }
+          }
+        });
+        if (hasChange) {
+          appState.chatMessages = sortChatMessagesAscending(Array.from(msgMap.values())).slice(-250);
+          saveAppState(appState);
+          if (typeof scheduleRenderChatUI === 'function') scheduleRenderChatUI();
+          else renderChatUI();
+        }
       })
       .catch(() => {});
-  }, 2500);
+  }, 6000);
 
   // Background Location Poller (Every 3.5s for Radar & Distance)
   setInterval(() => {
@@ -6622,7 +6671,9 @@ function setupChatUI() {
 
   if (ctxEditBtn) {
     ctxEditBtn.addEventListener('click', () => {
-      if (activeContextMenuMsg) openEditMessageModal(activeContextMenuMsg);
+      const target = activeContextMenuMsg;
+      closeChatContextMenu();
+      if (target) openEditMessageModal(target);
     });
   }
 
@@ -6772,20 +6823,27 @@ function setupChatUI() {
       }
     });
 
+    let lastTypingBroadcastTime = 0;
     inputField.addEventListener('input', () => {
       inputField.style.height = 'auto';
       inputField.style.height = Math.min(inputField.scrollHeight, 100) + 'px';
       updateSendButtonMode();
 
-      broadcastMyTypingStatus(true);
+      const now = Date.now();
+      if (now - lastTypingBroadcastTime > 3000) {
+        lastTypingBroadcastTime = now;
+        broadcastMyTypingStatus(true);
+      }
       clearTimeout(typingDebounceTimer);
       typingDebounceTimer = setTimeout(() => {
+        lastTypingBroadcastTime = 0;
         broadcastMyTypingStatus(false);
-      }, 2200);
+      }, 2500);
     });
 
     inputField.addEventListener('blur', () => {
       clearTimeout(typingDebounceTimer);
+      lastTypingBroadcastTime = 0;
       broadcastMyTypingStatus(false);
     });
 
@@ -7018,6 +7076,11 @@ function openChatContextMenu(msg, rowEl) {
 
   if (starLabel) {
     starLabel.textContent = msg.starred ? 'Unstar' : 'Star';
+  }
+
+  const replyBtn = document.getElementById('contextReplyBtn');
+  if (replyBtn) {
+    replyBtn.style.display = (!msg.deleted) ? 'flex' : 'none';
   }
 
   // Edit message: allowed for any text message sent by me (not deleted)
@@ -7725,20 +7788,17 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
     openChatContextMenu(msg, row);
   });
 
-  // Swipe Reply Icon Indicator
+  // Swipe Reply Icon Indicator (Mounted directly on bubble for authentic WhatsApp alignment)
   const replyIcon = document.createElement('div');
   replyIcon.className = 'swipe-reply-icon';
   replyIcon.innerHTML = '↩';
-  if (isMe) {
-    replyIcon.style.left = 'auto';
-    replyIcon.style.right = '-38px';
+  if (bubble) {
+    bubble.appendChild(replyIcon);
   } else {
-    replyIcon.style.left = '-38px';
-    replyIcon.style.right = 'auto';
+    row.appendChild(replyIcon);
   }
-  row.appendChild(replyIcon);
 
-  // Mobile Long Press & Bi-directional Swipe
+  // Mobile Long Press & Slide-To-Reply Gesture
   let touchStartX = 0;
   let touchStartY = 0;
   let isSwiping = false;
@@ -7749,12 +7809,12 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
     didLongPress = false;
     longPressTimer = setTimeout(() => {
       didLongPress = true;
-      openChatContextMenu(msg, row);
       if (navigator.vibrate) {
-        try { navigator.vibrate(25); } catch (err) {}
+        try { navigator.vibrate(35); } catch (err) {}
       }
       playTone(750, 0.06);
-    }, 450);
+      openChatContextMenu(msg, row);
+    }, 350);
   };
 
   const cancelLongPress = () => {
@@ -7769,6 +7829,7 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
       isSwiping = false;
+      didLongPress = false;
       startLongPress();
     }
   }, { passive: true });
@@ -7780,41 +7841,57 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
     const dx = currentX - touchStartX;
     const dy = currentY - touchStartY;
 
-    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+    // Vertical scroll detection: immediately allow native list scroll without locking
+    if (Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx)) {
+      cancelLongPress();
+      if (isSwiping) {
+        row.style.transform = 'translateX(0px)';
+        row.classList.remove('swiping');
+        isSwiping = false;
+      }
+      return;
+    }
+
+    // Only cancel long-press if finger genuinely shifts beyond touch jitter
+    if (Math.abs(dx) > 18 || Math.abs(dy) > 14) {
       cancelLongPress();
     }
 
-    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+    // Horizontal slide-to-reply: swipe right on message bubble
+    if (dx > 16 && dx > Math.abs(dy) * 1.15 && !didLongPress) {
       isSwiping = true;
-      if (dx > 0) {
-        replyIcon.style.left = '-38px';
-        replyIcon.style.right = 'auto';
-      } else {
-        replyIcon.style.left = 'auto';
-        replyIcon.style.right = '-38px';
-      }
-      const moveX = dx > 0 ? Math.min(dx * 0.65, 65) : Math.max(dx * 0.65, -65);
+      const moveX = Math.min(dx * 0.7, 72);
       row.style.transform = `translateX(${moveX}px)`;
       row.classList.add('swiping');
+      const progress = Math.min(dx / 50, 1);
+      replyIcon.style.opacity = String(progress);
+      replyIcon.style.transform = `translateY(-50%) scale(${0.6 + 0.4 * progress})`;
     }
   }, { passive: true });
 
   row.addEventListener('touchend', (e) => {
     cancelLongPress();
-    if (isSwiping) {
-      const endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : touchStartX;
-      const dx = endX - touchStartX;
+    if (didLongPress) {
       row.style.transform = 'translateX(0px)';
       row.classList.remove('swiping');
-      if (Math.abs(dx) > 35 && !didLongPress) {
+      isSwiping = false;
+      return;
+    }
+
+    if (isSwiping) {
+      const endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : touchStartX;
+      const finalDx = endX - touchStartX;
+      row.style.transform = 'translateX(0px)';
+      row.classList.remove('swiping');
+      if (finalDx > 35) {
         setReplyTarget(msg);
         if (navigator.vibrate) {
-          try { navigator.vibrate(20); } catch (err) {}
+          try { navigator.vibrate(25); } catch (err) {}
         }
-        playTone(800, 0.05);
+        playTone(850, 0.05);
       }
       isSwiping = false;
-    } else if (!didLongPress) {
+    } else {
       // Tap on row reveals quick action buttons (Reply & Edit)
       row.classList.add('show-reply-btn');
       setTimeout(() => row.classList.remove('show-reply-btn'), 3500);
@@ -7829,6 +7906,16 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
   });
 
   return row;
+}
+
+let chatRenderPending = false;
+function scheduleRenderChatUI() {
+  if (chatRenderPending) return;
+  chatRenderPending = true;
+  requestAnimationFrame(() => {
+    chatRenderPending = false;
+    renderChatUI();
+  });
 }
 
 function renderChatUI() {
@@ -8055,7 +8142,12 @@ function sendChatMessage(text, type = 'text', extraData = {}) {
   }
 
   saveAppState(appState);
-  renderChatUI();
+  const listEl = document.getElementById('chatMessagesList');
+  if (listEl && listEl.querySelectorAll('.chat-msg-row').length > 0) {
+    appendChatMessageDOM(msg, true);
+  } else {
+    scheduleRenderChatUI();
+  }
 
   // WhatsApp sent tick chime
   playTone(587.33, 0.08);
@@ -8101,7 +8193,7 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
     }
     if (tickChanged) {
       saveAppState(appState);
-      renderChatUI();
+      scheduleRenderChatUI();
     }
   } else {
     // If incoming fresh message has timestamp <= last message due to partner's clock skew:
@@ -8122,7 +8214,12 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
       appState.chatMessages = appState.chatMessages.slice(-250);
     }
     saveAppState(appState);
-    renderChatUI();
+    const chatList = document.getElementById('chatMessagesList');
+    if (chatList && chatList.querySelectorAll('.chat-msg-row').length > 0) {
+      appendChatMessageDOM(msg, isFresh);
+    } else {
+      scheduleRenderChatUI();
+    }
   }
 
   // Delivery & Read Receipt tracking when recipient receives partner's message
