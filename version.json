@@ -1,5 +1,5 @@
 {
-  "version": "2.6.3",
-  "buildTime": 1792732000000,
-  "notes": "v2.6.3 (Phase 1 Step 1): Offloaded heavy Base64 media (audio notes, documents, photos) to IndexedDB with 1s debounced saveAppState, legacy migration for both phones, and instant flush on app backgrounding."
+  "version": "2.6.4",
+  "buildTime": 1792736000000,
+  "notes": "v2.6.4 (Phase 1 Step 2): Chat pagination with latest 30 messages on open, scroll position preserving prepend on scroll-to-top, non-intrusive auto-scroll with floating unread button, reply-quote/starred/search jump with older message loading, and smooth top loading spinner."
 }

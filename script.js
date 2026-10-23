@@ -3517,7 +3517,8 @@ function setupTabNavigation() {
     } else if (tabId === 'paneChat') {
       const badge = document.getElementById('dockChatBadge');
       if (badge) badge.classList.add('is-hidden');
-      renderChatUI();
+      renderedChatMessagesCount = CHAT_PAGE_SIZE;
+      renderChatUI(false);
       fetchLatestCloudSync();
       markIncomingChatMessagesAsRead();
       if ('Notification' in window && Notification.permission === 'default') {
@@ -6881,6 +6882,7 @@ function setupChatUI() {
     });
     chatList.addEventListener('scroll', () => {
       updateScrollBottomButtonVisibility();
+      handleChatPaginationScroll();
     }, { passive: true });
   }
 
@@ -7195,9 +7197,31 @@ function clearReplyTarget() {
   if (replyBar) replyBar.classList.add('is-hidden');
 }
 
+const CHAT_PAGE_SIZE = 30;
+let renderedChatMessagesCount = 30;
+let isLoadingOlderChatMessages = false;
+
 function scrollToChatMessage(msgId) {
   if (!msgId) return;
-  const targetRow = document.querySelector(`[data-msg-id="${msgId}"]`);
+  const listEl = document.getElementById('chatMessagesList');
+  let targetRow = listEl ? listEl.querySelector(`[data-msg-id="${msgId}"]`) : null;
+
+  if (!targetRow) {
+    // Message is older and not currently rendered in DOM due to pagination
+    let rawMsgs = normalizeArray(appState?.chatMessages || appState?.chat_messages);
+    rawMsgs = rawMsgs.filter(m => !(m && m.hiddenFor && m.hiddenFor.includes(currentUser)));
+    const msgs = sortChatMessagesAscending(rawMsgs);
+    const targetIdx = msgs.findIndex(m => m && m.id === msgId);
+
+    if (targetIdx !== -1) {
+      // Load enough messages from the end to include this message plus a 10-message buffer
+      const neededCount = (msgs.length - targetIdx) + 10;
+      renderedChatMessagesCount = Math.max(renderedChatMessagesCount, neededCount);
+      renderChatUI(true);
+      targetRow = listEl ? listEl.querySelector(`[data-msg-id="${msgId}"]`) : null;
+    }
+  }
+
   if (targetRow) {
     targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
     targetRow.classList.add('msg-highlight-flash');
@@ -7305,7 +7329,7 @@ function updateScrollBottomButtonVisibility() {
   if (!btn || !listEl) return;
 
   const distance = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight;
-  if (distance > 180) {
+  if (distance > 140) {
     btn.classList.remove('is-hidden');
   } else {
     btn.classList.add('is-hidden');
@@ -7329,6 +7353,55 @@ function clearScrollUnreadBadge() {
     badge.textContent = '0';
     badge.classList.add('is-hidden');
   }
+}
+
+function handleChatPaginationScroll() {
+  const listEl = document.getElementById('chatMessagesList');
+  if (!listEl || isLoadingOlderChatMessages) return;
+
+  // Trigger when scrolled near the top (within 80px)
+  if (listEl.scrollTop <= 80) {
+    let rawMsgs = normalizeArray(appState?.chatMessages || appState?.chat_messages);
+    rawMsgs = rawMsgs.filter(m => !(m && m.hiddenFor && m.hiddenFor.includes(currentUser)));
+
+    if (rawMsgs.length > renderedChatMessagesCount) {
+      loadOlderChatMessages();
+    }
+  }
+}
+
+function loadOlderChatMessages() {
+  if (isLoadingOlderChatMessages) return;
+  isLoadingOlderChatMessages = true;
+
+  const listEl = document.getElementById('chatMessagesList');
+  const loader = document.getElementById('chatPaginationLoader');
+  if (loader) loader.classList.remove('is-hidden');
+
+  // Smooth micro-delay (100ms) for small spinner feedback
+  setTimeout(() => {
+    if (!listEl) {
+      isLoadingOlderChatMessages = false;
+      if (loader) loader.classList.add('is-hidden');
+      return;
+    }
+
+    const oldScrollHeight = listEl.scrollHeight;
+    const oldScrollTop = listEl.scrollTop;
+
+    renderedChatMessagesCount += CHAT_PAGE_SIZE;
+    renderChatUI(true);
+
+    const newScrollHeight = listEl.scrollHeight;
+    listEl.style.scrollBehavior = 'auto';
+    listEl.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
+    requestAnimationFrame(() => {
+      listEl.style.scrollBehavior = '';
+    });
+
+    if (loader) loader.classList.add('is-hidden');
+    isLoadingOlderChatMessages = false;
+  }, 100);
 }
 
 function pruneDisappearingMessages() {
@@ -7422,7 +7495,7 @@ function saveEditedMessage() {
       newText: msg.text,
       editedAt: msg.editedAt
     }, true);
-    renderChatUI();
+    renderChatUI(true);
     showToast('Message edited ✏️');
   }
   closeEditMessageModal();
@@ -7437,7 +7510,7 @@ function handleIncomingChatEdit(data) {
     msg.edited = true;
     msg.editedAt = data.editedAt || Date.now();
     saveAppState(appState);
-    renderChatUI();
+    renderChatUI(true);
   }
 }
 
@@ -7475,7 +7548,7 @@ function deleteMessageForEveryone() {
     msg.deletedAt = Date.now();
     saveAppState(appState);
     broadcastUpdate('CHAT_DELETE', { msgId: msg.id, deletedAt: msg.deletedAt }, true);
-    renderChatUI();
+    renderChatUI(true);
     showToast('Message deleted for everyone 🗑️');
   }
   closeDeleteMessageModal();
@@ -7490,7 +7563,7 @@ function deleteMessageForMe() {
     if (!msg.hiddenFor) msg.hiddenFor = [];
     if (!msg.hiddenFor.includes(currentUser)) msg.hiddenFor.push(currentUser);
     saveAppState(appState);
-    renderChatUI();
+    renderChatUI(true);
     showToast('Message deleted for you 🗑️');
   }
   closeDeleteMessageModal();
@@ -7505,7 +7578,7 @@ function handleIncomingChatDelete(data) {
     msg.text = 'This message was deleted';
     msg.deletedAt = data.deletedAt || Date.now();
     saveAppState(appState);
-    renderChatUI();
+    renderChatUI(true);
   }
 }
 
@@ -7517,7 +7590,7 @@ function toggleStarMessage(msgId) {
   msg.starred = !msg.starred;
   saveAppState(appState);
   broadcastUpdate('CHAT_STAR', { msgId: msg.id, starred: msg.starred }, true);
-  renderChatUI();
+  renderChatUI(true);
   showToast(msg.starred ? 'Message starred ⭐' : 'Message unstarred');
 }
 
@@ -7527,7 +7600,7 @@ function handleIncomingChatStar(data) {
   if (msg) {
     msg.starred = !!data.starred;
     saveAppState(appState);
-    renderChatUI();
+    renderChatUI(true);
   }
 }
 
@@ -8209,16 +8282,20 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
 }
 
 let chatRenderPending = false;
-function scheduleRenderChatUI() {
+let chatRenderPreserveScroll = false;
+function scheduleRenderChatUI(preserveScroll = false) {
+  if (preserveScroll) chatRenderPreserveScroll = true;
   if (chatRenderPending) return;
   chatRenderPending = true;
   requestAnimationFrame(() => {
     chatRenderPending = false;
-    renderChatUI();
+    const shouldPreserve = chatRenderPreserveScroll;
+    chatRenderPreserveScroll = false;
+    renderChatUI(shouldPreserve);
   });
 }
 
-function renderChatUI() {
+function renderChatUI(preserveScroll = false) {
   const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
   const partnerName = currentUser === 'himanshu' ? 'Gullu 🌸' : 'Himanshu ☕';
   const partnerAvatar = currentUser === 'himanshu' ? '🌸' : '☕';
@@ -8259,21 +8336,36 @@ function renderChatUI() {
     }
   });
 
-  // Remove existing message rows and date dividers (preserve empty state & typing bubble)
-  const existingItems = listEl.querySelectorAll('.chat-msg-row, .chat-date-divider');
-  existingItems.forEach(r => r.remove());
-
   const emptyState = document.getElementById('chatEmptyState');
   if (msgs.length === 0) {
+    const existingItems = listEl.querySelectorAll('.chat-msg-row, .chat-date-divider');
+    existingItems.forEach(r => r.remove());
     if (emptyState) emptyState.style.display = 'flex';
     return;
   }
   if (emptyState) emptyState.style.display = 'none';
 
+  // PAGINATION: Render only the latest renderedChatMessagesCount messages
+  if (!renderedChatMessagesCount || renderedChatMessagesCount < CHAT_PAGE_SIZE) {
+    renderedChatMessagesCount = CHAT_PAGE_SIZE;
+  }
+  const visibleMsgs = msgs.slice(-renderedChatMessagesCount);
+
+  // Capture metrics before updating DOM for accurate scroll compensation
+  const oldScrollHeight = listEl.scrollHeight;
+  const oldScrollTop = listEl.scrollTop;
+  const distanceFromBottom = oldScrollHeight - oldScrollTop - listEl.clientHeight;
+  const wasAtBottom = distanceFromBottom < 50;
+
+  // Remove existing message rows and date dividers (preserve loader, empty state, typing bubble)
+  const existingItems = listEl.querySelectorAll('.chat-msg-row, .chat-date-divider');
+  existingItems.forEach(r => r.remove());
+
   let lastDateStr = null;
   let prevMsg = null;
+  const typingBubble = document.getElementById('chatTypingBubble');
 
-  msgs.forEach(msg => {
+  visibleMsgs.forEach(msg => {
     const msgTime = getMessageTimestamp(msg);
     const dateStr = formatChatDateDivider(msgTime);
     if (dateStr !== lastDateStr) {
@@ -8281,7 +8373,6 @@ function renderChatUI() {
       divider.className = 'chat-date-divider';
       divider.setAttribute('data-date', dateStr);
       divider.innerHTML = `<span>${dateStr}</span>`;
-      const typingBubble = document.getElementById('chatTypingBubble');
       if (typingBubble && typingBubble.parentNode === listEl) {
         listEl.insertBefore(divider, typingBubble);
       } else {
@@ -8296,7 +8387,6 @@ function renderChatUI() {
     const hasTail = !isConsecutive;
 
     const row = createChatMessageDOMRow(msg, isConsecutive, hasTail);
-    const typingBubble = document.getElementById('chatTypingBubble');
     if (typingBubble && typingBubble.parentNode === listEl) {
       listEl.insertBefore(row, typingBubble);
     } else {
@@ -8306,8 +8396,18 @@ function renderChatUI() {
     prevMsg = msg;
   });
 
-  // Immediate jump to newest message at bottom
-  listEl.scrollTop = listEl.scrollHeight;
+  // Restore scroll position without jumping
+  if (preserveScroll && !wasAtBottom) {
+    const newScrollHeight = listEl.scrollHeight;
+    listEl.style.scrollBehavior = 'auto';
+    listEl.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
+    requestAnimationFrame(() => {
+      listEl.style.scrollBehavior = '';
+    });
+  } else {
+    listEl.scrollTop = listEl.scrollHeight;
+  }
+
   updateScrollBottomButtonVisibility();
 }
 
@@ -8379,11 +8479,14 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
     }
   }
 
+  renderedChatMessagesCount++;
+
   if (shouldScroll) {
     listEl.scrollTo({ top: listEl.scrollHeight, behavior: 'smooth' });
+    clearScrollUnreadBadge();
   } else {
     const distance = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight;
-    if (distance > 150) {
+    if (distance > 100) {
       incrementScrollUnreadBadge();
     }
   }
@@ -8493,7 +8596,7 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
     }
     if (tickChanged) {
       saveAppState(appState);
-      scheduleRenderChatUI();
+      scheduleRenderChatUI(true);
     }
   } else {
     // If incoming fresh message has timestamp <= last message due to partner's clock skew:
@@ -8516,9 +8619,12 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
     saveAppState(appState);
     const chatList = document.getElementById('chatMessagesList');
     if (chatList && chatList.querySelectorAll('.chat-msg-row').length > 0) {
-      appendChatMessageDOM(msg, isFresh);
+      // Auto-scroll only if fresh and user is already near bottom (<= 120px)
+      const distanceFromBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight;
+      const shouldScroll = isFresh && (distanceFromBottom <= 120);
+      appendChatMessageDOM(msg, shouldScroll);
     } else {
-      scheduleRenderChatUI();
+      scheduleRenderChatUI(true);
     }
   }
 
@@ -8684,12 +8790,37 @@ function executeChatSearch(query) {
   currentChatSearchIndex = -1;
 
   const counterEl = document.getElementById('chatSearchCounter');
-  if (!query) {
+  if (!query || !query.trim()) {
     if (counterEl) counterEl.textContent = '0 of 0';
     return;
   }
 
-  const q = query.toLowerCase();
+  const q = query.trim().toLowerCase();
+
+  // Check if there are matches in older unrendered messages
+  let rawMsgs = normalizeArray(appState?.chatMessages || appState?.chat_messages);
+  rawMsgs = rawMsgs.filter(m => !(m && m.hiddenFor && m.hiddenFor.includes(currentUser)));
+  const msgs = sortChatMessagesAscending(rawMsgs);
+
+  // Find the earliest matching message across full history
+  let earliestMatchIdx = -1;
+  for (let i = 0; i < msgs.length; i++) {
+    const m = msgs[i];
+    const matchText = ((m && m.text) || '') + ' ' + ((m && m.caption) || '') + ' ' + ((m && m.senderName) || '');
+    if (matchText.toLowerCase().includes(q)) {
+      earliestMatchIdx = i;
+      break;
+    }
+  }
+
+  if (earliestMatchIdx !== -1) {
+    const neededCount = (msgs.length - earliestMatchIdx) + 10;
+    if (neededCount > renderedChatMessagesCount) {
+      renderedChatMessagesCount = neededCount;
+      renderChatUI(true);
+    }
+  }
+
   const rows = document.querySelectorAll('.chat-msg-row');
   rows.forEach(r => {
     const textEl = r.querySelector('.chat-msg-text, .chat-msg-caption, .chat-call-meta');
@@ -8813,7 +8944,17 @@ function toggleMessageReaction(msgId, reactionEmoji = '❤️') {
   msg.reaction = msg.reaction === reactionEmoji ? null : reactionEmoji;
   saveAppState(appState);
   broadcastUpdate('CHAT_REACTION', { msgId, reaction: msg.reaction }, true);
-  renderChatUI();
+  renderChatUI(true);
+}
+
+function handleIncomingChatReaction(data) {
+  if (!data || !data.msgId || !appState || !appState.chatMessages) return;
+  const msg = appState.chatMessages.find(m => m.id === data.msgId);
+  if (msg) {
+    msg.reaction = data.reaction || null;
+    saveAppState(appState);
+    renderChatUI(true);
+  }
 }
 
 function openMediaDocsModal() {
