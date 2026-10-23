@@ -3631,7 +3631,7 @@ function setupTabNavigation() {
       try { startAutoLocationSync(); } catch (e) {}
       setTimeout(() => {
         if (!coupleMap) initCoupleRadarMap();
-        else coupleMap.invalidateSize();
+        else if (coupleMap && typeof coupleMap.invalidateSize === 'function') coupleMap.invalidateSize();
       }, 200);
     } else if (tabId === 'paneChat') {
       const badge = document.getElementById('dockChatBadge');
@@ -5185,11 +5185,92 @@ function getRomanticDistanceMessage(distKm) {
   }
 }
 
+// --- Leaflet Dynamic Lazy Loader (Phase 2 Step 2A) ---
+let isLeafletLoaded = false;
+let leafletLoadPromise = null;
+
+function loadLeafletAssets() {
+  if (typeof L !== 'undefined' && isLeafletLoaded) {
+    return Promise.resolve();
+  }
+  if (leafletLoadPromise) {
+    return leafletLoadPromise;
+  }
+
+  leafletLoadPromise = new Promise((resolve, reject) => {
+    if (typeof L !== 'undefined') {
+      isLeafletLoaded = true;
+      return resolve();
+    }
+
+    // 1. Dynamic CSS Link Injection
+    if (!document.getElementById('leafletCssLink')) {
+      const link = document.createElement('link');
+      link.id = 'leafletCssLink';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+
+    // 2. Dynamic JS Script Injection
+    const script = document.createElement('script');
+    script.id = 'leafletJsScript';
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.async = true;
+
+    script.onload = () => {
+      isLeafletLoaded = true;
+      resolve();
+    };
+
+    script.onerror = (err) => {
+      leafletLoadPromise = null;
+      reject(err);
+    };
+
+    document.body.appendChild(script);
+  });
+
+  return leafletLoadPromise;
+}
+
 function initCoupleRadarMap() {
   const mapEl = document.getElementById('coupleRadarMap');
-  if (!mapEl || coupleMap || typeof L === 'undefined') return;
+  if (!mapEl || coupleMap) return;
+
+  // If Leaflet is not loaded yet, inject on-demand and show loading indicator
+  if (typeof L === 'undefined') {
+    if (!document.getElementById('radarMapLoading')) {
+      mapEl.innerHTML = `
+        <div class="radar-map-loading" id="radarMapLoading">
+          <span class="radar-map-spinner"></span>
+          <span>Connecting Radar GPS Map... 📍</span>
+        </div>
+      `;
+    }
+    loadLeafletAssets().then(() => {
+      if (document.getElementById('radarMapLoading')) {
+        mapEl.innerHTML = '';
+      }
+      initCoupleRadarMap();
+    }).catch((err) => {
+      console.warn('Leaflet lazy load failed:', err);
+      if (document.getElementById('radarMapLoading')) {
+        mapEl.innerHTML = `
+          <div class="radar-map-loading">
+            <span>⚠️ Radar map offline. GPS distances active!</span>
+          </div>
+        `;
+      }
+    });
+    return;
+  }
 
   try {
+    if (document.getElementById('radarMapLoading')) {
+      mapEl.innerHTML = '';
+    }
+
     coupleMap = L.map('coupleRadarMap', {
       zoomControl: true,
       attributionControl: false
@@ -5851,11 +5932,6 @@ function setupCoupleRadar() {
       startAutoLocationSync();
     }, 1000);
   }
-
-  // Initialize map when container is visible
-  setTimeout(() => {
-    initCoupleRadarMap();
-  }, 500);
 }
 
 function createFloatingHeart(parent) {

@@ -1,5 +1,5 @@
 {
-  "version": "2.6.7",
-  "buildTime": 1792760000000,
-  "notes": "v2.6.7 (Phase 1 Step 5A): Service Worker fix: bypass Firebase, Realtime DB, and WebSockets from SW caching; delete bloated old caches in activate; stale-while-revalidate for static app shell only."
+  "version": "2.6.8",
+  "buildTime": 1792770000000,
+  "notes": "v2.6.8 (Phase 2 Step 2A): Leaflet JS & CSS dynamic lazy loading on demand when opening Radar/Location tab, elegant map loading spinner, and zero eager map initialization on first load."
 }
