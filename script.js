@@ -368,18 +368,26 @@ function normalizeArray(val) {
 
 function getMessageTimestamp(m) {
   if (!m) return 0;
-  if (typeof m.timestamp === 'number' && !isNaN(m.timestamp)) return m.timestamp;
+  if (typeof m.timestamp === 'number' && !isNaN(m.timestamp) && m.timestamp > 0) return m.timestamp;
   if (typeof m.timestamp === 'string') {
     const num = Number(m.timestamp);
     if (!isNaN(num) && num > 0) return num;
     const parsed = Date.parse(m.timestamp);
-    if (!isNaN(parsed)) return parsed;
+    if (!isNaN(parsed) && parsed > 0) return parsed;
   }
+  if (typeof m.time === 'number' && !isNaN(m.time) && m.time > 0) return m.time;
+  if (typeof m.time === 'string') {
+    const num = Number(m.time);
+    if (!isNaN(num) && num > 0) return num;
+    const parsed = Date.parse(m.time);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  if (typeof m.createdAt === 'number' && !isNaN(m.createdAt) && m.createdAt > 0) return m.createdAt;
   if (m.id && typeof m.id === 'string') {
     const match = m.id.match(/^msg_(\d+)/);
     if (match && match[1]) {
       const idTime = Number(match[1]);
-      if (!isNaN(idTime)) return idTime;
+      if (!isNaN(idTime) && idTime > 0) return idTime;
     }
   }
   return 0;
@@ -391,8 +399,12 @@ function sortChatMessagesAscending(messages) {
   const deduped = [];
   messages.forEach(m => {
     if (!m) return;
-    const id = m.id || ('msg_' + getMessageTimestamp(m) + '_' + Math.random().toString(36).substr(2, 4));
+    const t = getMessageTimestamp(m);
+    const id = m.id || ('msg_' + (t || Date.now()) + '_' + Math.random().toString(36).substr(2, 4));
     m.id = id;
+    if (t > 0 && (!m.timestamp || typeof m.timestamp !== 'number')) {
+      m.timestamp = t;
+    }
     if (!seenIds.has(id)) {
       seenIds.add(id);
       deduped.push(m);
@@ -3178,6 +3190,10 @@ function setupTabNavigation() {
       if (p.id === tabId) p.classList.add('active');
       else p.classList.remove('active');
     });
+
+    const isChat = tabId === 'paneChat';
+    document.documentElement.classList.toggle('chat-view-active', isChat);
+    document.body.classList.toggle('chat-view-active', isChat);
 
     if (tabId === 'panePulse') {
       fetchLatestCloudSync();
@@ -7004,11 +7020,11 @@ function openChatContextMenu(msg, rowEl) {
     starLabel.textContent = msg.starred ? 'Unstar' : 'Star';
   }
 
-  // Edit message: allowed only for sender within 15 min and not deleted
+  // Edit message: allowed for any text message sent by me (not deleted)
   const isMe = msg.sender === currentUser;
-  const isWithin15m = msg.timestamp && (Date.now() - msg.timestamp < 15 * 60 * 1000);
+  const isTextMsg = msg.type === 'text' || !msg.type;
   if (editBtn) {
-    editBtn.style.display = (isMe && isWithin15m && !msg.deleted) ? 'flex' : 'none';
+    editBtn.style.display = (isMe && isTextMsg && !msg.deleted) ? 'flex' : 'none';
   }
 
   if (copyBtn) {
@@ -7028,13 +7044,19 @@ function closeChatContextMenu() {
 
 function openEditMessageModal(msg) {
   if (!msg) return;
+  activeContextMenuMsg = msg;
   const modal = document.getElementById('chatEditModal');
   const textarea = document.getElementById('chatEditTextInput');
   if (textarea) {
     textarea.value = msg.text || '';
   }
   if (modal) modal.classList.remove('is-hidden');
-  if (textarea) textarea.focus();
+  if (textarea) {
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    }, 60);
+  }
 }
 
 function closeEditMessageModal() {
@@ -7570,6 +7592,7 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
     bubbleInnerHtml = `
       <div class="chat-msg-bubble">
         <button type="button" class="bubble-reply-action-btn" title="Reply ↩">↩</button>
+        ${isMe && !msg.deleted ? `<button type="button" class="bubble-edit-action-btn" title="Edit message ✏️">✏️</button>` : ''}
         ${quoteHtml}
         ${!isMe && !isConsecutive ? `<span class="chat-msg-sender-name">${escapeChatHtml(senderDisplayName)}</span>` : ''}
         <p class="chat-msg-text">${linkifyChatText(msg.text)}</p>
@@ -7617,6 +7640,19 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
     replyActionBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       setReplyTarget(msg);
+      if (navigator.vibrate) {
+        try { navigator.vibrate(20); } catch (err) {}
+      }
+      playTone(800, 0.05);
+    });
+  }
+
+  // Edit Button on Bubble (Desktop & Mobile)
+  const editActionBtn = row.querySelector('.bubble-edit-action-btn');
+  if (editActionBtn) {
+    editActionBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openEditMessageModal(msg);
       if (navigator.vibrate) {
         try { navigator.vibrate(20); } catch (err) {}
       }
@@ -7778,6 +7814,10 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
         playTone(800, 0.05);
       }
       isSwiping = false;
+    } else if (!didLongPress) {
+      // Tap on row reveals quick action buttons (Reply & Edit)
+      row.classList.add('show-reply-btn');
+      setTimeout(() => row.classList.remove('show-reply-btn'), 3500);
     }
   });
 
@@ -7847,7 +7887,8 @@ function renderChatUI() {
   let prevMsg = null;
 
   msgs.forEach(msg => {
-    const dateStr = formatChatDateDivider(msg.timestamp);
+    const msgTime = getMessageTimestamp(msg);
+    const dateStr = formatChatDateDivider(msgTime);
     if (dateStr !== lastDateStr) {
       const divider = document.createElement('div');
       divider.className = 'chat-date-divider';
@@ -7863,7 +7904,8 @@ function renderChatUI() {
       prevMsg = null;
     }
 
-    const isConsecutive = !!(prevMsg && prevMsg.sender === msg.sender && Math.abs(msg.timestamp - prevMsg.timestamp) < 300000 && prevMsg.type !== 'burst' && msg.type !== 'burst');
+    const prevTime = prevMsg ? getMessageTimestamp(prevMsg) : 0;
+    const isConsecutive = !!(prevMsg && prevMsg.sender === msg.sender && Math.abs(msgTime - prevTime) < 300000 && prevMsg.type !== 'burst' && msg.type !== 'burst');
     const hasTail = !isConsecutive;
 
     const row = createChatMessageDOMRow(msg, isConsecutive, hasTail);
@@ -7966,7 +8008,15 @@ function sendChatMessage(text, type = 'text', extraData = {}) {
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
   if (!appState.chatMessages) appState.chatMessages = [];
 
-  const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+  // Guarantee strictly monotonic timestamp so new messages NEVER appear above older messages
+  let maxPrevTime = 0;
+  for (let i = 0; i < appState.chatMessages.length; i++) {
+    const t = getMessageTimestamp(appState.chatMessages[i]);
+    if (t > maxPrevTime) maxPrevTime = t;
+  }
+  const safeTimestamp = Math.max(Date.now(), maxPrevTime + 1);
+
+  const msgId = 'msg_' + safeTimestamp + '_' + Math.random().toString(36).substr(2, 6);
   const myName = currentUser === 'himanshu' ? 'Himanshu' : 'Gullu';
 
   let replyData = null;
@@ -7991,7 +8041,7 @@ function sendChatMessage(text, type = 'text', extraData = {}) {
     sender: currentUser,
     senderName: myName,
     text: text.trim(),
-    timestamp: Date.now(),
+    timestamp: safeTimestamp,
     type: type,
     status: 'sent', // Single grey tick initially
     ...(replyData ? { replyTo: replyData } : {}),
@@ -8005,7 +8055,7 @@ function sendChatMessage(text, type = 'text', extraData = {}) {
   }
 
   saveAppState(appState);
-  appendChatMessageDOM(msg, true);
+  renderChatUI();
 
   // WhatsApp sent tick chime
   playTone(587.33, 0.08);
@@ -8019,13 +8069,13 @@ function sendChatMessage(text, type = 'text', extraData = {}) {
 }
 
 function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
-  if (!msg || !msg.id || (!msg.text && !msg.imageData && !msg.audioData)) return;
+  if (!msg || !msg.id || (!msg.text && !msg.imageData && !msg.audioData && !msg.callType && !msg.docData && !msg.location)) return;
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
   if (!appState.chatMessages) appState.chatMessages = [];
 
   const existingMsg = appState.chatMessages.find(m => m.id === msg.id);
   const now = Date.now();
-  const isFresh = msg.timestamp ? (Math.abs(now - msg.timestamp) < 15000) : false;
+  const isFresh = msg.timestamp ? (Math.abs(now - getMessageTimestamp(msg)) < 25000) : false;
 
   if (existingMsg) {
     let tickChanged = false;
@@ -8040,15 +8090,39 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
       tickChanged = true;
       updateMessageTickDOM(msg.id, 'delivered');
     }
-    if (tickChanged) saveAppState(appState);
+    if (msg.edited && !existingMsg.edited) {
+      existingMsg.edited = true;
+      existingMsg.text = msg.text;
+      tickChanged = true;
+    }
+    if (msg.reaction !== existingMsg.reaction) {
+      existingMsg.reaction = msg.reaction;
+      tickChanged = true;
+    }
+    if (tickChanged) {
+      saveAppState(appState);
+      renderChatUI();
+    }
   } else {
+    // If incoming fresh message has timestamp <= last message due to partner's clock skew:
+    if (isFresh && appState.chatMessages.length > 0) {
+      let maxTime = 0;
+      for (let i = 0; i < appState.chatMessages.length; i++) {
+        const t = getMessageTimestamp(appState.chatMessages[i]);
+        if (t > maxTime) maxTime = t;
+      }
+      const incTime = getMessageTimestamp(msg);
+      if (incTime <= maxTime) {
+        msg.timestamp = maxTime + 1;
+      }
+    }
     appState.chatMessages.push(msg);
     appState.chatMessages = sortChatMessagesAscending(appState.chatMessages);
     if (appState.chatMessages.length > 250) {
       appState.chatMessages = appState.chatMessages.slice(-250);
     }
     saveAppState(appState);
-    appendChatMessageDOM(msg, isFresh);
+    renderChatUI();
   }
 
   // Delivery & Read Receipt tracking when recipient receives partner's message
