@@ -1114,10 +1114,13 @@ function attachCurrentQAListener() {
   attachFirebaseListener('currentQA', firebaseDb.ref('our_story/currentQA'), 'value', (snapshot) => {
     const qa = snapshot.val();
     if (qa) {
-      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-      appState.currentQA = qa;
-      saveAppState(appState);
-      renderQA();
+      const prev = JSON.stringify(appState?.currentQA || {});
+      if (JSON.stringify(qa) !== prev) {
+        if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+        appState.currentQA = qa;
+        saveAppState(appState);
+        renderQA();
+      }
     }
   }, false);
 }
@@ -1127,10 +1130,13 @@ function attachCouponsListener() {
   attachFirebaseListener('coupons', firebaseDb.ref('our_story/coupons'), 'value', (snapshot) => {
     const coupons = snapshot.val();
     if (coupons && Array.isArray(coupons)) {
-      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-      appState.coupons = coupons;
-      saveAppState(appState);
-      renderCoupons();
+      const prev = JSON.stringify(appState?.coupons || []);
+      if (JSON.stringify(coupons) !== prev) {
+        if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+        appState.coupons = coupons;
+        saveAppState(appState);
+        renderCoupons();
+      }
     }
   }, false);
 }
@@ -1142,10 +1148,13 @@ function attachMemoriesListener() {
     if (mems) {
       const arr = Array.isArray(mems) ? mems : Object.values(mems);
       if (arr.length > 0) {
-        if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-        appState.memories = arr;
-        saveAppState(appState);
-        renderVaultFeed();
+        const prev = JSON.stringify(appState?.memories || []);
+        if (JSON.stringify(arr) !== prev) {
+          if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+          appState.memories = arr;
+          saveAppState(appState);
+          renderVaultFeed();
+        }
       }
     }
   }, false);
@@ -1318,37 +1327,13 @@ function fetchLatestCloudSync() {
     })
     .catch(() => {});
 
-  // 2. Fetch Latest Chat Messages (Batch process without freezing UI)
+  // 2. Fetch Latest Chat Messages (Silent In-Place Reconciliation without freezing UI or full re-render)
   fetch(`${dbUrl}/our_story/chat_messages.json?t=` + Date.now())
     .then(r => r.ok ? r.json() : null)
     .then(msgs => {
       if (!msgs || typeof msgs !== 'object') return;
       const incomingList = Object.values(msgs);
-      if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-      if (!appState.chatMessages) appState.chatMessages = [];
-      const msgMap = new Map();
-      appState.chatMessages.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
-      let hasChange = false;
-      incomingList.forEach(m => {
-        if (!m || !m.id) return;
-        const existing = msgMap.get(m.id);
-        if (!existing) {
-          msgMap.set(m.id, m);
-          hasChange = true;
-        } else {
-          if (m.status === 'read' && existing.status !== 'read') { existing.status = 'read'; hasChange = true; }
-          if (m.status === 'delivered' && (!existing.status || existing.status === 'sent')) { existing.status = 'delivered'; hasChange = true; }
-          if (m.edited && !existing.edited) { existing.edited = true; existing.text = m.text; hasChange = true; }
-          if (m.reaction !== existing.reaction) { existing.reaction = m.reaction; hasChange = true; }
-          if (m.deleted && !existing.deleted) { existing.deleted = true; existing.text = 'This message was deleted'; hasChange = true; }
-        }
-      });
-      if (hasChange) {
-        appState.chatMessages = sortChatMessagesAscending(Array.from(msgMap.values())).slice(-250);
-        saveAppState(appState);
-        if (typeof scheduleRenderChatUI === 'function') scheduleRenderChatUI();
-        else renderChatUI();
-      }
+      reconcileChatMessagesDOM(incomingList);
     })
     .catch(() => {});
 }
@@ -1369,9 +1354,36 @@ function initFirebaseRestSync(dbUrl) {
       if (bannerText) bannerText.textContent = 'Status: Connected to Google Firebase Cloud DB 🔥';
 
       if (cloudData) {
+        const prevMemories = JSON.stringify(appState?.memories || []);
+        const prevCoupons = JSON.stringify(appState?.coupons || []);
+        const prevQA = JSON.stringify(appState?.currentQA || {});
+        const prevMoods = JSON.stringify(appState?.currentMoods || {});
+        const prevPulses = JSON.stringify(appState?.pulses || []);
+
         appState = mergePreservingUserData(appState, cloudData);
         saveAppState(appState);
-        renderAll();
+
+        // Silently reconcile chat without full DOM wipe
+        if (cloudData.chat_messages) {
+          reconcileChatMessagesDOM(Object.values(cloudData.chat_messages));
+        }
+
+        // Only re-render tabs where actual data changes occurred
+        if (JSON.stringify(appState.memories || []) !== prevMemories) {
+          renderVaultFeed();
+        }
+        if (JSON.stringify(appState.coupons || []) !== prevCoupons) {
+          renderCoupons();
+        }
+        if (JSON.stringify(appState.currentQA || {}) !== prevQA) {
+          renderQA();
+        }
+        if (JSON.stringify(appState.currentMoods || {}) !== prevMoods) {
+          renderMoods();
+        }
+        if (JSON.stringify(appState.pulses || []) !== prevPulses) {
+          renderPulseHistory();
+        }
       } else {
         fetch(`${dbUrl}/our_story.json`, {
           method: 'PUT',
@@ -1417,31 +1429,7 @@ function initFirebaseRestSync(dbUrl) {
       .then(msgs => {
         if (!msgs || typeof msgs !== 'object') return;
         const incomingList = Object.values(msgs);
-        if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
-        if (!appState.chatMessages) appState.chatMessages = [];
-        const msgMap = new Map();
-        appState.chatMessages.forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
-        let hasChange = false;
-        incomingList.forEach(m => {
-          if (!m || !m.id) return;
-          const existing = msgMap.get(m.id);
-          if (!existing) {
-            msgMap.set(m.id, m);
-            hasChange = true;
-          } else {
-            if (m.status === 'read' && existing.status !== 'read') { existing.status = 'read'; hasChange = true; }
-            if (m.status === 'delivered' && (!existing.status || existing.status === 'sent')) { existing.status = 'delivered'; hasChange = true; }
-            if (m.edited && !existing.edited) { existing.edited = true; existing.text = m.text; hasChange = true; }
-            if (m.reaction !== existing.reaction) { existing.reaction = m.reaction; hasChange = true; }
-            if (m.deleted && !existing.deleted) { existing.deleted = true; existing.text = 'This message was deleted'; hasChange = true; }
-          }
-        });
-        if (hasChange) {
-          appState.chatMessages = sortChatMessagesAscending(Array.from(msgMap.values())).slice(-250);
-          saveAppState(appState);
-          if (typeof scheduleRenderChatUI === 'function') scheduleRenderChatUI();
-          else renderChatUI();
-        }
+        reconcileChatMessagesDOM(incomingList);
       })
       .catch(() => {});
   }, 6000);
@@ -7901,6 +7889,74 @@ function updateMessageTickDOM(msgId, newStatus) {
   }
 }
 
+function updateMessageReactionDOM(msgId, reaction) {
+  const row = document.querySelector(`.chat-msg-row[data-msg-id="${msgId}"]`);
+  if (!row) return;
+  const bubble = row.querySelector('.chat-msg-bubble');
+  if (!bubble) return;
+  let chip = row.querySelector('.chat-reaction-chip');
+  if (reaction) {
+    if (!chip) {
+      chip = document.createElement('span');
+      chip.className = 'chat-reaction-chip';
+      chip.setAttribute('data-msg-id', msgId);
+      bubble.appendChild(chip);
+    }
+    chip.textContent = reaction;
+  } else if (chip) {
+    chip.remove();
+  }
+}
+
+function updateMessageEditDOM(msgId, newText, editedAt) {
+  const row = document.querySelector(`.chat-msg-row[data-msg-id="${msgId}"]`);
+  if (!row) return;
+  const textEl = row.querySelector('.chat-msg-text');
+  if (textEl) textEl.innerHTML = linkifyChatText(newText);
+  const footer = row.querySelector('.chat-msg-footer');
+  if (footer && !footer.querySelector('.chat-msg-edited-tag')) {
+    const timeEl = footer.querySelector('.chat-msg-time');
+    const editTag = document.createElement('span');
+    editTag.className = 'chat-msg-edited-tag';
+    editTag.textContent = 'edited';
+    if (timeEl) footer.insertBefore(editTag, timeEl);
+    else footer.appendChild(editTag);
+  }
+}
+
+function updateMessageDeletedDOM(msgId) {
+  const row = document.querySelector(`.chat-msg-row[data-msg-id="${msgId}"]`);
+  if (!row) return;
+  const bubble = row.querySelector('.chat-msg-bubble');
+  if (bubble) {
+    bubble.className = 'chat-msg-bubble chat-deleted-bubble';
+    const timeStr = row.getAttribute('data-timestamp') ? formatChatTime(Number(row.getAttribute('data-timestamp'))) : '';
+    bubble.innerHTML = `
+      <p class="chat-msg-text deleted-msg"><em>🚫 This message was deleted</em></p>
+      <div class="chat-msg-footer">
+        <span class="chat-msg-time">${timeStr}</span>
+      </div>
+    `;
+  }
+}
+
+function updateMessageStarDOM(msgId, isStarred) {
+  const row = document.querySelector(`.chat-msg-row[data-msg-id="${msgId}"]`);
+  if (!row) return;
+  const footer = row.querySelector('.chat-msg-footer');
+  if (!footer) return;
+  const starEl = footer.querySelector('.chat-msg-star-badge');
+  if (isStarred && !starEl) {
+    const newStar = document.createElement('span');
+    newStar.className = 'chat-msg-star-badge';
+    newStar.title = 'Starred';
+    newStar.textContent = '⭐';
+    footer.insertBefore(newStar, footer.firstChild);
+  } else if (!isStarred && starEl) {
+    starEl.remove();
+  }
+}
+
 function handleIncomingChatReceipt(data, targetStatus) {
   if (!data || !appState || !appState.chatMessages) return;
   const msgIds = data.msgIds || (data.msgId ? [data.msgId] : []);
@@ -8128,7 +8184,7 @@ function saveEditedMessage() {
       newText: msg.text,
       editedAt: msg.editedAt
     }, true);
-    renderChatUI(true);
+    updateMessageEditDOM(msg.id, msg.text, msg.editedAt);
     showToast('Message edited ✏️');
   }
   closeEditMessageModal();
@@ -8143,7 +8199,7 @@ function handleIncomingChatEdit(data) {
     msg.edited = true;
     msg.editedAt = data.editedAt || Date.now();
     saveAppState(appState);
-    renderChatUI(true);
+    updateMessageEditDOM(data.msgId, data.newText, data.editedAt);
   }
 }
 
@@ -8181,7 +8237,7 @@ function deleteMessageForEveryone() {
     msg.deletedAt = Date.now();
     saveAppState(appState);
     broadcastUpdate('CHAT_DELETE', { msgId: msg.id, deletedAt: msg.deletedAt }, true);
-    renderChatUI(true);
+    updateMessageDeletedDOM(msg.id);
     showToast('Message deleted for everyone 🗑️');
   }
   closeDeleteMessageModal();
@@ -8196,7 +8252,8 @@ function deleteMessageForMe() {
     if (!msg.hiddenFor) msg.hiddenFor = [];
     if (!msg.hiddenFor.includes(currentUser)) msg.hiddenFor.push(currentUser);
     saveAppState(appState);
-    renderChatUI(true);
+    const row = document.querySelector(`.chat-msg-row[data-msg-id="${msgId}"]`);
+    if (row) row.remove();
     showToast('Message deleted for you 🗑️');
   }
   closeDeleteMessageModal();
@@ -8211,7 +8268,7 @@ function handleIncomingChatDelete(data) {
     msg.text = 'This message was deleted';
     msg.deletedAt = data.deletedAt || Date.now();
     saveAppState(appState);
-    renderChatUI(true);
+    updateMessageDeletedDOM(data.msgId);
   }
 }
 
@@ -8223,7 +8280,7 @@ function toggleStarMessage(msgId) {
   msg.starred = !msg.starred;
   saveAppState(appState);
   broadcastUpdate('CHAT_STAR', { msgId: msg.id, starred: msg.starred }, true);
-  renderChatUI(true);
+  updateMessageStarDOM(msg.id, msg.starred);
   showToast(msg.starred ? 'Message starred ⭐' : 'Message unstarred');
 }
 
@@ -8233,7 +8290,7 @@ function handleIncomingChatStar(data) {
   if (msg) {
     msg.starred = !!data.starred;
     saveAppState(appState);
-    renderChatUI(true);
+    updateMessageStarDOM(data.msgId, msg.starred);
   }
 }
 
@@ -8916,6 +8973,143 @@ function appendChatMessageDOM(msg, shouldScroll = true) {
   updateScrollBottomButtonVisibility();
 }
 
+// SILENT CHAT RECONCILIATION ENGINE (Zero DOM Wipe, Strict ID-Matching, Zero Scroll Jump)
+function reconcileChatMessagesDOM(incomingList) {
+  if (!incomingList || !Array.isArray(incomingList) || incomingList.length === 0) return;
+  const listEl = document.getElementById('chatMessagesList');
+  if (!listEl) return;
+
+  if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
+  if (!appState.chatMessages) appState.chatMessages = [];
+
+  // If chat is completely empty in DOM, render initial slice
+  const currentRows = listEl.querySelectorAll('.chat-msg-row');
+  if (currentRows.length === 0) {
+    appState.chatMessages = sortChatMessagesAscending(incomingList).slice(-250);
+    saveAppState(appState);
+    renderChatUI();
+    return;
+  }
+
+  // Capture metrics before updating DOM for accurate scroll compensation
+  const oldScrollHeight = listEl.scrollHeight;
+  const oldScrollTop = listEl.scrollTop;
+  const distanceFromBottom = oldScrollHeight - oldScrollTop - listEl.clientHeight;
+  const wasAtBottom = distanceFromBottom < 60;
+
+  // Map existing local messages by ID (ID-based reconciliation, never index-based)
+  const localMap = new Map();
+  appState.chatMessages.forEach(m => {
+    if (m && m.id) localMap.set(m.id, m);
+  });
+
+  let stateChanged = false;
+  let domChanged = false;
+
+  const sortedIncoming = sortChatMessagesAscending(incomingList);
+
+  sortedIncoming.forEach(incoming => {
+    if (!incoming || !incoming.id) return;
+    if (incoming.hiddenFor && incoming.hiddenFor.includes(currentUser)) return;
+
+    const existing = localMap.get(incoming.id);
+    const inDOM = listEl.querySelector(`[data-msg-id="${incoming.id}"]`);
+
+    if (!existing) {
+      // 1. BRAND NEW MESSAGE
+      localMap.set(incoming.id, incoming);
+      stateChanged = true;
+
+      const emptyState = document.getElementById('chatEmptyState');
+      if (emptyState) emptyState.style.display = 'none';
+
+      // Insert into DOM in strict timestamp order without auto-scrolling
+      appendChatMessageDOM(incoming, false);
+      domChanged = true;
+    } else {
+      // 2. EXISTING MESSAGE: in-place reconciliation
+      let msgChanged = false;
+
+      // Status / Ticks
+      if (incoming.status === 'read' && existing.status !== 'read') {
+        existing.status = 'read';
+        existing.readAt = incoming.readAt || Date.now();
+        msgChanged = true;
+        updateMessageTickDOM(incoming.id, 'read');
+      } else if (incoming.status === 'delivered' && (!existing.status || existing.status === 'sent')) {
+        existing.status = 'delivered';
+        existing.deliveredAt = incoming.deliveredAt || Date.now();
+        msgChanged = true;
+        updateMessageTickDOM(incoming.id, 'delivered');
+      }
+
+      // Edited
+      if (incoming.edited && (!existing.edited || existing.text !== incoming.text)) {
+        existing.edited = true;
+        existing.text = incoming.text;
+        existing.editedAt = incoming.editedAt || Date.now();
+        msgChanged = true;
+        updateMessageEditDOM(incoming.id, incoming.text, incoming.editedAt);
+      }
+
+      // Deleted
+      if (incoming.deleted && !existing.deleted) {
+        existing.deleted = true;
+        existing.text = 'This message was deleted';
+        msgChanged = true;
+        updateMessageDeletedDOM(incoming.id);
+      }
+
+      // Reaction
+      if (incoming.reaction !== existing.reaction) {
+        existing.reaction = incoming.reaction;
+        msgChanged = true;
+        updateMessageReactionDOM(incoming.id, incoming.reaction);
+      }
+
+      // Starred
+      if (!!incoming.starred !== !!existing.starred) {
+        existing.starred = !!incoming.starred;
+        msgChanged = true;
+        updateMessageStarDOM(incoming.id, incoming.starred);
+      }
+
+      // If message existed in state but was not rendered in DOM (within current page slice)
+      if (!inDOM && listEl.querySelectorAll('.chat-msg-row').length < renderedChatMessagesCount) {
+        appendChatMessageDOM(incoming, false);
+        domChanged = true;
+      }
+
+      if (msgChanged) {
+        stateChanged = true;
+      }
+    }
+  });
+
+  if (stateChanged) {
+    appState.chatMessages = sortChatMessagesAscending(Array.from(localMap.values())).slice(-250);
+    saveAppState(appState);
+  }
+
+  // Restore scroll position with pixel precision (zero scroll jump)
+  if (domChanged) {
+    if (wasAtBottom) {
+      listEl.scrollTop = listEl.scrollHeight;
+      clearScrollUnreadBadge();
+    } else {
+      const newScrollHeight = listEl.scrollHeight;
+      listEl.style.scrollBehavior = 'auto';
+      listEl.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
+      requestAnimationFrame(() => {
+        listEl.style.scrollBehavior = '';
+      });
+      incrementScrollUnreadBadge();
+    }
+  }
+
+  updateScrollBottomButtonVisibility();
+}
+
 function sendChatMessage(text, type = 'text', extraData = {}) {
   if (!text || !text.trim()) return;
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
@@ -9008,18 +9202,26 @@ function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
       tickChanged = true;
       updateMessageTickDOM(msg.id, 'delivered');
     }
-    if (msg.edited && !existingMsg.edited) {
+    if (msg.edited && (!existingMsg.edited || existingMsg.text !== msg.text)) {
       existingMsg.edited = true;
       existingMsg.text = msg.text;
+      existingMsg.editedAt = msg.editedAt || now;
       tickChanged = true;
+      updateMessageEditDOM(msg.id, msg.text, msg.editedAt);
     }
     if (msg.reaction !== existingMsg.reaction) {
       existingMsg.reaction = msg.reaction;
       tickChanged = true;
+      updateMessageReactionDOM(msg.id, msg.reaction);
+    }
+    if (msg.deleted && !existingMsg.deleted) {
+      existingMsg.deleted = true;
+      existingMsg.text = 'This message was deleted';
+      tickChanged = true;
+      updateMessageDeletedDOM(msg.id);
     }
     if (tickChanged) {
       saveAppState(appState);
-      scheduleRenderChatUI(true);
     }
   } else {
     // If incoming fresh message has timestamp <= last message due to partner's clock skew:
@@ -9367,7 +9569,7 @@ function toggleMessageReaction(msgId, reactionEmoji = '❤️') {
   msg.reaction = msg.reaction === reactionEmoji ? null : reactionEmoji;
   saveAppState(appState);
   broadcastUpdate('CHAT_REACTION', { msgId, reaction: msg.reaction }, true);
-  renderChatUI(true);
+  updateMessageReactionDOM(msgId, msg.reaction);
 }
 
 function handleIncomingChatReaction(data) {
@@ -9376,7 +9578,7 @@ function handleIncomingChatReaction(data) {
   if (msg) {
     msg.reaction = data.reaction || null;
     saveAppState(appState);
-    renderChatUI(true);
+    updateMessageReactionDOM(data.msgId, msg.reaction);
   }
 }
 
