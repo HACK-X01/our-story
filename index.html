@@ -20,7 +20,7 @@
 
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
-  <link rel="stylesheet" href="styles.css?v=56">
+  <link rel="stylesheet" href="styles.css?v=57">
 </head>
 <body>
 
@@ -1190,15 +1190,16 @@
   </div>
 
   <!-- FLOATING PWA UPDATE PROMPT BANNER -->
-  <div class="app-update-banner is-hidden" id="appUpdateBanner">
-    <div class="update-banner-icon">🚀</div>
+  <div class="app-update-banner is-hidden" id="appUpdateBanner" role="alert" aria-live="polite">
+    <div class="update-banner-icon">✨</div>
     <div class="update-banner-body">
-      <h4 class="update-banner-title">New Update Available! ✨</h4>
-      <p class="update-banner-text">Naye updates & features ready hain. Aapki memories & answers 100% safe rahenge!</p>
+      <span class="update-banner-title">New Update Available!</span>
+      <span class="update-banner-text">Tap to refresh &amp; get latest features</span>
     </div>
-    <button class="update-banner-btn" id="updateAppBtn">
-      Update Now 💖
+    <button type="button" class="update-banner-btn" id="updateAppBtn">
+      Refresh 🔄
     </button>
+    <button type="button" class="update-banner-dismiss-btn" id="dismissUpdateBannerBtn" title="Dismiss" aria-label="Dismiss">✕</button>
   </div>
 
   <!-- IN-APP MUSIC PLAYER (Plays music inside app with crystal-clear audio!) -->
@@ -1985,6 +1986,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=56"></script>
+  <script src="script.js?v=57"></script>
 </body>
 </html>

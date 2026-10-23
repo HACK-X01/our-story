@@ -1,5 +1,5 @@
 {
-  "version": "2.6.8",
-  "buildTime": 1792770000000,
-  "notes": "v2.6.8 (Phase 2 Step 2A): Leaflet JS & CSS dynamic lazy loading on demand when opening Radar/Location tab, elegant map loading spinner, and zero eager map initialization on first load."
+  "version": "2.6.9",
+  "buildTime": 1792773000000,
+  "notes": "v2.6.9 (Phase 4 Step 4A): Service Worker strategy & smooth update flow, non-intrusive dismissible update banner, guard against reloads while calling/typing/recording, versioned cache our-story-v53."
 }

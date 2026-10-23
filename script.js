@@ -6105,34 +6105,68 @@ function setupModalDismiss() {
 }
 
 // --- 9. PWA INSTALL & LIVE APP UPDATE ENGINE ---
-let waitingServiceWorker = null;
+let activeWaitingWorker = null;
 
-function showUpdateBanner(worker = null) {
-  if (worker) waitingServiceWorker = worker;
+function isUserBusyWithInteractiveTask() {
+  // 1. WebRTC video or audio call is active, incoming, or outgoing
+  if (typeof vcState !== 'undefined' && vcState && (vcState.status === 'active' || vcState.status === 'outgoing' || vcState.status === 'incoming')) {
+    return true;
+  }
+  // 2. User is actively typing inside chat message input
+  const chatTextInput = document.getElementById('chatTextInput');
+  if (chatTextInput && chatTextInput.value && chatTextInput.value.trim().length > 0) {
+    return true;
+  }
+  // 3. User is actively focused inside any text input or textarea
+  if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+    return true;
+  }
+  // 4. User is actively recording a voice note
+  const voiceRecBar = document.getElementById('chatVoiceRecordBar');
+  if (voiceRecBar && !voiceRecBar.classList.contains('is-hidden') && voiceRecBar.style.display !== 'none') {
+    return true;
+  }
+  return false;
+}
+
+function showAppUpdatePrompt(worker = null) {
+  if (worker) activeWaitingWorker = worker;
   const banner = document.getElementById('appUpdateBanner');
   if (banner) {
     banner.classList.remove('is-hidden');
-    try {
-      playTone(700, 0.2);
-    } catch (e) {}
+    banner.style.display = 'flex';
+  }
+}
+
+function dismissAppUpdatePrompt() {
+  const banner = document.getElementById('appUpdateBanner');
+  if (banner) {
+    banner.classList.add('is-hidden');
+    banner.style.display = 'none';
   }
 }
 
 function setupPWAandUpdates() {
-  // 1. Silent Background Auto-Update Engine
+  // 1. Graceful PWA Auto-Update Engine with Call / Typing / Voice Note Safety
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').then((registration) => {
-      // Auto-activate waiting worker immediately
+      // Check if a worker is already waiting from previous session
       if (registration.waiting) {
-        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        activeWaitingWorker = registration.waiting;
+        showAppUpdatePrompt(registration.waiting);
       }
 
+      // Detect when a newly downloaded service worker finishes installing
       registration.addEventListener('updatefound', () => {
         const newWorker = registration.installing;
         if (newWorker) {
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed') {
-              newWorker.postMessage({ type: 'SKIP_WAITING' });
+              if (navigator.serviceWorker.controller) {
+                // An active controller exists -> genuine new version installed & waiting
+                activeWaitingWorker = newWorker;
+                showAppUpdatePrompt(newWorker);
+              }
             }
           });
         }
@@ -6141,11 +6175,15 @@ function setupPWAandUpdates() {
       // Periodically check for updates silently in the background
       setInterval(() => {
         registration.update().catch(() => {});
-      }, 30000);
+      }, 45000);
 
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
           registration.update().catch(() => {});
+          if (registration.waiting) {
+            activeWaitingWorker = registration.waiting;
+            showAppUpdatePrompt(registration.waiting);
+          }
           if (typeof firebaseDb !== 'undefined' && firebaseDb) {
             try { firebaseDb.goOnline(); } catch (e) {}
           }
@@ -6191,25 +6229,44 @@ function setupPWAandUpdates() {
       console.warn('PWA Service Worker registration skipped:', err);
     });
 
-    // When the new worker takes control, save data and seamlessly refresh to new version
+    // When the new worker takes control (via user tapping update or next cold launch)
     let isRefreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (isRefreshing) return;
+      // Guard: Never reload while in a call, actively typing, or recording voice note
+      if (isUserBusyWithInteractiveTask()) {
+        console.log('PWA: Service worker activated, reload deferred (user is busy with call/typing/voice)');
+        showAppUpdatePrompt(activeWaitingWorker);
+        return;
+      }
       isRefreshing = true;
-      if (appState) saveAppState(appState);
-      console.log('App auto-updated silently in the background ✨');
+      if (appState) saveAppState(appState, true);
+      console.log('App updated to new version ✨');
       window.location.reload();
     });
   }
 
-  // 2. Hide any update banner permanently (Silent Auto-Update Mode)
-  const banner = document.getElementById('appUpdateBanner');
-  if (banner) {
-    banner.classList.add('is-hidden');
-    banner.style.display = 'none';
+  // 2. Hook up Update Prompt Buttons
+  const updateBtn = document.getElementById('updateAppBtn');
+  if (updateBtn) {
+    updateBtn.addEventListener('click', () => {
+      if (appState) saveAppState(appState, true);
+      if (activeWaitingWorker) {
+        activeWaitingWorker.postMessage({ type: 'SKIP_WAITING' });
+      } else {
+        window.location.reload();
+      }
+    });
   }
 
-  // 4. PWA "Add to Home Screen" Install Prompt Handler
+  const dismissBtn = document.getElementById('dismissUpdateBannerBtn');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', () => {
+      dismissAppUpdatePrompt();
+    });
+  }
+
+  // 3. PWA "Add to Home Screen" Install Prompt Handler
   let deferredInstallPrompt = null;
   const installBtn = document.getElementById('installPwaBtn');
 
@@ -6240,7 +6297,7 @@ function setupPWAandUpdates() {
   });
 }
 
-// Automatic Cache Purge & Live Version Verifier
+// Automatic Cache Purge & Live Version Verifier (Safe Guarded)
 async function checkAndApplyForcedAppUpdate() {
   try {
     const res = await fetch('./version.json?nocache=' + Date.now(), { cache: 'no-store' });
@@ -6249,19 +6306,18 @@ async function checkAndApplyForcedAppUpdate() {
     const storedVersion = localStorage.getItem('our_story_app_version');
     if (cloudData && cloudData.version) {
       if (storedVersion && storedVersion !== cloudData.version) {
-        console.log(`[PWA Auto-Update] Updating app from ${storedVersion} -> ${cloudData.version}`);
-        localStorage.setItem('our_story_app_version', cloudData.version);
-        if ('caches' in window) {
-          const cacheKeys = await caches.keys();
-          await Promise.all(cacheKeys.map(k => caches.delete(k)));
+        console.log(`[PWA Version Check] New version on server: ${cloudData.version} (stored: ${storedVersion})`);
+        if (isUserBusyWithInteractiveTask()) {
+          showAppUpdatePrompt(activeWaitingWorker);
+          return;
         }
+        localStorage.setItem('our_story_app_version', cloudData.version);
         if ('serviceWorker' in navigator) {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          for (const reg of regs) {
-            await reg.unregister();
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg) {
+            reg.update().catch(() => {});
           }
         }
-        window.location.reload(true);
       } else {
         localStorage.setItem('our_story_app_version', cloudData.version);
       }

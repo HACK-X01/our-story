@@ -3,13 +3,13 @@
    Himanshu & Gullu Couple App
    ========================================================================== */
 
-const CACHE_NAME = 'our-story-v52';
+const CACHE_NAME = 'our-story-v53';
 
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './styles.css?v=56',
-  './script.js?v=56',
+  './styles.css?v=57',
+  './script.js?v=57',
   './paho-mqtt.min.js',
   './manifest.json',
   './version.json',
@@ -18,9 +18,8 @@ const ASSETS_TO_CACHE = [
   './apple-touch-icon.png'
 ];
 
-// 1. Install & Precache App Shell
+// 1. Install & Precache App Shell (Waits for safe activation to avoid interrupting calls/typing)
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
