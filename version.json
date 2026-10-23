@@ -1,5 +1,5 @@
 {
-  "version": "2.6.2",
-  "buildTime": 1792728000000,
-  "notes": "v2.6.2: Fixed typing lag (eliminated 10-15s background polling freezes & throttled typing events), restored smooth mobile touch scrolling with pan-y, enhanced 350ms long-press context menu for reply and edit, and added authentic WhatsApp slide-to-reply gesture."
+  "version": "2.6.3",
+  "buildTime": 1792732000000,
+  "notes": "v2.6.3 (Phase 1 Step 1): Offloaded heavy Base64 media (audio notes, documents, photos) to IndexedDB with 1s debounced saveAppState, legacy migration for both phones, and instant flush on app backgrounding."
 }

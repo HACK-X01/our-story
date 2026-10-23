@@ -430,12 +430,228 @@ function sanitizeAppStateArrays(state) {
   return state;
 }
 
+/* ==========================================================================
+   OFFLINE MEDIA STORAGE & INDEXEDDB ENGINE (Zero-Freeze Async Blob Storage)
+   Extracts Heavy Base64 Audio, Docs, & Images out of localStorage
+   ========================================================================== */
+
+const IDB_DATABASE_NAME = 'OurStoryMediaDB';
+const IDB_DATABASE_VERSION = 1;
+const IDB_STORE_NAME = 'media_blobs';
+let mediaIDBInstance = null;
+const mediaMemoryCache = new Map();
+
+function openMediaDB() {
+  if (mediaIDBInstance) return Promise.resolve(mediaIDBInstance);
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    try {
+      const request = indexedDB.open(IDB_DATABASE_NAME, IDB_DATABASE_VERSION);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(IDB_STORE_NAME)) {
+          db.createObjectStore(IDB_STORE_NAME, { keyPath: 'id' });
+        }
+      };
+      request.onsuccess = (e) => {
+        mediaIDBInstance = e.target.result;
+        resolve(mediaIDBInstance);
+      };
+      request.onerror = (e) => {
+        console.warn('IndexedDB open error:', e);
+        resolve(null);
+      };
+    } catch (err) {
+      console.warn('IndexedDB initialization failed:', err);
+      resolve(null);
+    }
+  });
+}
+
+function saveMediaBlobToIDB(id, base64Data) {
+  if (!id || !base64Data) return Promise.resolve(false);
+  mediaMemoryCache.set(id, base64Data);
+
+  return openMediaDB().then((db) => {
+    if (!db) return false;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction([IDB_STORE_NAME], 'readwrite');
+        const store = tx.objectStore(IDB_STORE_NAME);
+        store.put({ id, data: base64Data, updatedAt: Date.now() });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  });
+}
+
+function getMediaBlobFromIDB(id) {
+  if (!id) return Promise.resolve(null);
+  if (mediaMemoryCache.has(id)) {
+    return Promise.resolve(mediaMemoryCache.get(id));
+  }
+
+  return openMediaDB().then((db) => {
+    if (!db) return null;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction([IDB_STORE_NAME], 'readonly');
+        const store = tx.objectStore(IDB_STORE_NAME);
+        const req = store.get(id);
+        req.onsuccess = () => {
+          if (req.result && req.result.data) {
+            mediaMemoryCache.set(id, req.result.data);
+            resolve(req.result.data);
+          } else {
+            resolve(null);
+          }
+        };
+        req.onerror = () => resolve(null);
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  });
+}
+
+function resolveMediaUrl(urlOrRef) {
+  if (!urlOrRef) return Promise.resolve('');
+  if (typeof urlOrRef !== 'string') return Promise.resolve(urlOrRef);
+  if (!urlOrRef.startsWith('[IDB]:')) return Promise.resolve(urlOrRef);
+
+  const key = urlOrRef.replace('[IDB]:', '');
+  if (mediaMemoryCache.has(key)) {
+    return Promise.resolve(mediaMemoryCache.get(key));
+  }
+  return getMediaBlobFromIDB(key).then(data => data || '');
+}
+
+// Strip heavy Base64 media before writing to localStorage, persisting into IndexedDB
+function stripAndPersistMediaBlobs(state) {
+  if (!state || typeof state !== 'object') return state;
+  const stripped = { ...state };
+
+  if (Array.isArray(state.chatMessages)) {
+    stripped.chatMessages = state.chatMessages.map(msg => {
+      if (!msg) return msg;
+      let clone = null;
+
+      if (msg.imageData && msg.imageData.startsWith('data:')) {
+        const key = 'media_' + msg.id + '_img';
+        saveMediaBlobToIDB(key, msg.imageData);
+        if (!clone) clone = { ...msg };
+        clone.imageData = '[IDB]:' + key;
+      }
+
+      if (msg.audioData && msg.audioData.startsWith('data:')) {
+        const key = 'media_' + msg.id + '_audio';
+        saveMediaBlobToIDB(key, msg.audioData);
+        if (!clone) clone = { ...msg };
+        clone.audioData = '[IDB]:' + key;
+      }
+
+      if (msg.docData && msg.docData.startsWith('data:')) {
+        const key = 'media_' + msg.id + '_doc';
+        saveMediaBlobToIDB(key, msg.docData);
+        if (!clone) clone = { ...msg };
+        clone.docData = '[IDB]:' + key;
+      }
+
+      return clone || msg;
+    });
+  }
+
+  if (Array.isArray(state.memories)) {
+    stripped.memories = state.memories.map(mem => {
+      if (!mem) return mem;
+      if (mem.photoUrl && mem.photoUrl.startsWith('data:')) {
+        const key = 'media_mem_' + mem.id + '_img';
+        saveMediaBlobToIDB(key, mem.photoUrl);
+        return { ...mem, photoUrl: '[IDB]:' + key };
+      }
+      return mem;
+    });
+  }
+
+  return stripped;
+}
+
+// Migrate any legacy Base64 media from existing phones into IndexedDB without losing any chats/memories
+function migrateLegacyMediaToIndexedDB(state) {
+  if (!state || typeof state !== 'object') return state;
+  let hasLegacy = false;
+
+  if (Array.isArray(state.chatMessages)) {
+    state.chatMessages.forEach(msg => {
+      if (!msg) return;
+      if (msg.imageData && msg.imageData.startsWith('data:')) {
+        const key = 'media_' + msg.id + '_img';
+        saveMediaBlobToIDB(key, msg.imageData);
+        hasLegacy = true;
+      }
+      if (msg.audioData && msg.audioData.startsWith('data:')) {
+        const key = 'media_' + msg.id + '_audio';
+        saveMediaBlobToIDB(key, msg.audioData);
+        hasLegacy = true;
+      }
+      if (msg.docData && msg.docData.startsWith('data:')) {
+        const key = 'media_' + msg.id + '_doc';
+        saveMediaBlobToIDB(key, msg.docData);
+        hasLegacy = true;
+      }
+    });
+  }
+
+  if (Array.isArray(state.memories)) {
+    state.memories.forEach(mem => {
+      if (mem && mem.photoUrl && mem.photoUrl.startsWith('data:')) {
+        const key = 'media_mem_' + mem.id + '_img';
+        saveMediaBlobToIDB(key, mem.photoUrl);
+        hasLegacy = true;
+      }
+    });
+  }
+
+  // Pre-load the latest 35 messages media into RAM cache for 0ms access
+  if (Array.isArray(state.chatMessages)) {
+    state.chatMessages.slice(-35).forEach(msg => {
+      if (!msg) return;
+      if (msg.imageData && msg.imageData.startsWith('[IDB]:')) {
+        getMediaBlobFromIDB(msg.imageData.replace('[IDB]:', ''));
+      }
+      if (msg.audioData && msg.audioData.startsWith('[IDB]:')) {
+        getMediaBlobFromIDB(msg.audioData.replace('[IDB]:', ''));
+      }
+      if (msg.docData && msg.docData.startsWith('[IDB]:')) {
+        getMediaBlobFromIDB(msg.docData.replace('[IDB]:', ''));
+      }
+    });
+  }
+
+  if (hasLegacy) {
+    try {
+      const stripped = stripAndPersistMediaBlobs(state);
+      localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(stripped));
+      console.log('✅ Successfully migrated legacy Base64 media to IndexedDB');
+    } catch (e) {
+      console.warn('Migration save warning:', e);
+    }
+  }
+
+  return state;
+}
+
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
   try {
     const primary = localStorage.getItem(PERMANENT_STORAGE_KEY);
     if (primary) {
-      const data = sanitizeAppStateArrays(JSON.parse(primary));
+      const rawData = sanitizeAppStateArrays(JSON.parse(primary));
+      const data = migrateLegacyMediaToIndexedDB(rawData);
       // Cleanup stale test locations older than 6 hours so partner location is not stuck with identical coordinates
       if (data && data.locations) {
         const now = Date.now();
@@ -465,8 +681,10 @@ function getStoredCoupleData() {
           const parsed = JSON.parse(data);
           if (parsed && (parsed.memories || parsed.coupons || parsed.currentQA)) {
             const sanitized = sanitizeAppStateArrays(parsed);
-            localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(sanitized));
-            return sanitized;
+            const migrated = migrateLegacyMediaToIndexedDB(sanitized);
+            const stripped = stripAndPersistMediaBlobs(migrated);
+            localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(stripped));
+            return migrated;
           }
         } catch (e) {}
       }
@@ -477,15 +695,60 @@ function getStoredCoupleData() {
   return null;
 }
 
-function saveAppState(newState) {
-  if (!newState) return;
-  sanitizeAppStateArrays(newState);
-  appState = newState;
+let saveAppStateDebounceTimer = null;
+let hasPendingAppStateSave = false;
+
+// Immediate flush of debounced state to disk (prevents any data loss on app close / backgrounding)
+function flushPendingSaveAppState() {
+  if (saveAppStateDebounceTimer) {
+    clearTimeout(saveAppStateDebounceTimer);
+    saveAppStateDebounceTimer = null;
+  }
+  if (!hasPendingAppStateSave || !appState) return;
+  hasPendingAppStateSave = false;
+
   try {
-    localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(appState));
+    const storagePayload = stripAndPersistMediaBlobs(appState);
+    localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(storagePayload));
   } catch (e) {
     console.warn('LocalStorage save failed:', e);
   }
+}
+
+// Debounced saveAppState (1-second debounce prevents blocking the main thread while typing/syncing)
+function saveAppState(newState, immediate = false) {
+  if (!newState) return;
+  sanitizeAppStateArrays(newState);
+  appState = newState;
+  hasPendingAppStateSave = true;
+
+  if (immediate) {
+    flushPendingSaveAppState();
+    return;
+  }
+
+  if (saveAppStateDebounceTimer) {
+    clearTimeout(saveAppStateDebounceTimer);
+  }
+
+  saveAppStateDebounceTimer = setTimeout(() => {
+    flushPendingSaveAppState();
+  }, 1000);
+}
+
+// Lifecycle listeners to flush saves immediately when switching apps or closing browser
+if (typeof window !== 'undefined') {
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushPendingSaveAppState();
+    }
+  });
+  window.addEventListener('pagehide', () => {
+    flushPendingSaveAppState();
+  });
+  window.addEventListener('beforeunload', () => {
+    flushPendingSaveAppState();
+  });
 }
 
 // Merge server and local states without losing any memories, answers, or coupons
@@ -3912,75 +4175,82 @@ function setupMemoryVault() {
 // Allows Himanshu & Gullu to download and preserve any memory anytime
 // ==========================================================================
 
-function downloadPhotoFile(src, filename = 'OurStory_Memory.jpg', caption = '') {
-  if (!src) {
+function downloadPhotoFile(rawSrc, filename = 'OurStory_Memory.jpg', caption = '') {
+  if (!rawSrc) {
     showToast('❌ Photo data not found!');
     return;
   }
 
-  try {
-    let cleanName = (filename || 'OurStory_Memory.jpg').replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-    if (!cleanName.toLowerCase().endsWith('.jpg') && !cleanName.toLowerCase().endsWith('.png')) {
-      cleanName += '.jpg';
+  resolveMediaUrl(rawSrc).then(src => {
+    if (!src) {
+      showToast('❌ Photo data not found!');
+      return;
     }
 
-    if (src.startsWith('data:')) {
-      const parts = src.split(',');
-      const mimeMatch = parts[0].match(/:(.*?);/);
-      const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-      const bstr = atob(parts[1]);
-      let n = bstr.length;
-      const u8arr = new Uint8Array(n);
-      while (n--) {
-        u8arr[n] = bstr.charCodeAt(n);
+    try {
+      let cleanName = (filename || 'OurStory_Memory.jpg').replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+      if (!cleanName.toLowerCase().endsWith('.jpg') && !cleanName.toLowerCase().endsWith('.png')) {
+        cleanName += '.jpg';
       }
-      const blob = new Blob([u8arr], { type: mime });
-      const blobUrl = URL.createObjectURL(blob);
 
+      if (src.startsWith('data:')) {
+        const parts = src.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        const blob = new Blob([u8arr], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = cleanName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+      } else {
+        fetch(src)
+          .then(res => res.blob())
+          .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = cleanName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+          })
+          .catch(() => {
+            const link = document.createElement('a');
+            link.href = src;
+            link.download = cleanName;
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          });
+      }
+
+      playTone(720, 0.15);
+      showToast(`⬇️ Photo download ho gayi! ("${cleanName}") 📸✨`);
+    } catch (err) {
+      console.error('Download error:', err);
       const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = cleanName;
+      link.href = src;
+      link.download = filename || 'OurStory_Photo.jpg';
+      link.target = '_blank';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
-    } else {
-      fetch(src)
-        .then(res => res.blob())
-        .then(blob => {
-          const blobUrl = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          link.download = cleanName;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
-        })
-        .catch(() => {
-          const link = document.createElement('a');
-          link.href = src;
-          link.download = cleanName;
-          link.target = '_blank';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        });
+      showToast('⬇️ Photo download started! 📸');
     }
-
-    playTone(720, 0.15);
-    showToast(`⬇️ Photo download ho gayi! ("${cleanName}") 📸✨`);
-  } catch (err) {
-    console.error('Download error:', err);
-    const link = document.createElement('a');
-    link.href = src;
-    link.download = filename || 'OurStory_Photo.jpg';
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast('⬇️ Photo download started! 📸');
-  }
+  });
 }
 
 async function sharePhotoFile(src, filename = 'OurStory_Memory.jpg', caption = '') {
@@ -6178,43 +6448,46 @@ let currentActiveVoiceBtn = null;
 function setupVoicePlayListener(btn) {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const audioSrc = btn.getAttribute('data-audio-src');
-    if (!audioSrc) return;
+    const rawAudioSrc = btn.getAttribute('data-audio-src');
+    if (!rawAudioSrc) return;
 
-    const bubble = btn.closest('.chat-voice-bubble');
-    const speedPill = bubble ? bubble.querySelector('.voice-speed-pill') : null;
-    const speedRate = speedPill ? (parseFloat(speedPill.getAttribute('data-speed')) || 1.0) : 1.0;
+    resolveMediaUrl(rawAudioSrc).then(audioSrc => {
+      if (!audioSrc) return;
 
-    btn.classList.add('listened');
+      const bubble = btn.closest('.chat-voice-bubble');
+      const speedPill = bubble ? bubble.querySelector('.voice-speed-pill') : null;
+      const speedRate = speedPill ? (parseFloat(speedPill.getAttribute('data-speed')) || 1.0) : 1.0;
 
-    if (currentActiveVoiceBtn === btn && currentActiveVoicePlayer) {
-      if (currentActiveVoicePlayer.paused) {
-        currentActiveVoicePlayer.playbackRate = speedRate;
-        currentActiveVoicePlayer.play().then(() => {
-          btn.textContent = '⏸';
-          if (bubble) bubble.classList.add('playing');
-        }).catch(() => {});
-      } else {
+      btn.classList.add('listened');
+
+      if (currentActiveVoiceBtn === btn && currentActiveVoicePlayer) {
+        if (currentActiveVoicePlayer.paused) {
+          currentActiveVoicePlayer.playbackRate = speedRate;
+          currentActiveVoicePlayer.play().then(() => {
+            btn.textContent = '⏸';
+            if (bubble) bubble.classList.add('playing');
+          }).catch(() => {});
+        } else {
+          currentActiveVoicePlayer.pause();
+          btn.textContent = '▶';
+          if (bubble) bubble.classList.remove('playing');
+        }
+        return;
+      }
+
+      if (currentActiveVoicePlayer) {
         currentActiveVoicePlayer.pause();
-        btn.textContent = '▶';
-        if (bubble) bubble.classList.remove('playing');
+        if (currentActiveVoiceBtn) {
+          currentActiveVoiceBtn.textContent = '▶';
+          const prevBubble = currentActiveVoiceBtn.closest('.chat-voice-bubble');
+          if (prevBubble) prevBubble.classList.remove('playing');
+        }
       }
-      return;
-    }
 
-    if (currentActiveVoicePlayer) {
-      currentActiveVoicePlayer.pause();
-      if (currentActiveVoiceBtn) {
-        currentActiveVoiceBtn.textContent = '▶';
-        const prevBubble = currentActiveVoiceBtn.closest('.chat-voice-bubble');
-        if (prevBubble) prevBubble.classList.remove('playing');
-      }
-    }
-
-    const player = new Audio(audioSrc);
-    player.playbackRate = speedRate;
-    currentActiveVoicePlayer = player;
-    currentActiveVoiceBtn = btn;
+      const player = new Audio(audioSrc);
+      player.playbackRate = speedRate;
+      currentActiveVoicePlayer = player;
+      currentActiveVoiceBtn = btn;
 
     btn.textContent = '⏸';
     if (bubble) bubble.classList.add('playing');
@@ -6237,6 +6510,7 @@ function setupVoicePlayListener(btn) {
       console.warn('Voice playback failed:', err);
       btn.textContent = '▶';
       if (bubble) bubble.classList.remove('playing');
+    });
     });
   });
 }
@@ -7562,13 +7836,18 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
     const captionHtml = (msg.caption || (msg.text && msg.text !== 'Shared a photo 📷'))
       ? `<p class="chat-msg-caption">${escapeChatHtml(msg.caption || msg.text)}</p>`
       : '';
+    let imageSrc = msg.imageData || msg.text || '';
+    if (imageSrc.startsWith('[IDB]:')) {
+      const key = imageSrc.replace('[IDB]:', '');
+      imageSrc = mediaMemoryCache.get(key) || '';
+    }
     bubbleInnerHtml = `
       <div class="chat-msg-bubble">
         <button type="button" class="bubble-reply-action-btn" title="Reply ↩">↩</button>
         ${quoteHtml}
         ${!isMe && !isConsecutive ? `<span class="chat-msg-sender-name">${escapeChatHtml(senderDisplayName)}</span>` : ''}
         <div class="chat-image-msg-bubble">
-          <img class="chat-msg-image-thumb" src="${msg.imageData || msg.text}" alt="Shared photo" loading="lazy">
+          <img class="chat-msg-image-thumb" src="${imageSrc}" alt="Shared photo" loading="lazy">
           <button type="button" class="chat-image-download-btn" title="Download Photo to Phone 💾">⬇️</button>
           ${captionHtml}
         </div>
@@ -7760,6 +8039,27 @@ function createChatMessageDOMRow(msg, isConsecutive = false, hasTail = true) {
       const cap = msg.caption || (msg.text !== 'Shared a photo 📷' ? msg.text : '');
       downloadPhotoFile(thumb.src, `OurStory_Chat_${Date.now()}.jpg`, cap);
     });
+  }
+
+  // Asynchronous hydration for IndexedDB media references
+  if (msg.type === 'image' && msg.imageData && msg.imageData.startsWith('[IDB]:')) {
+    const key = msg.imageData.replace('[IDB]:', '');
+    if (!mediaMemoryCache.has(key)) {
+      getMediaBlobFromIDB(key).then(actualUrl => {
+        if (actualUrl && thumb) thumb.src = actualUrl;
+      });
+    }
+  }
+  if (msg.type === 'doc' && msg.docData && msg.docData.startsWith('[IDB]:')) {
+    const key = msg.docData.replace('[IDB]:', '');
+    if (!mediaMemoryCache.has(key)) {
+      getMediaBlobFromIDB(key).then(actualUrl => {
+        if (actualUrl) {
+          const docLink = row.querySelector('.chat-doc-card a.chat-image-download-btn');
+          if (docLink) docLink.href = actualUrl;
+        }
+      });
+    }
   }
 
   // Call Back Button
@@ -9877,8 +10177,8 @@ function triggerPhotoSelection(sourceType) {
   }
 }
 
-function openPhotoLightbox(src, title = 'Our Memory 📸', caption = '', subText = '') {
-  if (!src) return;
+function openPhotoLightbox(rawSrc, title = 'Our Memory 📸', caption = '', subText = '') {
+  if (!rawSrc) return;
   const modal = document.getElementById('photoLightboxModal');
   const img = document.getElementById('photoLightboxImg');
   const cap = document.getElementById('photoLightboxCaption');
@@ -9888,7 +10188,6 @@ function openPhotoLightbox(src, title = 'Our Memory 📸', caption = '', subText
   const footerDownloadBtn = document.getElementById('lightboxFooterDownloadBtn');
   const footerShareBtn = document.getElementById('lightboxFooterShareBtn');
 
-  if (img) img.src = src;
   if (titleEl) titleEl.textContent = title;
   if (cap) cap.textContent = caption || '';
   if (subEl) subEl.textContent = subText || '';
@@ -9898,21 +10197,21 @@ function openPhotoLightbox(src, title = 'Our Memory 📸', caption = '', subText
   if (downloadBtn) {
     downloadBtn.onclick = (e) => {
       e.preventDefault();
-      downloadPhotoFile(src, cleanFilename, caption);
+      downloadPhotoFile(rawSrc, cleanFilename, caption);
     };
   }
 
   if (footerDownloadBtn) {
     footerDownloadBtn.onclick = (e) => {
       e.preventDefault();
-      downloadPhotoFile(src, cleanFilename, caption);
+      downloadPhotoFile(rawSrc, cleanFilename, caption);
     };
   }
 
   if (footerShareBtn) {
     footerShareBtn.onclick = (e) => {
       e.preventDefault();
-      sharePhotoFile(src, cleanFilename, caption);
+      sharePhotoFile(rawSrc, cleanFilename, caption);
     };
   }
 
@@ -9920,6 +10219,10 @@ function openPhotoLightbox(src, title = 'Our Memory 📸', caption = '', subText
     modal.classList.remove('is-hidden');
     modal.classList.add('open');
   }
+
+  resolveMediaUrl(rawSrc).then(src => {
+    if (src && img) img.src = src;
+  });
 }
 
 function closePhotoLightbox() {
