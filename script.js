@@ -1280,6 +1280,18 @@ function setupFirebaseRealtimeListeners() {
     }
   }, true);
 
+  // 9. Firebase Connection Status (.info/connected)
+  attachFirebaseListener('firebase_connected', firebaseDb.ref('.info/connected'), 'value', (snapshot) => {
+    const connected = snapshot.val() === true;
+    isFirebaseConnected = connected;
+    if (connected) {
+      updateSyncIndicator(true);
+      if (typeof triggerOutboxFlush === 'function') triggerOutboxFlush();
+    } else {
+      updateSyncIndicator();
+    }
+  }, true);
+
   // Attach tab-scoped listeners for initially active tab
   const activePane = document.querySelector('.tab-pane.active');
   const activeTabId = activePane ? activePane.id : 'panePulse';
@@ -1774,10 +1786,11 @@ function initCloudSync() {
         console.log('Connected to EMQX Cloud Relay! Subscribing to couple topics...');
         // Subscribe to all topics under our couple prefix
         mqttClient.subscribe(SYNC_TOPIC_PREFIX + '#', { qos: 0 });
+        if (typeof triggerOutboxFlush === 'function') triggerOutboxFlush();
       },
       onFailure: (err) => {
         isMqttConnected = false;
-        updateSyncIndicator(false, 'Sync Reconnecting...');
+        updateSyncIndicator();
         console.log('MQTT connection failed, retrying in 8s:', err);
         setTimeout(initCloudSync, 8000);
       }
@@ -1805,23 +1818,396 @@ function initCloudSync() {
   }, 3500);
 }
 
-function updateSyncIndicator(online, text) {
+// ==========================================================================
+// PERSISTENT OFFLINE OUTBOX QUEUE & CONNECTIVITY COORDINATOR (STEP 4C)
+// ==========================================================================
+const OUTBOX_STORAGE_KEY = 'our_story_offline_outbox';
+let isFlushingOutbox = false;
+let outboxFlushTimer = null;
+
+function getOutboxQueue() {
+  try {
+    const raw = localStorage.getItem(OUTBOX_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.warn('[Outbox] Failed to read queue from storage:', e);
+    return [];
+  }
+}
+
+function saveOutboxQueue(queue) {
+  try {
+    localStorage.setItem(OUTBOX_STORAGE_KEY, JSON.stringify(Array.isArray(queue) ? queue : []));
+  } catch (e) {
+    console.warn('[Outbox] Failed to save queue to storage:', e);
+  }
+}
+
+function isAppOnlineAndConnected() {
+  const isNetOnline = typeof navigator === 'undefined' || !('onLine' in navigator) || navigator.onLine;
+  if (!isNetOnline) return false;
+  return isFirebaseConnected || isMqttConnected;
+}
+
+function enqueueOutboxAction(actionType, payload, messageId = null) {
+  const queue = getOutboxQueue();
+  const msgId = messageId || (payload && (payload.msgId || payload.id));
+
+  // Coalesce edits, reactions, and deletions on the same message
+  if (msgId) {
+    if (actionType === 'CHAT_EDIT') {
+      const pendingMsg = queue.find(it => it.actionType === 'CHAT_MESSAGE' && it.messageId === msgId);
+      if (pendingMsg && pendingMsg.payload) {
+        pendingMsg.payload.text = payload.newText;
+        pendingMsg.payload.edited = true;
+        pendingMsg.payload.editedAt = payload.editedAt || Date.now();
+        saveOutboxQueue(queue);
+        triggerOutboxFlush();
+        return;
+      }
+    } else if (actionType === 'CHAT_REACTION') {
+      const pendingMsg = queue.find(it => it.actionType === 'CHAT_MESSAGE' && it.messageId === msgId);
+      if (pendingMsg && pendingMsg.payload) {
+        pendingMsg.payload.reaction = payload.reaction;
+        saveOutboxQueue(queue);
+        triggerOutboxFlush();
+        return;
+      }
+      const existingReaction = queue.find(it => it.actionType === 'CHAT_REACTION' && it.messageId === msgId);
+      if (existingReaction && existingReaction.payload) {
+        existingReaction.payload.reaction = payload.reaction;
+        saveOutboxQueue(queue);
+        triggerOutboxFlush();
+        return;
+      }
+    } else if (actionType === 'CHAT_DELETE') {
+      const pendingMsgIdx = queue.findIndex(it => it.actionType === 'CHAT_MESSAGE' && it.messageId === msgId);
+      if (pendingMsgIdx !== -1) {
+        queue.splice(pendingMsgIdx, 1);
+        saveOutboxQueue(queue);
+        return;
+      }
+      const editIdx = queue.findIndex(it => it.actionType === 'CHAT_EDIT' && it.messageId === msgId);
+      if (editIdx !== -1) queue.splice(editIdx, 1);
+    }
+  }
+
+  queue.push({
+    queueId: 'outbox_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+    actionType,
+    messageId: msgId,
+    payload,
+    createdAt: Date.now(),
+    attempts: 0,
+    lastAttempt: 0
+  });
+
+  saveOutboxQueue(queue);
+  triggerOutboxFlush();
+}
+
+async function syncActionToFirebasePromise(type, data) {
+  const config = getStoredFirebaseConfig();
+  if (!config || !config.databaseURL) {
+    return true; // No cloud DB configured, treat as local success
+  }
+  const dbUrl = config.databaseURL.trim().replace(/\/$/, '');
+
+  let sdkSuccess = false;
+
+  // 1. Firebase Compat SDK (Realtime WebSocket)
+  if (firebaseDb && isFirebaseConnected) {
+    try {
+      if (type === 'CHAT_MESSAGE') {
+        await firebaseDb.ref('our_story/chat_messages/' + data.id).set(data);
+        sdkSuccess = true;
+      } else if (type === 'CHAT_EDIT') {
+        await firebaseDb.ref('our_story/chat_messages/' + data.msgId).update({
+          text: data.newText,
+          edited: true,
+          editedAt: data.editedAt || Date.now()
+        });
+        sdkSuccess = true;
+      } else if (type === 'CHAT_DELETE') {
+        await firebaseDb.ref('our_story/chat_messages/' + data.msgId).update({
+          deleted: true,
+          text: 'This message was deleted',
+          deletedAt: data.deletedAt || Date.now()
+        });
+        sdkSuccess = true;
+      } else if (type === 'CHAT_REACTION') {
+        await firebaseDb.ref('our_story/chat_messages/' + data.msgId).update({
+          reaction: data.reaction || null
+        });
+        sdkSuccess = true;
+      }
+    } catch (err) {
+      console.warn('[Outbox] Firebase SDK write failed, attempting REST fallback:', err);
+    }
+  }
+
+  if (sdkSuccess) return true;
+
+  // 2. Direct HTTPS REST fallback with 8-second timeout
+  try {
+    let endpoint = `${dbUrl}/our_story`;
+    let method = 'PATCH';
+    let body = {};
+
+    if (type === 'CHAT_MESSAGE') {
+      endpoint += `/chat_messages/${data.id}.json`;
+      method = 'PUT';
+      body = data;
+    } else if (type === 'CHAT_EDIT') {
+      endpoint += `/chat_messages/${data.msgId}.json`;
+      method = 'PATCH';
+      body = { text: data.newText, edited: true, editedAt: data.editedAt || Date.now() };
+    } else if (type === 'CHAT_DELETE') {
+      endpoint += `/chat_messages/${data.msgId}.json`;
+      method = 'PATCH';
+      body = { deleted: true, text: 'This message was deleted', deletedAt: data.deletedAt || Date.now() };
+    } else if (type === 'CHAT_REACTION') {
+      endpoint += `/chat_messages/${data.msgId}.json`;
+      method = 'PATCH';
+      body = { reaction: data.reaction || null };
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(endpoint, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      isFirebaseConnected = true;
+      return true;
+    }
+  } catch (err) {
+    console.warn('[Outbox] Firebase REST write failed:', err);
+  }
+
+  return false;
+}
+
+async function dispatchOutboxAction(item) {
+  if (!item || !item.actionType) return true;
+
+  if (item.actionType === 'CHAT_MESSAGE') {
+    const msg = { ...item.payload };
+    if (msg.imageData && typeof msg.imageData === 'string' && msg.imageData.startsWith('[IDB]:')) {
+      msg.imageData = await resolveMediaUrl(msg.imageData);
+    }
+    if (msg.audioData && typeof msg.audioData === 'string' && msg.audioData.startsWith('[IDB]:')) {
+      msg.audioData = await resolveMediaUrl(msg.audioData);
+    }
+    if (msg.docData && typeof msg.docData === 'string' && msg.docData.startsWith('[IDB]:')) {
+      msg.docData = await resolveMediaUrl(msg.docData);
+    }
+
+    const saved = await syncActionToFirebasePromise('CHAT_MESSAGE', msg);
+    if (!saved) return false;
+
+    broadcastUpdate('CHAT_MESSAGE', msg, false, true);
+    return true;
+  }
+
+  if (item.actionType === 'CHAT_EDIT') {
+    const saved = await syncActionToFirebasePromise('CHAT_EDIT', item.payload);
+    if (!saved) return false;
+    broadcastUpdate('CHAT_EDIT', item.payload, true, true);
+    return true;
+  }
+
+  if (item.actionType === 'CHAT_DELETE') {
+    const saved = await syncActionToFirebasePromise('CHAT_DELETE', item.payload);
+    if (!saved) return false;
+    broadcastUpdate('CHAT_DELETE', item.payload, true, true);
+    return true;
+  }
+
+  if (item.actionType === 'CHAT_REACTION') {
+    const saved = await syncActionToFirebasePromise('CHAT_REACTION', item.payload);
+    if (!saved) return false;
+    broadcastUpdate('CHAT_REACTION', item.payload, true, true);
+    return true;
+  }
+
+  return true;
+}
+
+async function flushOfflineOutbox() {
+  if (isFlushingOutbox) return;
+  const isNetOnline = typeof navigator === 'undefined' || !('onLine' in navigator) || navigator.onLine;
+  if (!isNetOnline) {
+    updateSyncIndicator(false, 'Offline');
+    return;
+  }
+
+  const queue = getOutboxQueue();
+  if (!queue || queue.length === 0) return;
+
+  isFlushingOutbox = true;
+
+  try {
+    while (queue.length > 0) {
+      const item = queue[0];
+      const now = Date.now();
+
+      if (item.attempts > 0) {
+        const backoffMs = Math.min(30000, 1500 * Math.pow(2, item.attempts - 1));
+        const elapsed = now - (item.lastAttempt || 0);
+        if (elapsed < backoffMs) {
+          if (outboxFlushTimer) clearTimeout(outboxFlushTimer);
+          outboxFlushTimer = setTimeout(() => triggerOutboxFlush(), backoffMs - elapsed);
+          break;
+        }
+      }
+
+      item.lastAttempt = now;
+      let sendSuccess = false;
+
+      try {
+        sendSuccess = await dispatchOutboxAction(item);
+      } catch (err) {
+        console.warn('[Outbox] Dispatch error for action:', item.actionType, err);
+        sendSuccess = false;
+      }
+
+      if (sendSuccess) {
+        queue.shift();
+        saveOutboxQueue(queue);
+
+        if (item.actionType === 'CHAT_MESSAGE' && item.messageId) {
+          const targetMsg = appState?.chatMessages?.find(m => m.id === item.messageId);
+          if (targetMsg && targetMsg.status === 'pending') {
+            targetMsg.status = 'sent';
+            saveAppState(appState);
+            updateMessageTickDOM(item.messageId, 'sent');
+          }
+        }
+      } else {
+        item.attempts = (item.attempts || 0) + 1;
+        saveOutboxQueue(queue);
+        const backoffMs = Math.min(30000, 1500 * Math.pow(2, item.attempts - 1));
+        if (outboxFlushTimer) clearTimeout(outboxFlushTimer);
+        outboxFlushTimer = setTimeout(() => triggerOutboxFlush(), backoffMs);
+        break;
+      }
+    }
+  } finally {
+    isFlushingOutbox = false;
+  }
+}
+
+function triggerOutboxFlush() {
+  if (outboxFlushTimer) {
+    clearTimeout(outboxFlushTimer);
+    outboxFlushTimer = null;
+  }
+  outboxFlushTimer = setTimeout(() => {
+    flushOfflineOutbox();
+  }, 50);
+}
+
+function initOfflineOutbox() {
+  // Re-enqueue any orphan pending messages from local appState
+  if (appState && Array.isArray(appState.chatMessages)) {
+    const queue = getOutboxQueue();
+    let queueChanged = false;
+    appState.chatMessages.forEach(msg => {
+      if (msg && msg.sender === currentUser && msg.status === 'pending') {
+        const inQueue = queue.some(it => it.actionType === 'CHAT_MESSAGE' && it.messageId === msg.id);
+        if (!inQueue) {
+          queue.push({
+            queueId: 'outbox_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+            actionType: 'CHAT_MESSAGE',
+            messageId: msg.id,
+            payload: msg,
+            createdAt: msg.timestamp || Date.now(),
+            attempts: 0,
+            lastAttempt: 0
+          });
+          queueChanged = true;
+        }
+      }
+    });
+    if (queueChanged) saveOutboxQueue(queue);
+  }
+
+  // Network lifecycle triggers
+  window.addEventListener('online', () => {
+    console.log('[Network] Browser came online!');
+    updateSyncIndicator('connecting', 'Reconnecting to cloud...');
+    if (typeof initCloudSync === 'function') {
+      try { initCloudSync(); } catch (e) {}
+    }
+    if (typeof initFirebaseDatabase === 'function') {
+      try { initFirebaseDatabase(); } catch (e) {}
+    }
+    triggerOutboxFlush();
+  });
+
+  window.addEventListener('offline', () => {
+    console.log('[Network] Browser went offline!');
+    updateSyncIndicator(false, 'Offline - Actions queued in Outbox');
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      updateSyncIndicator();
+      triggerOutboxFlush();
+    }
+  });
+
+  updateSyncIndicator();
+
+  const isNetOnline = typeof navigator === 'undefined' || !('onLine' in navigator) || navigator.onLine;
+  if (isNetOnline) {
+    triggerOutboxFlush();
+  }
+}
+
+function updateSyncIndicator(state, text) {
   const pill = document.getElementById('liveSyncPill');
   if (!pill) return;
-  if (online) {
-    pill.classList.remove('offline');
-    pill.title = text || 'Live Cloud Sync Connected';
-    const label = pill.querySelector('.sync-label');
-    if (label) label.textContent = 'Live';
-  } else {
+  const label = pill.querySelector('.sync-label');
+
+  let mode = 'online';
+  const isNetOnline = typeof navigator === 'undefined' || !('onLine' in navigator) || navigator.onLine;
+
+  if (state === false || state === 'offline' || !isNetOnline) {
+    mode = 'offline';
+  } else if (state === 'connecting' || (!isFirebaseConnected && !isMqttConnected)) {
+    mode = 'connecting';
+  } else if (state === true || state === 'online' || isFirebaseConnected || isMqttConnected) {
+    mode = 'online';
+  }
+
+  if (mode === 'offline') {
+    pill.classList.remove('connecting');
     pill.classList.add('offline');
-    pill.title = text || 'Connecting...';
-    const label = pill.querySelector('.sync-label');
+    pill.title = text || 'Offline - Actions queued in Outbox';
+    if (label) label.textContent = 'Offline';
+  } else if (mode === 'connecting') {
+    pill.classList.remove('offline');
+    pill.classList.add('connecting');
+    pill.title = text || 'Connecting to live cloud sync...';
+    if (label) label.textContent = 'Connecting...';
+  } else {
+    pill.classList.remove('offline', 'connecting');
+    pill.title = text || 'Live Cloud Sync Connected ✨';
     if (label) label.textContent = 'Sync';
   }
 }
 
-function broadcastUpdate(type, data, retain = false) {
+function broadcastUpdate(type, data, retain = false, skipFirebaseSync = false) {
   const payload = {
     type,
     data,
@@ -1862,10 +2248,12 @@ function broadcastUpdate(type, data, retain = false) {
   }
 
   // 4. Cloud Firebase Realtime Database
-  try {
-    syncToFirebase(type, data);
-  } catch (e) {
-    console.warn('Firebase sync error in broadcastUpdate:', e);
+  if (!skipFirebaseSync) {
+    try {
+      syncToFirebase(type, data);
+    } catch (e) {
+      console.warn('Firebase sync error in broadcastUpdate:', e);
+    }
   }
 
   // 5. Cloud Push Notification for Closed App / Locked Phone (ntfy Web Push Gateway)
@@ -7866,7 +8254,9 @@ function getMessageStatus(msg) {
 function renderChatTicksHtml(msg, isMe) {
   if (!isMe) return '';
   const status = getMessageStatus(msg);
-  if (status === 'read') {
+  if (status === 'pending') {
+    return `<span class="chat-msg-ticks tick-pending" data-msg-id="${msg.id}" title="Pending / Offline">🕒</span>`;
+  } else if (status === 'read') {
     return `<span class="chat-msg-ticks tick-read" data-msg-id="${msg.id}" title="Read (Seen)">✓✓</span>`;
   } else if (status === 'delivered') {
     return `<span class="chat-msg-ticks tick-delivered" data-msg-id="${msg.id}" title="Delivered">✓✓</span>`;
@@ -7878,14 +8268,24 @@ function renderChatTicksHtml(msg, isMe) {
 function updateMessageTickDOM(msgId, newStatus) {
   const tickEl = document.querySelector(`.chat-msg-ticks[data-msg-id="${msgId}"]`);
   if (!tickEl) return;
-  if (newStatus === 'read') {
-    tickEl.className = 'chat-msg-ticks tick-read';
-    tickEl.textContent = '✓✓';
-    tickEl.title = 'Read (Seen)';
+  if (newStatus === 'pending') {
+    tickEl.className = 'chat-msg-ticks tick-pending';
+    tickEl.textContent = '🕒';
+    tickEl.title = 'Pending / Offline';
+  } else if (newStatus === 'sent') {
+    if (!tickEl.classList.contains('tick-read') && !tickEl.classList.contains('tick-delivered')) {
+      tickEl.className = 'chat-msg-ticks tick-sent';
+      tickEl.textContent = '✓';
+      tickEl.title = 'Sent';
+    }
   } else if (newStatus === 'delivered' && !tickEl.classList.contains('tick-read')) {
     tickEl.className = 'chat-msg-ticks tick-delivered';
     tickEl.textContent = '✓✓';
     tickEl.title = 'Delivered';
+  } else if (newStatus === 'read') {
+    tickEl.className = 'chat-msg-ticks tick-read';
+    tickEl.textContent = '✓✓';
+    tickEl.title = 'Read (Seen)';
   }
 }
 
@@ -8179,12 +8579,12 @@ function saveEditedMessage() {
     msg.edited = true;
     msg.editedAt = Date.now();
     saveAppState(appState);
-    broadcastUpdate('CHAT_EDIT', {
+    updateMessageEditDOM(msg.id, msg.text, msg.editedAt);
+    enqueueOutboxAction('CHAT_EDIT', {
       msgId: msg.id,
       newText: msg.text,
       editedAt: msg.editedAt
-    }, true);
-    updateMessageEditDOM(msg.id, msg.text, msg.editedAt);
+    }, msg.id);
     showToast('Message edited ✏️');
   }
   closeEditMessageModal();
@@ -8236,8 +8636,8 @@ function deleteMessageForEveryone() {
     msg.text = 'This message was deleted';
     msg.deletedAt = Date.now();
     saveAppState(appState);
-    broadcastUpdate('CHAT_DELETE', { msgId: msg.id, deletedAt: msg.deletedAt }, true);
     updateMessageDeletedDOM(msg.id);
+    enqueueOutboxAction('CHAT_DELETE', { msgId: msg.id, deletedAt: msg.deletedAt }, msg.id);
     showToast('Message deleted for everyone 🗑️');
   }
   closeDeleteMessageModal();
@@ -8982,10 +9382,13 @@ function reconcileChatMessagesDOM(incomingList) {
   if (!appState) appState = JSON.parse(JSON.stringify(DEFAULT_APP_STATE));
   if (!appState.chatMessages) appState.chatMessages = [];
 
-  // If chat is completely empty in DOM, render initial slice
+  // If chat is completely empty in DOM, render initial slice merged with local state
   const currentRows = listEl.querySelectorAll('.chat-msg-row');
   if (currentRows.length === 0) {
-    appState.chatMessages = sortChatMessagesAscending(incomingList).slice(-250);
+    const combinedMap = new Map();
+    (appState.chatMessages || []).forEach(m => { if (m && m.id) combinedMap.set(m.id, m); });
+    incomingList.forEach(m => { if (m && m.id) combinedMap.set(m.id, m); });
+    appState.chatMessages = sortChatMessagesAscending(Array.from(combinedMap.values())).slice(-250);
     saveAppState(appState);
     renderChatUI();
     return;
@@ -9150,7 +9553,7 @@ function sendChatMessage(text, type = 'text', extraData = {}) {
     text: text.trim(),
     timestamp: safeTimestamp,
     type: type,
-    status: 'sent', // Single grey tick initially
+    status: 'pending', // Starts pending with 🕒 icon; transitions to ✓ sent when flushed
     ...(replyData ? { replyTo: replyData } : {}),
     ...extraData
   };
@@ -9176,8 +9579,8 @@ function sendChatMessage(text, type = 'text', extraData = {}) {
   // Stop typing indicator on message send
   broadcastMyTypingStatus(false);
 
-  // Real-time broadcast
-  broadcastUpdate('CHAT_MESSAGE', msg);
+  // Enqueue in Outbox (Persistent FIFO queue with retry backoff)
+  enqueueOutboxAction('CHAT_MESSAGE', msg, msg.id);
 }
 
 function handleIncomingChatMessage(msg, isLocalBroadcast = false) {
@@ -9568,8 +9971,8 @@ function toggleMessageReaction(msgId, reactionEmoji = '❤️') {
 
   msg.reaction = msg.reaction === reactionEmoji ? null : reactionEmoji;
   saveAppState(appState);
-  broadcastUpdate('CHAT_REACTION', { msgId, reaction: msg.reaction }, true);
   updateMessageReactionDOM(msgId, msg.reaction);
+  enqueueOutboxAction('CHAT_REACTION', { msgId, reaction: msg.reaction }, msgId);
 }
 
 function handleIncomingChatReaction(data) {
@@ -11079,6 +11482,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize Live Location & Distance Radar
   safeInit('setupCoupleRadar', setupCoupleRadar);
+
+  // Initialize Persistent Offline Outbox Queue & Network Listeners (Step 4C)
+  safeInit('initOfflineOutbox', initOfflineOutbox);
 
   // Initialize Real-Time Cloud (MQTT WSS) & Cross-Tab Sync
   safeInit('initCloudSync', initCloudSync);

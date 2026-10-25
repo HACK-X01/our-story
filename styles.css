@@ -2291,9 +2291,25 @@ body {
   animation: syncPulseDot 2s infinite ease-in-out;
 }
 
-.live-sync-pill.offline .sync-dot {
+.live-sync-pill.connecting {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.live-sync-pill.connecting .sync-dot {
   background: #f59e0b;
   box-shadow: 0 0 8px #f59e0b;
+  animation: syncPulseDot 1s infinite ease-in-out;
+}
+
+.live-sync-pill.offline {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.live-sync-pill.offline .sync-dot {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
   animation: none;
 }
 
@@ -4448,6 +4464,13 @@ body.chat-view-active .tabs-container {
   display: inline-block;
   line-height: 1;
   transition: color 0.2s ease, transform 0.15s ease;
+}
+
+.chat-msg-ticks.tick-pending {
+  font-size: 0.68rem;
+  letter-spacing: 0;
+  opacity: 0.8;
+  color: #a0aec0;
 }
 
 .chat-msg-ticks.tick-sent {

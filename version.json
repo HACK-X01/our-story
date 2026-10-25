@@ -1,5 +1,6 @@
 {
-  "version": "2.6.10",
-  "buildTime": 1792775000000,
-  "notes": "v2.6.10 (Phase 4 Step 4B): Instant chat launch with silent reconciliation by message id, in-place updates for ticks/edits/reactions/deletions, zero scroll jump, and background tab diff-refresh."
+  "version": "2.6.11",
+  "buildTime": 1792945000000,
+  "notes": "v2.6.11 (Phase 4 Step 4C): Offline behavior + Outbox queue with idempotent client-generated IDs, FIFO retry with exponential backoff, clock pending indicator, and offline optimistic edits/deletions/reactions."
 }
+
