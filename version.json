@@ -1,6 +1,7 @@
 {
-  "version": "2.6.11",
-  "buildTime": 1792945000000,
-  "notes": "v2.6.11 (Phase 4 Step 4C): Offline behavior + Outbox queue with idempotent client-generated IDs, FIFO retry with exponential backoff, clock pending indicator, and offline optimistic edits/deletions/reactions."
+  "version": "2.6.12",
+  "buildTime": 1792946000000,
+  "notes": "v2.6.12: Fix Video Call black screen - resolved mobile autoplay policy on remote video element, fixed candidate wipe race condition, updated live STUN servers, track stream assembler, and synchronized backup room."
 }
+
 
