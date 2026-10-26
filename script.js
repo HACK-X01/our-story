@@ -26,38 +26,219 @@ const AUTH_CREDENTIALS = {
   }
 };
 
+// ==========================================================================
+// STORAGE SAFETY & PERSISTENCE ENGINE (Phase 4 Step 4D)
+// navigator.storage.persist() + Quota Monitor + QuotaExceeded Safe Fallback
+// ==========================================================================
+
+const storageMemoryFallbacks = new Map();
+let hasCheckedPersistentStorage = false;
+let isStorageWarningDismissed = false;
+let isQuotaWarningActive = false;
+
+function isQuotaExceededError(err) {
+  return (
+    err &&
+    (err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      err.code === 22 ||
+      err.code === 1014 ||
+      err.number === -2147024882)
+  );
+}
+
+function pruneDisposableStorage() {
+  console.log('[StorageSafety] Pruning non-essential storage keys to free quota...');
+  try {
+    const legacyKeys = [
+      'our_story_cache_v6',
+      'our_story_cache_v5',
+      'our_story_cache_v4',
+      'our_story_cache_v3',
+      'our_story_cache_v2',
+      'our_story_cache'
+    ];
+    legacyKeys.forEach(k => {
+      try { localStorage.removeItem(k); } catch (e) {}
+    });
+
+    try {
+      const raw = localStorage.getItem('our_story_shown_notification_ids');
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length > 10) {
+          localStorage.setItem('our_story_shown_notification_ids', JSON.stringify(arr.slice(-10)));
+        }
+      }
+    } catch (e) {}
+  } catch (err) {
+    console.warn('[StorageSafety] Pruning failed:', err);
+  }
+}
+
+function handleStorageQuotaExceeded(storageType = 'localStorage', key = '') {
+  console.warn(`[StorageSafety] QuotaExceeded in ${storageType} for key: ${key}. Data safely kept in memory.`);
+  pruneDisposableStorage();
+
+  if (!isQuotaWarningActive) {
+    isQuotaWarningActive = true;
+    showStorageWarningBanner('Storage bhar gayi hai! Naya data memory me safe hai. Phone space free karein.');
+    setTimeout(() => {
+      isQuotaWarningActive = false;
+    }, 15000);
+  }
+}
+
+function safeSetLocalStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    storageMemoryFallbacks.delete(key);
+    return true;
+  } catch (err) {
+    // Preserve in memory state first - zero data loss
+    storageMemoryFallbacks.set(key, value);
+    if (isQuotaExceededError(err)) {
+      handleStorageQuotaExceeded('localStorage', key);
+      try {
+        localStorage.setItem(key, value);
+        storageMemoryFallbacks.delete(key);
+        return true;
+      } catch (retryErr) {
+        console.warn(`[StorageSafety] Retry setItem failed for "${key}". Memory state remains intact.`);
+        return false;
+      }
+    } else {
+      console.warn(`[StorageSafety] localStorage.setItem failed for key "${key}":`, err);
+      return false;
+    }
+  }
+}
+
+function safeGetLocalStorage(key) {
+  if (storageMemoryFallbacks.has(key)) {
+    return storageMemoryFallbacks.get(key);
+  }
+  try {
+    return localStorage.getItem(key);
+  } catch (err) {
+    console.warn(`[StorageSafety] localStorage.getItem failed for key "${key}":`, err);
+    return null;
+  }
+}
+
+function safeRemoveLocalStorage(key) {
+  storageMemoryFallbacks.delete(key);
+  try {
+    localStorage.removeItem(key);
+    return true;
+  } catch (err) {
+    console.warn(`[StorageSafety] localStorage.removeItem failed for key "${key}":`, err);
+    return false;
+  }
+}
+
+function showStorageWarningBanner(msg) {
+  if (isStorageWarningDismissed) return;
+  const banner = document.getElementById('storageWarningBanner');
+  const textEl = document.getElementById('storageWarningText');
+  if (banner) {
+    if (textEl && msg) textEl.textContent = msg;
+    banner.classList.remove('is-hidden');
+    banner.style.display = 'flex';
+  }
+}
+
+function dismissStorageWarningBanner() {
+  isStorageWarningDismissed = true;
+  const banner = document.getElementById('storageWarningBanner');
+  if (banner) {
+    banner.classList.add('is-hidden');
+    banner.style.display = 'none';
+  }
+}
+
+async function checkStorageQuotaEstimate() {
+  if (typeof navigator === 'undefined' || !navigator.storage || typeof navigator.storage.estimate !== 'function') {
+    return;
+  }
+  try {
+    const estimate = await navigator.storage.estimate();
+    const usage = estimate.usage || 0;
+    const quota = estimate.quota || 0;
+    if (quota > 0) {
+      const ratio = usage / quota;
+      console.log(`[StorageSafety] Usage: ${(usage / (1024 * 1024)).toFixed(1)} MB / ${(quota / (1024 * 1024)).toFixed(1)} MB (${(ratio * 100).toFixed(1)}%)`);
+      if (ratio >= 0.9) {
+        showStorageWarningBanner('Device storage 90% se jyada bhar chuki hai. Purani media clean kar sakte hain.');
+      }
+    }
+  } catch (err) {
+    console.warn('[StorageSafety] navigator.storage.estimate error (ignored):', err);
+  }
+}
+
+async function initStorageSafetyEngine() {
+  const dismissBtn = document.getElementById('dismissStorageWarningBtn');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', dismissStorageWarningBanner);
+  }
+
+  if (hasCheckedPersistentStorage) return;
+  hasCheckedPersistentStorage = true;
+
+  // 1. Call navigator.storage.persist() once after launch
+  if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.persist === 'function') {
+    try {
+      const isPersisted = await navigator.storage.persist();
+      console.log('[StorageSafety] Persistent storage granted:', isPersisted);
+    } catch (err) {
+      console.warn('[StorageSafety] navigator.storage.persist error (ignored):', err);
+    }
+  } else {
+    console.log('[StorageSafety] Persistent storage API not supported.');
+  }
+
+  // 2. Check storage quota estimate (90% non-intrusive warning)
+  checkStorageQuotaEstimate();
+}
+
 function getAuthenticatedUser() {
-  const local = localStorage.getItem(AUTH_STORAGE_KEY);
+  const local = safeGetLocalStorage(AUTH_STORAGE_KEY);
   if (local === 'himanshu' || local === 'gullu') return local;
-  const session = sessionStorage.getItem(AUTH_STORAGE_KEY);
-  if (session === 'himanshu' || session === 'gullu') return session;
+  try {
+    const session = sessionStorage.getItem(AUTH_STORAGE_KEY);
+    if (session === 'himanshu' || session === 'gullu') return session;
+  } catch (e) {}
   return null;
 }
 
 let currentUser = getAuthenticatedUser();
 if (currentUser) {
-  localStorage.setItem('our_story_current_user', currentUser);
+  safeSetLocalStorage('our_story_current_user', currentUser);
   if (currentUser === 'himanshu') {
-    localStorage.setItem('our_story_device_role', 'himanshu');
-    localStorage.setItem('our_story_is_himanshu_device', 'true');
+    safeSetLocalStorage('our_story_device_role', 'himanshu');
+    safeSetLocalStorage('our_story_is_himanshu_device', 'true');
   }
 }
 
 function isHimanshuDevice() {
   if (currentUser === 'himanshu') return true;
-  const role = localStorage.getItem('our_story_device_role');
+  const role = safeGetLocalStorage('our_story_device_role');
   if (role === 'himanshu') return true;
-  const isH = localStorage.getItem('our_story_is_himanshu_device');
+  const isH = safeGetLocalStorage('our_story_is_himanshu_device');
   if (isH === 'true') return true;
-  const auth = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
+  let auth = safeGetLocalStorage(AUTH_STORAGE_KEY);
+  if (!auth) {
+    try { auth = sessionStorage.getItem(AUTH_STORAGE_KEY); } catch (e) {}
+  }
   if (auth === 'himanshu') return true;
   return false;
 }
 
-let myDeviceId = localStorage.getItem('our_story_device_id');
+let myDeviceId = safeGetLocalStorage('our_story_device_id');
 if (!myDeviceId) {
   myDeviceId = 'dev_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
-  localStorage.setItem('our_story_device_id', myDeviceId);
+  safeSetLocalStorage('our_story_device_id', myDeviceId);
 }
 
 let currentMode = 'together';  // 'together' or 'apart'
@@ -339,7 +520,7 @@ const NOTIFICATION_DEDUPE_KEY = 'our_story_shown_notification_ids';
 
 function getShownNotificationIds() {
   try {
-    const raw = localStorage.getItem(NOTIFICATION_DEDUPE_KEY);
+    const raw = safeGetLocalStorage(NOTIFICATION_DEDUPE_KEY);
     if (raw) return new Set(JSON.parse(raw));
   } catch (e) {}
   return new Set();
@@ -351,7 +532,7 @@ function recordNotificationShown(id) {
     const set = getShownNotificationIds();
     set.add(String(id));
     const arr = Array.from(set).slice(-150);
-    localStorage.setItem(NOTIFICATION_DEDUPE_KEY, JSON.stringify(arr));
+    safeSetLocalStorage(NOTIFICATION_DEDUPE_KEY, JSON.stringify(arr));
   } catch (e) {}
 }
 
@@ -481,8 +662,25 @@ function saveMediaBlobToIDB(id, base64Data) {
         const store = tx.objectStore(IDB_STORE_NAME);
         store.put({ id, data: base64Data, updatedAt: Date.now() });
         tx.oncomplete = () => resolve(true);
-        tx.onerror = () => resolve(false);
+        tx.onerror = (e) => {
+          const err = tx.error || (e && e.target && e.target.error);
+          if (isQuotaExceededError(err)) {
+            console.warn('[IDB] QuotaExceededError in saveMediaBlobToIDB. Preserved in memory cache.');
+            handleStorageQuotaExceeded('IndexedDB', id);
+          }
+          resolve(false);
+        };
+        tx.onabort = (e) => {
+          const err = tx.error || (e && e.target && e.target.error);
+          if (isQuotaExceededError(err)) {
+            handleStorageQuotaExceeded('IndexedDB', id);
+          }
+          resolve(false);
+        };
       } catch (e) {
+        if (isQuotaExceededError(e)) {
+          handleStorageQuotaExceeded('IndexedDB', id);
+        }
         resolve(false);
       }
     });
@@ -635,7 +833,7 @@ function migrateLegacyMediaToIndexedDB(state) {
   if (hasLegacy) {
     try {
       const stripped = stripAndPersistMediaBlobs(state);
-      localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(stripped));
+      safeSetLocalStorage(PERMANENT_STORAGE_KEY, JSON.stringify(stripped));
       console.log('✅ Successfully migrated legacy Base64 media to IndexedDB');
     } catch (e) {
       console.warn('Migration save warning:', e);
@@ -648,7 +846,7 @@ function migrateLegacyMediaToIndexedDB(state) {
 // Retrieve stored state with backward compatibility for all legacy versions
 function getStoredCoupleData() {
   try {
-    const primary = localStorage.getItem(PERMANENT_STORAGE_KEY);
+    const primary = safeGetLocalStorage(PERMANENT_STORAGE_KEY);
     if (primary) {
       const rawData = sanitizeAppStateArrays(JSON.parse(primary));
       const data = migrateLegacyMediaToIndexedDB(rawData);
@@ -675,7 +873,7 @@ function getStoredCoupleData() {
       'our_story_cache'
     ];
     for (const key of legacyKeys) {
-      const data = localStorage.getItem(key);
+      const data = safeGetLocalStorage(key);
       if (data) {
         try {
           const parsed = JSON.parse(data);
@@ -683,7 +881,7 @@ function getStoredCoupleData() {
             const sanitized = sanitizeAppStateArrays(parsed);
             const migrated = migrateLegacyMediaToIndexedDB(sanitized);
             const stripped = stripAndPersistMediaBlobs(migrated);
-            localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(stripped));
+            safeSetLocalStorage(PERMANENT_STORAGE_KEY, JSON.stringify(stripped));
             return migrated;
           }
         } catch (e) {}
@@ -709,8 +907,12 @@ function flushPendingSaveAppState() {
 
   try {
     const storagePayload = stripAndPersistMediaBlobs(appState);
-    localStorage.setItem(PERMANENT_STORAGE_KEY, JSON.stringify(storagePayload));
+    const ok = safeSetLocalStorage(PERMANENT_STORAGE_KEY, JSON.stringify(storagePayload));
+    if (!ok) {
+      hasPendingAppStateSave = true; // Retry on next cycle
+    }
   } catch (e) {
+    hasPendingAppStateSave = true;
     console.warn('LocalStorage save failed:', e);
   }
 }
@@ -954,7 +1156,7 @@ function initFirebaseDatabase() {
       .then(r => r.ok ? r.json() : null)
       .then(extConfig => {
         if (extConfig && extConfig.databaseURL && !extConfig.databaseURL.includes('YOUR-PROJECT-ID')) {
-          localStorage.setItem('our_story_firebase_config', JSON.stringify(extConfig));
+          safeSetLocalStorage('our_story_firebase_config', JSON.stringify(extConfig));
           initFirebaseDatabase();
         }
       })
@@ -1682,7 +1884,7 @@ function setupFirebaseModal() {
         projectId: url.replace('https://', '').split('.')[0]
       };
 
-      localStorage.setItem('our_story_firebase_config', JSON.stringify(newConfig));
+      safeSetLocalStorage('our_story_firebase_config', JSON.stringify(newConfig));
       playCelebrationChime();
       modal.classList.add('is-hidden');
       showAppModal('🔥 Firebase Connected!', 'Firebase Realtime Database successfully connect ho gaya hai! Saari memories, moods aur heartbeats cloud me save rahengi.');
@@ -1825,12 +2027,19 @@ const OUTBOX_STORAGE_KEY = 'our_story_offline_outbox';
 let isFlushingOutbox = false;
 let outboxFlushTimer = null;
 
+let outboxMemoryQueue = null;
+
 function getOutboxQueue() {
+  if (Array.isArray(outboxMemoryQueue) && outboxMemoryQueue.length > 0) {
+    return outboxMemoryQueue;
+  }
   try {
-    const raw = localStorage.getItem(OUTBOX_STORAGE_KEY);
+    const raw = safeGetLocalStorage(OUTBOX_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const queue = Array.isArray(parsed) ? parsed : [];
+    outboxMemoryQueue = queue;
+    return queue;
   } catch (e) {
     console.warn('[Outbox] Failed to read queue from storage:', e);
     return [];
@@ -1838,8 +2047,9 @@ function getOutboxQueue() {
 }
 
 function saveOutboxQueue(queue) {
+  outboxMemoryQueue = Array.isArray(queue) ? queue : [];
   try {
-    localStorage.setItem(OUTBOX_STORAGE_KEY, JSON.stringify(Array.isArray(queue) ? queue : []));
+    safeSetLocalStorage(OUTBOX_STORAGE_KEY, JSON.stringify(outboxMemoryQueue));
   } catch (e) {
     console.warn('[Outbox] Failed to save queue to storage:', e);
   }
@@ -2222,7 +2432,7 @@ function broadcastUpdate(type, data, retain = false, skipFirebaseSync = false) {
 
   // 2. Storage event
   try {
-    localStorage.setItem('our_story_last_sync_event', JSON.stringify(payload));
+    safeSetLocalStorage('our_story_last_sync_event', JSON.stringify(payload));
   } catch (e) {}
 
   // 3. Cloud MQTT WebSocket
@@ -2560,7 +2770,7 @@ function triggerIncomingHeartbeatAlert(pulse) {
   if (!pulse) return;
   const pulseId = pulse.id || ('pulse_' + pulse.timestamp);
   lastAcknowledgedPulseId = pulseId;
-  localStorage.setItem('our_story_last_pulse_ack', pulseId);
+  safeSetLocalStorage('our_story_last_pulse_ack', pulseId);
   recordNotificationShown(pulseId);
 
   // 1. Double heartbeat sound (lub-dub... lub-dub)
@@ -2719,7 +2929,7 @@ function feelIncomingHeartbeat(pulse) {
   if (pulse) {
     const pulseId = pulse.id || ('pulse_' + pulse.timestamp);
     lastAcknowledgedPulseId = pulseId;
-    localStorage.setItem('our_story_last_pulse_ack', pulseId);
+    safeSetLocalStorage('our_story_last_pulse_ack', pulseId);
     recordNotificationShown(pulseId);
   }
 
@@ -2828,8 +3038,8 @@ async function registerClosedAppPushSubscription() {
 
     if (res.ok) {
       console.log('Registered with ntfy Web Push successfully for topic:', myTopic);
-      localStorage.setItem('our_story_push_registered', 'true');
-      localStorage.setItem('our_story_push_topic', myTopic);
+      safeSetLocalStorage('our_story_push_registered', 'true');
+      safeSetLocalStorage('our_story_push_topic', myTopic);
 
       if (firebaseDb) {
         try {
@@ -3320,7 +3530,7 @@ function setAppPauseState(shouldPause, actor = 'himanshu') {
   };
 
   try {
-    localStorage.setItem(APP_PAUSE_STORAGE_KEY, JSON.stringify(pausePayload));
+    safeSetLocalStorage(APP_PAUSE_STORAGE_KEY, JSON.stringify(pausePayload));
   } catch (e) {}
 
   saveAppState(appState);
@@ -3357,7 +3567,7 @@ function handleIncomingAppPause(data) {
   appState.pausedAt = pausedAt;
 
   try {
-    localStorage.setItem(APP_PAUSE_STORAGE_KEY, JSON.stringify({
+    safeSetLocalStorage(APP_PAUSE_STORAGE_KEY, JSON.stringify({
       isPaused,
       pausedBy: data.pausedBy || 'himanshu',
       pausedAt
@@ -3507,9 +3717,9 @@ function setupHimanshuPauseControl() {
   if (deviceActiveBtn) {
     deviceActiveBtn.addEventListener('click', () => {
       setAppPauseState(false, 'himanshu');
-      localStorage.setItem('our_story_device_role', 'himanshu');
-      localStorage.setItem('our_story_is_himanshu_device', 'true');
-      localStorage.setItem(AUTH_STORAGE_KEY, 'himanshu');
+      safeSetLocalStorage('our_story_device_role', 'himanshu');
+      safeSetLocalStorage('our_story_is_himanshu_device', 'true');
+      safeSetLocalStorage(AUTH_STORAGE_KEY, 'himanshu');
       sessionStorage.setItem(AUTH_STORAGE_KEY, 'himanshu');
       currentUser = 'himanshu';
       window.location.hash = 'himanshu';
@@ -3586,9 +3796,9 @@ function setupHimanshuPauseControl() {
     secretUnlockBtn.addEventListener('click', () => {
       const val = secretPassInput.value.trim();
       if (val === AUTH_CREDENTIALS.himanshu.pass) {
-        localStorage.setItem('our_story_device_role', 'himanshu');
-        localStorage.setItem('our_story_is_himanshu_device', 'true');
-        localStorage.setItem(AUTH_STORAGE_KEY, 'himanshu');
+        safeSetLocalStorage('our_story_device_role', 'himanshu');
+        safeSetLocalStorage('our_story_is_himanshu_device', 'true');
+        safeSetLocalStorage(AUTH_STORAGE_KEY, 'himanshu');
         sessionStorage.setItem(AUTH_STORAGE_KEY, 'himanshu');
         currentUser = 'himanshu';
         setAppPauseState(false, 'himanshu');
@@ -3816,22 +4026,22 @@ function handleLoginSubmit() {
 
   const isRemember = rememberCheckbox ? rememberCheckbox.checked : true;
   if (isRemember) {
-    localStorage.setItem(AUTH_STORAGE_KEY, matchedUser);
+    safeSetLocalStorage(AUTH_STORAGE_KEY, matchedUser);
     sessionStorage.setItem(AUTH_STORAGE_KEY, matchedUser);
   } else {
     sessionStorage.setItem(AUTH_STORAGE_KEY, matchedUser);
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+    safeRemoveLocalStorage(AUTH_STORAGE_KEY);
   }
 
   currentUser = matchedUser;
-  localStorage.setItem('our_story_current_user', currentUser);
-  localStorage.setItem('our_story_profile_selected', 'true');
+  safeSetLocalStorage('our_story_current_user', currentUser);
+  safeSetLocalStorage('our_story_profile_selected', 'true');
   if (matchedUser === 'himanshu') {
-    localStorage.setItem('our_story_device_role', 'himanshu');
-    localStorage.setItem('our_story_is_himanshu_device', 'true');
+    safeSetLocalStorage('our_story_device_role', 'himanshu');
+    safeSetLocalStorage('our_story_is_himanshu_device', 'true');
   } else if (matchedUser === 'gullu') {
-    localStorage.setItem('our_story_device_role', 'gullu');
-    localStorage.setItem('our_story_is_himanshu_device', 'false');
+    safeSetLocalStorage('our_story_device_role', 'gullu');
+    safeSetLocalStorage('our_story_is_himanshu_device', 'false');
   }
   window.location.hash = currentUser;
 
@@ -5356,7 +5566,7 @@ function dispatchHeartbeatPulse(customNote = null) {
 
   // Mark our own sent pulse as acknowledged so we don't trigger incoming alert on ourselves
   lastAcknowledgedPulseId = pulseId;
-  localStorage.setItem('our_story_last_pulse_ack', pulseId);
+  safeSetLocalStorage('our_story_last_pulse_ack', pulseId);
 
   // Broadcast in real-time across Cloud (MQTT) + Cross-tab (BroadcastChannel) + Firebase RTDB
   broadcastUpdate('PULSE_SENT', newPulse, true);
@@ -6679,7 +6889,7 @@ async function checkAndApplyForcedAppUpdate() {
     const res = await fetch('./version.json?nocache=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const cloudData = await res.json();
-    const storedVersion = localStorage.getItem('our_story_app_version');
+    const storedVersion = safeGetLocalStorage('our_story_app_version');
     if (cloudData && cloudData.version) {
       if (storedVersion && storedVersion !== cloudData.version) {
         console.log(`[PWA Version Check] New version on server: ${cloudData.version} (stored: ${storedVersion})`);
@@ -6687,7 +6897,7 @@ async function checkAndApplyForcedAppUpdate() {
           showAppUpdatePrompt(activeWaitingWorker);
           return;
         }
-        localStorage.setItem('our_story_app_version', cloudData.version);
+        safeSetLocalStorage('our_story_app_version', cloudData.version);
         if ('serviceWorker' in navigator) {
           const reg = await navigator.serviceWorker.getRegistration();
           if (reg) {
@@ -6695,7 +6905,7 @@ async function checkAndApplyForcedAppUpdate() {
           }
         }
       } else {
-        localStorage.setItem('our_story_app_version', cloudData.version);
+        safeSetLocalStorage('our_story_app_version', cloudData.version);
       }
     }
   } catch (e) {
@@ -11632,6 +11842,7 @@ document.addEventListener('DOMContentLoaded', () => {
   safeInit('setupIncomingPulseModal', setupIncomingPulseModal);
   safeInit('setupNotificationPermissions', setupNotificationPermissions);
   safeInit('setupInAppMusicPlayer', setupInAppMusicPlayer);
+  safeInit('initStorageSafetyEngine', initStorageSafetyEngine);
   safeInit('setupPWAandUpdates', setupPWAandUpdates);
   safeInit('checkAndApplyForcedAppUpdate', checkAndApplyForcedAppUpdate);
   safeInit('setupChatUI', setupChatUI);

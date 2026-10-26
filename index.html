@@ -20,7 +20,7 @@
 
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
-  <link rel="stylesheet" href="styles.css?v=60">
+  <link rel="stylesheet" href="styles.css?v=61">
 </head>
 <body>
 
@@ -1202,6 +1202,16 @@
     <button type="button" class="update-banner-dismiss-btn" id="dismissUpdateBannerBtn" title="Dismiss" aria-label="Dismiss">✕</button>
   </div>
 
+  <!-- FLOATING STORAGE SAFETY WARNING BANNER (Phase 4 Step 4D) -->
+  <div class="storage-warning-banner is-hidden" id="storageWarningBanner" role="alert" aria-live="polite">
+    <div class="storage-warning-icon">⚠️</div>
+    <div class="storage-warning-body">
+      <span class="storage-warning-title">Storage kam hai</span>
+      <span class="storage-warning-text" id="storageWarningText">Phone storage 90% bhar chuki hai. Data memory me safe hai.</span>
+    </div>
+    <button type="button" class="storage-warning-dismiss-btn" id="dismissStorageWarningBtn" title="Dismiss" aria-label="Dismiss">✕</button>
+  </div>
+
   <!-- IN-APP MUSIC PLAYER (Plays music inside app with crystal-clear audio!) -->
   <div class="in-app-music-bar is-hidden" id="inAppMusicBar">
     <div class="music-bar-left">
@@ -1986,6 +1996,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=60"></script>
+  <script src="script.js?v=61"></script>
 </body>
 </html>
