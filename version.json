@@ -1,5 +1,5 @@
 {
-  "version": "2.6.13",
-  "buildTime": 1792947000000,
-  "notes": "v2.6.13 (Phase 4 Step 4D): Storage safety - navigator.storage.persist() integration, storage.estimate() quota monitoring with non-intrusive 90% warning, safeSetLocalStorage with QuotaExceededError handling & in-memory preservation, IDB quota fallback, and backup/export design."
+  "version": "2.6.14",
+  "buildTime": 1792948000000,
+  "notes": "v2.6.14 (Call Fix Part 2): WebRTC Video & Audio Call Fix - dynamic TURN relay configuration (Firebase + local settings + STUN fallback), callId-tagged candidate queueing without destructive wiping, persistent core candidate listeners, direct user gesture audio unlocking with tap-to-hear fallback, auto ICE restart, Screen Wake Lock, and live call diagnostics debug pill."
 }

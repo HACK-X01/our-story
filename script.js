@@ -946,6 +946,10 @@ if (typeof window !== 'undefined') {
       if (typeof detachAllNonCoreFirebaseListeners === 'function') {
         detachAllNonCoreFirebaseListeners();
       }
+    } else if (document.visibilityState === 'visible') {
+      if (typeof vcState !== 'undefined' && vcState.status === 'active' && typeof requestCallWakeLock === 'function') {
+        requestCallWakeLock();
+      }
     }
   });
   window.addEventListener('pagehide', () => {
@@ -1471,6 +1475,18 @@ function setupFirebaseRealtimeListeners() {
     const callMeta = snapshot.val();
     if (callMeta) {
       handleIncomingVCSignal(callMeta);
+    }
+  }, true);
+
+  // 7B. Dynamic TURN Server Configuration (Always-On Core)
+  attachFirebaseListener('turnConfig', firebaseDb.ref('our_story/turn_config'), 'value', (snapshot) => {
+    const val = snapshot.val();
+    if (val) {
+      cachedTurnConfig = val;
+      try {
+        safeSetLocalStorage('our_story_turn_config', typeof val === 'string' ? val : JSON.stringify(val));
+      } catch (e) {}
+      console.log('[WebRTC] Dynamic TURN server configuration updated from Firebase');
     }
   }, true);
 
@@ -10325,27 +10341,111 @@ function populateMediaDocsContent() {
 // PRIVATE COUPLE VIDEO CALL (VC) ENGINE - WebRTC P2P + Dual Cloud Signaling
 // ==========================================================================
 
-const RTC_CONFIG = {
-  iceServers: [
+let cachedTurnConfig = null;
+
+function getStoredTurnConfig() {
+  if (cachedTurnConfig) {
+    return normalizeTurnServers(cachedTurnConfig);
+  }
+  try {
+    const raw = safeGetLocalStorage('our_story_turn_config');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      cachedTurnConfig = parsed;
+      return normalizeTurnServers(parsed);
+    }
+  } catch (e) {
+    console.warn('[WebRTC] Failed to parse turn_config from storage:', e);
+  }
+  return null;
+}
+
+function normalizeTurnServers(cfg) {
+  if (!cfg) return null;
+  let servers = [];
+  if (Array.isArray(cfg)) {
+    servers = cfg;
+  } else if (cfg.iceServers && Array.isArray(cfg.iceServers)) {
+    servers = cfg.iceServers;
+  }
+  const validServers = servers.filter(s => s && s.urls && (s.username || String(s.urls).startsWith('stun:')));
+  return validServers.length > 0 ? validServers : null;
+}
+
+function hasTurnConfigured() {
+  const servers = getStoredTurnConfig();
+  return !!(servers && servers.some(s => {
+    const u = Array.isArray(s.urls) ? s.urls.join(',') : String(s.urls || '');
+    return u.includes('turn:') || u.includes('turns:');
+  }));
+}
+
+function getEffectiveRtcConfig() {
+  const defaultStunServers = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
     { urls: 'stun:stun.relay.metered.ca:80' },
-    { urls: 'stun:stun.services.mozilla.com' },
-    { urls: 'stun:global.stun.twilio.com:3478' }
-  ],
-  iceCandidatePoolSize: 10
+    { urls: 'stun:stun.services.mozilla.com' }
+  ];
+
+  const customServers = getStoredTurnConfig();
+  let effectiveIceServers = [...defaultStunServers];
+
+  if (customServers && customServers.length > 0) {
+    console.log('[WebRTC] Applying configured TURN/STUN relay servers:', customServers.length);
+    effectiveIceServers = [...customServers, ...defaultStunServers];
+  } else {
+    console.warn('[WebRTC] TURN not configured, using STUN-only fallback. To configure TURN for mobile carrier NAT, see instructions or use window.setCoupleTurnConfig()');
+  }
+
+  return {
+    iceServers: effectiveIceServers,
+    iceCandidatePoolSize: 10
+  };
+}
+
+window.setCoupleTurnConfig = function(configData, syncToFirebase = true) {
+  if (!configData) {
+    console.error('[WebRTC] Invalid TURN configuration provided.');
+    return false;
+  }
+  try {
+    const payload = typeof configData === 'string' ? JSON.parse(configData) : configData;
+    cachedTurnConfig = payload;
+    safeSetLocalStorage('our_story_turn_config', JSON.stringify(payload));
+    console.log('[WebRTC] Local TURN configuration saved successfully.');
+
+    if (syncToFirebase && firebaseDb) {
+      firebaseDb.ref('our_story/turn_config').set(payload)
+        .then(() => {
+          console.log('[WebRTC] TURN configuration successfully synchronized to Firebase for both phones! ✨');
+        })
+        .catch(err => {
+          console.warn('[WebRTC] Failed to sync TURN config to Firebase:', err);
+        });
+    }
+    return true;
+  } catch (e) {
+    console.error('[WebRTC] Failed to parse or save TURN config:', e);
+    return false;
+  }
 };
 
 let pendingIceCandidates = [];
 const processedCandidateKeys = new Set();
 
-function addReceivedIceCandidate(candData) {
+function addReceivedIceCandidate(candData, candidateCallId) {
   if (!candData || !candData.candidate) return;
-  const candKey = candData.candidate + '_' + (candData.sdpMid || '') + '_' + (candData.sdpMLineIndex || 0);
+  const activeCallId = vcState.callId;
+  const candCallId = candidateCallId || candData.callId;
+
+  if (activeCallId && candCallId && activeCallId !== candCallId) {
+    console.log('[WebRTC ICE] Dropping stale candidate from past/different call:', candCallId);
+    return;
+  }
+
+  const candKey = (candCallId || 'curr') + '_' + candData.candidate + '_' + (candData.sdpMid || '') + '_' + (candData.sdpMLineIndex || 0);
   if (processedCandidateKeys.has(candKey)) return;
   processedCandidateKeys.add(candKey);
 
@@ -10356,7 +10456,7 @@ function addReceivedIceCandidate(candData) {
         console.warn('addIceCandidate error:', err);
       });
     } else {
-      pendingIceCandidates.push(candidate);
+      pendingIceCandidates.push({ candidate, callId: candCallId || activeCallId });
     }
   } catch (err) {
     console.warn('Invalid ICE candidate payload:', err);
@@ -10365,143 +10465,276 @@ function addReceivedIceCandidate(candData) {
 
 async function flushPendingIceCandidates() {
   if (!vcState.peerConnection || !vcState.peerConnection.remoteDescription) return;
+  const remaining = [];
   while (pendingIceCandidates.length > 0) {
-    const cand = pendingIceCandidates.shift();
+    const item = pendingIceCandidates.shift();
+    const cand = item.candidate || item;
+    const candCallId = item.callId;
+    if (vcState.callId && candCallId && vcState.callId !== candCallId) {
+      continue;
+    }
     try {
       await vcState.peerConnection.addIceCandidate(cand);
     } catch (err) {
       console.warn('Failed to add queued candidate:', err);
     }
   }
+  pendingIceCandidates = remaining;
 }
 
 function handleIncomingVCCandidate(data) {
   if (!data || !data.candidate) return;
   if (data.to && data.to !== currentUser) return;
   if (vcState.callId && data.callId && vcState.callId !== data.callId) return;
-  addReceivedIceCandidate(data.candidate);
+  addReceivedIceCandidate(data.candidate, data.callId);
 }
 
-function handleIncomingRemoteTrack(event) {
-  const remoteVideo = document.getElementById('remoteVideo');
-  const remoteAudio = document.getElementById('remoteAudioStream');
-  const placeholder = document.getElementById('remoteVideoPlaceholder');
+function unlockCallAudioContext() {
+  try {
+    const remoteAudio = document.getElementById('remoteAudioStream');
+    if (remoteAudio) {
+      remoteAudio.muted = false;
+      remoteAudio.volume = 1.0;
+      const p = remoteAudio.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {});
+      }
+    }
+    if (typeof (window.AudioContext || window.webkitAudioContext) !== 'undefined') {
+      if (!window._callAudioCtx) {
+        window._callAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (window._callAudioCtx.state === 'suspended') {
+        window._callAudioCtx.resume().catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.warn('[WebRTC Audio] Context unlock warning:', e);
+  }
+}
+
+function showTapToHearBanner() {
+  const btn = document.getElementById('vcTapToHearBtn');
+  if (btn && vcState.status === 'active') {
+    btn.classList.remove('is-hidden');
+  }
+}
+
+function hideTapToHearBanner() {
+  const btn = document.getElementById('vcTapToHearBtn');
+  if (btn) {
+    btn.classList.add('is-hidden');
+  }
+}
+
+let callWakeLock = null;
+
+async function requestCallWakeLock() {
+  if ('wakeLock' in navigator && !callWakeLock) {
+    try {
+      callWakeLock = await navigator.wakeLock.request('screen');
+      callWakeLock.addEventListener('release', () => {
+        callWakeLock = null;
+      });
+      console.log('[WebRTC] Screen Wake Lock active for ongoing call');
+    } catch (err) {
+      console.warn('[WebRTC] Wake lock request error:', err);
+    }
+  }
+}
+
+function releaseCallWakeLock() {
+  if (callWakeLock) {
+    try {
+      callWakeLock.release();
+    } catch (e) {}
+    callWakeLock = null;
+  }
+}
+
+let iceRestartAttempts = 0;
+const MAX_ICE_RESTARTS = 2;
+
+function handleIceFailure(pc) {
+  if (!pc || vcState.status !== 'active') return;
   const statusEl = document.getElementById('vcConnectionStatus');
+  if (statusEl) statusEl.textContent = 'Reconnecting... ⚡';
 
-  console.log('[WebRTC ontrack] Track received:', event.track?.kind, event.track?.id);
+  if (iceRestartAttempts < MAX_ICE_RESTARTS) {
+    iceRestartAttempts++;
+    console.log(`[WebRTC] ICE failed. Attempting ICE restart (${iceRestartAttempts}/${MAX_ICE_RESTARTS})...`);
+    showVcToast(`Reconnecting call (${iceRestartAttempts}/${MAX_ICE_RESTARTS})... ⏳`);
 
-  if (!vcState.remoteStream) {
-    vcState.remoteStream = new MediaStream();
-  }
-
-  // Add all tracks to remoteStream
-  if (event.streams && event.streams[0]) {
-    event.streams[0].getTracks().forEach(track => {
-      if (!vcState.remoteStream.getTracks().some(t => t.id === track.id)) {
-        vcState.remoteStream.addTrack(track);
+    if (typeof pc.restartIce === 'function') {
+      try {
+        pc.restartIce();
+        if (vcState.role === 'caller') {
+          pc.createOffer({ iceRestart: true })
+            .then(offer => pc.setLocalDescription(offer))
+            .then(() => {
+              const partnerUser = currentUser === 'himanshu' ? 'gullu' : 'himanshu';
+              broadcastUpdate('VC_SIGNAL', {
+                callId: vcState.callId,
+                callType: vcState.callType,
+                status: 'ice_restart_offer',
+                sdpOffer: JSON.stringify(pc.localDescription),
+                from: currentUser,
+                to: partnerUser
+              }, false);
+            })
+            .catch(e => console.warn('ICE restart offer failed:', e));
+        }
+      } catch (e) {
+        console.warn('restartIce failed:', e);
       }
-    });
-  } else if (event.track) {
-    if (!vcState.remoteStream.getTracks().some(t => t.id === event.track.id)) {
-      vcState.remoteStream.addTrack(event.track);
     }
-  }
-
-  // Attach to remoteVideo element (MUST be muted for mobile autoplay policy)
-  if (remoteVideo) {
-    remoteVideo.muted = true;
-    remoteVideo.playsInline = true;
-    remoteVideo.setAttribute('playsinline', '');
-    remoteVideo.setAttribute('muted', '');
-    if (remoteVideo.srcObject !== vcState.remoteStream) {
-      remoteVideo.srcObject = vcState.remoteStream;
-    }
-
-    const revealVideoIfReady = () => {
-      if (placeholder && vcState.callType === 'video') {
-        placeholder.style.display = 'none';
+  } else {
+    console.warn('[WebRTC] Max ICE restart attempts reached. Connection unrecoverable.');
+    showVcToast('⚠️ Connection lost. Direct network unreachable.');
+    setTimeout(() => {
+      if (vcState.status === 'active') {
+        endVideoCall('Connection lost 💔');
       }
-      remoteVideo.play().catch(() => {});
-    };
-
-    remoteVideo.onloadedmetadata = revealVideoIfReady;
-    remoteVideo.oncanplay = revealVideoIfReady;
-    remoteVideo.onplaying = revealVideoIfReady;
-
-    remoteVideo.play().catch(err => {
-      console.warn('remoteVideo play failed, will auto-retry on touch:', err);
-    });
+    }, 2500);
   }
-
-  // Attach to remoteAudio element
-  if (remoteAudio) {
-    if (remoteAudio.srcObject !== vcState.remoteStream) {
-      remoteAudio.srcObject = vcState.remoteStream;
-    }
-    remoteAudio.play().catch(err => {
-      console.warn('remoteAudio play failed, will auto-retry on touch:', err);
-    });
-  }
-
-  // Once video track is unmuted / receiving frames, hide the placeholder
-  const videoTracks = vcState.remoteStream.getVideoTracks();
-  if (videoTracks.length > 0) {
-    const vt = videoTracks[0];
-    vt.onunmute = () => {
-      if (placeholder && vcState.callType === 'video') placeholder.style.display = 'none';
-      if (remoteVideo) remoteVideo.play().catch(() => {});
-    };
-    if (vt.readyState === 'live' && !vt.muted) {
-      if (placeholder && vcState.callType === 'video') placeholder.style.display = 'none';
-    }
-  }
-
-  if (statusEl) statusEl.textContent = 'Connected with Partner ❤️';
 }
 
-function setupIceStateMonitoring(pc) {
-  if (!pc) return;
+let callStatsInterval = null;
 
-  pc.oniceconnectionstatechange = () => {
-    console.log('[WebRTC] iceConnectionState changed to:', pc.iceConnectionState);
-    const statusEl = document.getElementById('vcConnectionStatus');
-    const placeholder = document.getElementById('remoteVideoPlaceholder');
-
-    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-      if (statusEl) statusEl.textContent = 'Live Connected ❤️';
-      const remoteVideo = document.getElementById('remoteVideo');
-      if (remoteVideo && remoteVideo.srcObject) {
-        remoteVideo.play().catch(() => {});
-      }
-      const remoteAudio = document.getElementById('remoteAudioStream');
-      if (remoteAudio && remoteAudio.srcObject) {
-        remoteAudio.play().catch(() => {});
-      }
-      if (placeholder && vcState.remoteStream && vcState.remoteStream.getVideoTracks().length > 0) {
-        placeholder.style.display = 'none';
-      }
-    } else if (pc.iceConnectionState === 'failed') {
-      console.warn('[WebRTC] ICE Connection Failed! Direct P2P NAT blocked.');
-      if (statusEl) statusEl.textContent = 'Reconnecting Video... ⚡ (Tap 🌐 for Backup)';
-      if (vcState.role === 'caller' && typeof pc.restartIce === 'function') {
-        try { pc.restartIce(); } catch (e) {}
-      }
-      showVcToast('⚠️ Direct connection slow. Tap 🌐 Backup Room anytime!');
-    } else if (pc.iceConnectionState === 'disconnected') {
-      if (statusEl) statusEl.textContent = 'Connection Disconnected... ⏳';
-    }
-  };
-
-  pc.onconnectionstatechange = () => {
-    console.log('[WebRTC] connectionState changed to:', pc.connectionState);
-    if (pc.connectionState === 'connected') {
-      const remoteVideo = document.getElementById('remoteVideo');
-      if (remoteVideo && remoteVideo.srcObject) {
-        remoteVideo.play().catch(() => {});
-      }
-    }
-  };
+function isCallDebugEnabled() {
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('debug') === '1' || urlParams.get('call_debug') === 'true') return true;
+    if (window.location.hash.includes('debug')) return true;
+    if (safeGetLocalStorage('our_story_call_debug') === 'true') return true;
+  } catch (e) {}
+  return false;
 }
+
+window.toggleCallDebug = function(enable) {
+  const next = enable !== undefined ? !!enable : !isCallDebugEnabled();
+  safeSetLocalStorage('our_story_call_debug', next ? 'true' : 'false');
+  console.log(`[WebRTC Debug] Live call debug diagnostics ${next ? 'ENABLED' : 'DISABLED'}.`);
+  const pill = document.getElementById('vcDebugPill');
+  if (pill) {
+    if (next && vcState.status === 'active') {
+      pill.classList.remove('is-hidden');
+      startCallStatsMonitoring(vcState.peerConnection);
+    } else if (!next) {
+      pill.classList.add('is-hidden');
+      stopCallStatsMonitoring();
+    }
+  }
+  return `Call debug is now ${next ? 'ON' : 'OFF'}`;
+};
+
+function startCallStatsMonitoring(pc) {
+  stopCallStatsMonitoring();
+  if (!pc || !isCallDebugEnabled()) return;
+
+  const pill = document.getElementById('vcDebugPill');
+  if (pill && vcState.status === 'active') pill.classList.remove('is-hidden');
+
+  callStatsInterval = setInterval(async () => {
+    if (!pc || vcState.status !== 'active') {
+      stopCallStatsMonitoring();
+      return;
+    }
+    try {
+      const stats = await pc.getStats();
+      let bytesAudioIn = 0;
+      let bytesVideoIn = 0;
+      let packetsLost = 0;
+      let selectedPairType = 'None';
+      let isTurnRelay = false;
+
+      stats.forEach(report => {
+        if (report.type === 'inbound-rtp') {
+          if (report.kind === 'audio') {
+            bytesAudioIn = report.bytesReceived || 0;
+          } else if (report.kind === 'video') {
+            bytesVideoIn = report.bytesReceived || 0;
+          }
+          if (report.packetsLost) {
+            packetsLost += report.packetsLost;
+          }
+        }
+        if (report.type === 'transport' && report.selectedCandidatePairId) {
+          const pair = stats.get(report.selectedCandidatePairId);
+          if (pair) {
+            const localCand = stats.get(pair.localCandidateId);
+            const remoteCand = stats.get(pair.remoteCandidateId);
+            if (localCand && remoteCand) {
+              selectedPairType = `${localCand.candidateType} ➔ ${remoteCand.candidateType}`;
+              if (localCand.candidateType === 'relay' || remoteCand.candidateType === 'relay') {
+                isTurnRelay = true;
+              }
+            }
+          }
+        }
+        if (report.type === 'candidate-pair' && (report.selected || report.nominated) && report.state === 'succeeded') {
+          const localCand = stats.get(report.localCandidateId);
+          const remoteCand = stats.get(report.remoteCandidateId);
+          if (localCand && remoteCand) {
+            selectedPairType = `${localCand.candidateType} ➔ ${remoteCand.candidateType}`;
+            if (localCand.candidateType === 'relay' || remoteCand.candidateType === 'relay') {
+              isTurnRelay = true;
+            }
+          }
+        }
+      });
+
+      const dot = document.getElementById('vcDebugDot');
+      const summary = document.getElementById('vcDebugSummary');
+      const totalKbIn = Math.round((bytesAudioIn + bytesVideoIn) / 1024);
+
+      if (dot) {
+        dot.className = 'debug-indicator-dot ' + (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed' ? 'connected' : (pc.iceConnectionState === 'failed' ? 'failed' : ''));
+      }
+      if (summary) {
+        summary.textContent = `ICE: ${pc.iceConnectionState} | ⬇ ${totalKbIn}KB`;
+      }
+
+      const elIce = document.getElementById('dbgIceState');
+      const elConn = document.getElementById('dbgConnState');
+      const elPair = document.getElementById('dbgPairType');
+      const elTurn = document.getElementById('dbgTurnActive');
+      const elAudio = document.getElementById('dbgBytesAudio');
+      const elVideo = document.getElementById('dbgBytesVideo');
+      const elLost = document.getElementById('dbgPacketsLost');
+      const elTracks = document.getElementById('dbgTracksInfo');
+
+      if (elIce) elIce.textContent = pc.iceConnectionState || '-';
+      if (elConn) elConn.textContent = pc.connectionState || '-';
+      if (elPair) elPair.textContent = selectedPairType;
+      if (elTurn) elTurn.textContent = isTurnRelay ? 'YES (Relay Active) 🚀' : (hasTurnConfigured() ? 'Available (STUN used)' : 'NO (STUN only)');
+      if (elAudio) elAudio.textContent = `${Math.round(bytesAudioIn / 1024)} KB`;
+      if (elVideo) elVideo.textContent = `${Math.round(bytesVideoIn / 1024)} KB`;
+      if (elLost) elLost.textContent = String(packetsLost);
+
+      if (elTracks && vcState.localStream && vcState.remoteStream) {
+        const lA = vcState.localStream.getAudioTracks().length;
+        const lV = vcState.localStream.getVideoTracks().length;
+        const rA = vcState.remoteStream.getAudioTracks().length;
+        const rV = vcState.remoteStream.getVideoTracks().length;
+        elTracks.textContent = `L: A(${lA}) V(${lV}) | R: A(${rA}) V(${rV})`;
+      }
+    } catch (err) {
+      console.warn('Error reading WebRTC stats:', err);
+    }
+  }, 1500);
+}
+
+function stopCallStatsMonitoring() {
+  if (callStatsInterval) {
+    clearInterval(callStatsInterval);
+    callStatsInterval = null;
+  }
+  const pill = document.getElementById('vcDebugPill');
+  if (pill) pill.classList.add('is-hidden');
+}
+
+
 
 let vcState = {
   callId: null,
@@ -10721,8 +10954,8 @@ async function startVideoCall(callType = 'video') {
     firebaseDb.ref('our_story/webrtc_call/calleeCandidates').set(null);
   }
 
-  // Create WebRTC Peer Connection
-  const pc = new RTCPeerConnection(RTC_CONFIG);
+  // Create WebRTC Peer Connection with Dynamic TURN/STUN Config
+  const pc = new RTCPeerConnection(getEffectiveRtcConfig());
   vcState.peerConnection = pc;
 
   stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -10732,6 +10965,8 @@ async function startVideoCall(callType = 'video') {
   pc.onicecandidate = (event) => {
     if (event.candidate && event.candidate.candidate) {
       const candJSON = event.candidate.toJSON();
+      candJSON.callId = vcState.callId;
+      candJSON.from = currentUser;
       if (firebaseDb) {
         firebaseDb.ref('our_story/webrtc_call/callerCandidates').push(candJSON);
       }
@@ -10771,14 +11006,14 @@ async function startVideoCall(callType = 'video') {
     // Broadcast for MQTT & push notification
     broadcastUpdate('VC_CALL', callPayload, false);
 
-    // Listen for Callee candidates
+    // Listen for Callee candidates (Always-On Core during call so never detached by visibilitychange)
     if (firebaseDb) {
       attachFirebaseListener('webrtc_callee_candidates', firebaseDb.ref('our_story/webrtc_call/calleeCandidates'), 'child_added', (snapshot) => {
         const candidateData = snapshot.val();
         if (candidateData) {
-          addReceivedIceCandidate(candidateData);
+          addReceivedIceCandidate(candidateData, candidateData.callId);
         }
-      }, false);
+      }, true);
     }
   } catch (err) {
     console.error('Error starting video/audio call:', err);
@@ -10904,15 +11139,10 @@ async function acceptIncomingCall() {
   switchToActiveCallScreen();
 
   // Prime remote audio playback context on accept
-  const remoteAudioInit = document.getElementById('remoteAudioStream');
-  if (remoteAudioInit) {
-    remoteAudioInit.play().catch(() => {});
-  }
+  unlockCallAudioContext();
 
-  pendingIceCandidates = [];
-  processedCandidateKeys.clear();
-
-  const pc = new RTCPeerConnection(RTC_CONFIG);
+  // Create WebRTC Peer Connection with Dynamic TURN/STUN Config (DO NOT wipe pending candidates!)
+  const pc = new RTCPeerConnection(getEffectiveRtcConfig());
   vcState.peerConnection = pc;
 
   stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -10922,6 +11152,8 @@ async function acceptIncomingCall() {
   pc.onicecandidate = (event) => {
     if (event.candidate && event.candidate.candidate) {
       const candJSON = event.candidate.toJSON();
+      candJSON.callId = vcState.callId;
+      candJSON.from = currentUser;
       if (firebaseDb) {
         firebaseDb.ref('our_story/webrtc_call/calleeCandidates').push(candJSON);
       }
@@ -10936,6 +11168,8 @@ async function acceptIncomingCall() {
   };
 
   setupIceStateMonitoring(pc);
+  requestCallWakeLock();
+  startCallStatsMonitoring(pc);
 
   try {
     const offerObj = JSON.parse(vcState.pendingOffer);
@@ -10965,13 +11199,14 @@ async function acceptIncomingCall() {
       to: callerUser
     }, false);
 
+    // Listen for Caller candidates (Always-On Core during call so never detached by visibilitychange)
     if (firebaseDb) {
       attachFirebaseListener('webrtc_caller_candidates', firebaseDb.ref('our_story/webrtc_call/callerCandidates'), 'child_added', (snapshot) => {
         const candidateData = snapshot.val();
         if (candidateData) {
-          addReceivedIceCandidate(candidateData);
+          addReceivedIceCandidate(candidateData, candidateData.callId);
         }
-      }, false);
+      }, true);
     }
   } catch (err) {
     console.error('Error answering call:', err);
@@ -10983,6 +11218,7 @@ async function acceptIncomingCall() {
 async function handleCallAcceptedByPartner(callData) {
   if (vcState.status !== 'outgoing') return;
   stopOutgoingRingtone();
+  unlockCallAudioContext();
 
   vcState.status = 'active';
   if (callData.callType) vcState.callType = callData.callType;
@@ -10994,13 +11230,16 @@ async function handleCallAcceptedByPartner(callData) {
       await vcState.peerConnection.setRemoteDescription(new RTCSessionDescription(answerObj));
       await flushPendingIceCandidates();
 
+      requestCallWakeLock();
+      startCallStatsMonitoring(vcState.peerConnection);
+
       const remoteVideo = document.getElementById('remoteVideo');
       if (remoteVideo && remoteVideo.srcObject) {
         remoteVideo.play().catch(() => {});
       }
       const remoteAudio = document.getElementById('remoteAudioStream');
       if (remoteAudio && remoteAudio.srcObject) {
-        remoteAudio.play().catch(() => {});
+        remoteAudio.play().then(() => hideTapToHearBanner()).catch(() => showTapToHearBanner());
       }
     } catch (err) {
       console.error('Error applying remote SDP answer:', err);
@@ -11127,6 +11366,11 @@ function declineIncomingCall() {
 function cleanupCallState() {
   detachFirebaseListener('webrtc_callee_candidates');
   detachFirebaseListener('webrtc_caller_candidates');
+
+  releaseCallWakeLock();
+  stopCallStatsMonitoring();
+  hideTapToHearBanner();
+  iceRestartAttempts = 0;
 
   if (vcState.callTimeoutTimer) {
     clearTimeout(vcState.callTimeoutTimer);
@@ -11500,6 +11744,36 @@ function handleIncomingVCSignal(data) {
     openJitsiFallbackRoom();
   }
 
+  // 3B. ICE Restart renegotiation signaling
+  if (data.from === partnerUser && data.to === currentUser && data.status === 'ice_restart_offer' && vcState.peerConnection) {
+    console.log('[WebRTC] Handling ICE restart offer from partner');
+    try {
+      const offerObj = JSON.parse(data.sdpOffer);
+      vcState.peerConnection.setRemoteDescription(new RTCSessionDescription(offerObj))
+        .then(() => vcState.peerConnection.createAnswer())
+        .then(answer => vcState.peerConnection.setLocalDescription(answer))
+        .then(() => {
+          broadcastUpdate('VC_SIGNAL', {
+            callId: vcState.callId,
+            status: 'ice_restart_answer',
+            sdpAnswer: JSON.stringify(vcState.peerConnection.localDescription),
+            from: currentUser,
+            to: partnerUser
+          }, false);
+        })
+        .catch(e => console.warn('ICE restart answer failed:', e));
+    } catch (e) {}
+  }
+
+  if (data.from === partnerUser && data.to === currentUser && data.status === 'ice_restart_answer' && vcState.peerConnection) {
+    console.log('[WebRTC] Handling ICE restart answer from partner');
+    try {
+      const answerObj = JSON.parse(data.sdpAnswer);
+      vcState.peerConnection.setRemoteDescription(new RTCSessionDescription(answerObj))
+        .catch(e => console.warn('Failed to set remote ICE restart answer:', e));
+    } catch (e) {}
+  }
+
   // 4. Call was ended or declined
   if (data.status === 'ended' || data.status === 'declined') {
     if (vcState.status !== 'idle' && vcState.callId === data.callId) {
@@ -11521,6 +11795,7 @@ function setupVideoCallEngine() {
   const headerBtn = document.getElementById('headerVcBtn');
   if (headerBtn) {
     headerBtn.addEventListener('click', () => {
+      unlockCallAudioContext();
       playTone(600, 0.1);
       startVideoCall('video');
     });
@@ -11529,6 +11804,7 @@ function setupVideoCallEngine() {
   const chatAudioBtn = document.getElementById('chatStartAudioBtn');
   if (chatAudioBtn) {
     chatAudioBtn.addEventListener('click', () => {
+      unlockCallAudioContext();
       startAudioCall();
     });
   }
@@ -11536,6 +11812,7 @@ function setupVideoCallEngine() {
   const chatVcBtn = document.getElementById('chatStartVcBtn');
   if (chatVcBtn) {
     chatVcBtn.addEventListener('click', () => {
+      unlockCallAudioContext();
       playTone(600, 0.1);
       startVideoCall('video');
     });
@@ -11548,7 +11825,10 @@ function setupVideoCallEngine() {
 
   const acceptBtn = document.getElementById('vcAcceptCallBtn');
   if (acceptBtn) {
-    acceptBtn.addEventListener('click', () => acceptIncomingCall());
+    acceptBtn.addEventListener('click', () => {
+      unlockCallAudioContext();
+      acceptIncomingCall();
+    });
   }
 
   const declineBtn = document.getElementById('vcDeclineCallBtn');
@@ -11627,8 +11907,33 @@ function setupVideoCallEngine() {
         remoteVideo.play().catch(() => {});
       }
       if (remoteAudio && remoteAudio.srcObject && remoteAudio.paused) {
-        remoteAudio.play().catch(() => {});
+        remoteAudio.play().then(() => hideTapToHearBanner()).catch(() => {});
       }
+    });
+  }
+
+  const tapToHearBtn = document.getElementById('vcTapToHearBtn');
+  if (tapToHearBtn) {
+    tapToHearBtn.addEventListener('click', () => {
+      unlockCallAudioContext();
+      const remoteAudio = document.getElementById('remoteAudioStream');
+      if (remoteAudio) {
+        remoteAudio.muted = false;
+        remoteAudio.volume = 1.0;
+        remoteAudio.play().then(() => hideTapToHearBanner()).catch(err => {
+          console.warn('[WebRTC Audio] Tap to hear play failed:', err);
+        });
+      }
+      const remoteVideo = document.getElementById('remoteVideo');
+      if (remoteVideo) remoteVideo.play().catch(() => {});
+    });
+  }
+
+  const debugPill = document.getElementById('vcDebugPill');
+  const debugDetails = document.getElementById('vcDebugDetails');
+  if (debugPill && debugDetails) {
+    debugPill.addEventListener('click', () => {
+      debugDetails.classList.toggle('is-hidden');
     });
   }
 

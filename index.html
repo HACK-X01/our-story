@@ -20,7 +20,7 @@
 
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
-  <link rel="stylesheet" href="styles.css?v=61">
+  <link rel="stylesheet" href="styles.css?v=62">
 </head>
 <body>
 
@@ -1744,6 +1744,30 @@
         </div>
       </div>
 
+      <!-- Floating Tap to Hear / Unmute Overlay (Shows if browser blocks unmuted audio autoplay) -->
+      <button type="button" class="vc-tap-to-hear-btn is-hidden" id="vcTapToHearBtn" title="Tap to unmute remote sound">
+        <span class="tap-hear-icon">🔊</span>
+        <span class="tap-hear-text">Tap to hear audio</span>
+      </button>
+
+      <!-- Live WebRTC Call Diagnostics Pill (Active when ?debug=1 or toggleCallDebug is ON) -->
+      <div class="vc-debug-pill is-hidden" id="vcDebugPill" title="Tap to toggle live call diagnostics">
+        <div class="vc-debug-pill-header" id="vcDebugPillHeader">
+          <span class="debug-indicator-dot" id="vcDebugDot"></span>
+          <span class="debug-summary-text" id="vcDebugSummary">ICE: Init</span>
+        </div>
+        <div class="vc-debug-details is-hidden" id="vcDebugDetails">
+          <div class="debug-row"><span>ICE State:</span> <b id="dbgIceState">-</b></div>
+          <div class="debug-row"><span>Connection:</span> <b id="dbgConnState">-</b></div>
+          <div class="debug-row"><span>Pair Type:</span> <b id="dbgPairType">-</b></div>
+          <div class="debug-row"><span>TURN Active:</span> <b id="dbgTurnActive">No</b></div>
+          <div class="debug-row"><span>Audio In:</span> <b id="dbgBytesAudio">0 KB</b></div>
+          <div class="debug-row"><span>Video In:</span> <b id="dbgBytesVideo">0 KB</b></div>
+          <div class="debug-row"><span>Packets Lost:</span> <b id="dbgPacketsLost">0</b></div>
+          <div class="debug-row"><span>Tracks:</span> <b id="dbgTracksInfo">-</b></div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1996,6 +2020,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script src="paho-mqtt.min.js"></script>
-  <script src="script.js?v=61"></script>
+  <script src="script.js?v=62"></script>
 </body>
 </html>

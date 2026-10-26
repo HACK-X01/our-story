@@ -7282,6 +7282,123 @@ body.chat-view-active .tabs-container {
   color: #ffffff;
 }
 
+/* ==========================================================================
+   TAP TO HEAR BANNER & WEBRTC DIAGNOSTICS DEBUG PILL (Phase 4 Call Fix)
+   ========================================================================== */
+
+.vc-tap-to-hear-btn {
+  position: absolute;
+  top: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 35;
+  background: rgba(30, 14, 46, 0.94);
+  border: 1.5px solid #ff4081;
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(255, 64, 129, 0.45);
+  animation: pulseTapHear 1.8s infinite;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.vc-tap-to-hear-btn.is-hidden {
+  display: none !important;
+}
+
+@keyframes pulseTapHear {
+  0% { transform: translateX(-50%) scale(1); }
+  50% { transform: translateX(-50%) scale(1.05); }
+  100% { transform: translateX(-50%) scale(1); }
+}
+
+.vc-debug-pill {
+  position: absolute;
+  bottom: 88px;
+  left: 12px;
+  z-index: 40;
+  max-width: 270px;
+  background: rgba(10, 5, 18, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  padding: 6px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  color: #00ffaa;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  cursor: pointer;
+  user-select: none;
+}
+
+.vc-debug-pill.is-hidden {
+  display: none !important;
+}
+
+.vc-debug-pill-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.debug-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffcc00;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.debug-indicator-dot.connected {
+  background: #00ffaa;
+  box-shadow: 0 0 6px #00ffaa;
+}
+
+.debug-indicator-dot.failed {
+  background: #ff4444;
+  box-shadow: 0 0 6px #ff4444;
+}
+
+.debug-summary-text {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vc-debug-details {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.vc-debug-details.is-hidden {
+  display: none !important;
+}
+
+.vc-debug-details .debug-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vc-debug-details .debug-row b {
+  color: #00e5ff;
+}
+
 /* Fallback Jitsi Screen */
 .ig-fallback-header {
   width: 100%;
